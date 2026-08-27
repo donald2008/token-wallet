@@ -100,12 +100,63 @@ Notifier          异常往哪报   P3 前空实现, 接口先行
 channels/
 ├── deepseek/        generic-http 实现, params: { api_key }
 ├── kimi-code/       generic-http 实现, params: { api_key }  (/coding/v1/usages 已实测)
-├── ark-coding/      scripted 实现,     params: { session_cookie }  (控制台 XHR + Chrome 会话)
-├── aliyun-plan/     scripted 实现,     params: { bl_session | session_cookie }  (首选 bl CLI 会话, Cookie 兜底, 8/29 重置后定案)
-├── longcat/         generic-http 实现, params: { api_key }
-├── opencode/        generic-http 实现, params: { api_key }  (/zen/go/v1/usage 已实测, zen/go 共享账户级配额)
+├── aliyun-plan/     command 实现(包装 bl CLI), params: { api_key }  (key 用于探针模式, 完整用量走 bl 会话)
+├── ark-coding/      session 实现,      params: { session_cookie }  (控制台 XHR + Cookie)
+├── opencode/        http 实现,         params: { api_key }  (/zen/go/v1/usage 已实测, zen/go 共享账户级配额)
 └── custom-http/     高级通道: 暴露 URL+JSONPath 映射, 给折腾党(后置)
 ```
+
+(longcat 暂缓, 见 backlog)
+
+### 5.0 实现方式归类(D-018, 由 7 家实战收敛)
+
+| 类型 | 机制 | 通道 | 会话/凭据归属 |
+|------|------|------|--------------|
+| http | 单次 HTTP + Bearer key + JSON 映射 | deepseek / kimi-code / opencode | app 管 key |
+| command | 包装官方 CLI 子进程, 解析 stdout JSON | aliyun-plan(`bl usage token-plan`) | CLI 管会话; 通道另收 api_key(sk-sp)用于探针模式(429 retry-after → 耗尽状态+重置时间) |
+| session | 控制台网关 + Cookie 重放 | ark-coding | 用户粘贴 Cookie, app 监测过期 |
+| local-agent | 拉本地 agent gateway API | hermes 本地用量 | gateway token |
+
+command 类健康检查: 跑通道定义的 health_check 命令(如 `bl auth status`), 会话失效 → auth_expired, 卡片展示 setup_hint(如 `bl auth login --console`)。
+
+### 5.0.1 配置设计: 三层分离
+
+```
+内置通道目录(随 app 发布, 用户不可见)  ← ChannelDescriptor: 实现类型+请求细节+映射规则+params_schema
+实例配置 instances.yaml(用户数据)      ← 启用哪些通道实例 + 参数 + 轮询覆盖
+全局设置 settings(用户数据)            ← 主题/模板/默认轮询/通知开关
+```
+
+instances.yaml 示例(用户唯一能看到的配置面):
+
+```yaml
+version: 1
+instances:
+  - id: deepseek
+    channel: deepseek
+    params:
+      api_key: { source: store }       # store = 设置页录入的加密存储; env/command 供 headless
+  - id: kimi
+    channel: kimi-code
+    poll_interval: 3m                   # 可选, 覆盖全局默认
+    params:
+      api_key: { source: store }
+  - id: aliyun
+    channel: aliyun-plan
+    params:
+      api_key: { source: store }       # sk-sp, 探针模式用; 完整用量依赖 bl 会话
+  - id: ark
+    channel: ark-coding
+    params:
+      session_cookie: { source: store }
+```
+
+凭据引用统一为 CredentialRef `{source: store|env|file|command, key?}`:
+桌面用户用 store(设置页写入); headless 部署用 env/command(我们接 Consul KV)。
+
+加载与校验: instances.yaml 用 zod 校验 fail-fast; mtime watch 热加载;
+实例校验连带检查通道存在性 + params_schema 完整性 + credential source 可解析。
+表单校验与实例校验复用同一 zod schema。
 
 ### 5.0 通道描述符 (ChannelDescriptor)
 
