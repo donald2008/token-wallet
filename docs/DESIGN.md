@@ -115,7 +115,7 @@ channels/  (两层模型: platform → product, D-025)
 │   ├── coding-plan/      command(bl), window, params: { api_key }
 │   └── pay-as-you-go/    http, balance, params: { api_key }  (后置)
 ├── volcengine-ark/
-│   ├── coding-plan/      session, window, params: { session_cookie }  (GetCodingPlanUsage 已确认)
+│   ├── coding-plan/      command(arkcli), window, params: {}  (arkcli usage plan 已实测, SSO --no-browser 设备码登录)
 │   └── pay-as-you-go/    后置
 ├── deepseek/
 │   └── balance/          http, balance, params: { api_key }  (/user/balance 已实测)
@@ -137,7 +137,7 @@ channels/  (两层模型: platform → product, D-025)
 |------|------|------|--------------|
 | http | 单次 HTTP + Bearer key + JSON 映射 | deepseek / kimi-code / opencode | app 管 key |
 | command | 包装官方 CLI 子进程, 解析 stdout JSON | aliyun-plan(`bl usage token-plan`) | CLI 管会话; 通道另收 api_key(sk-sp)用于探针模式(429 retry-after → 耗尽状态+重置时间) |
-| session | 控制台网关 + Cookie 重放 | ark-coding | 用户粘贴 Cookie, app 监测过期 |
+| session | 控制台网关 + Cookie 重放 | (保留机制, 当前无实例 — 方舟已升级 command; 作为无官方 CLI 平台的兜底) | 用户粘贴 Cookie, app 监测过期 |
 | local-agent | 拉本地 agent gateway API | hermes 本地用量 | gateway token |
 
 command 类健康检查: 跑通道定义的 health_check 命令(如 `bl auth status`), 会话失效 → auth_expired, 卡片展示 setup_hint(如 `bl auth login --console`)。
@@ -238,7 +238,7 @@ generic-http 只接"一次请求+静态映射"。
 |----------|------|------|
 | deepseek-api | T1 官方 `GET /user/balance` | 无 |
 | kimi-k3 (Kimi Code) | **已实测通过(2026-08-27)**: `GET https://api.kimi.com/coding/v1/usages`, KIMI_K3_KEY(sk-kimi-xxx)直接可用, 返回主配额(usage)+滚动窗(limits[].window)+会员等级+并行数+加油包(boosterWallet)。注意: 非官方文档接口, 可能变动 | 低: 接口已验证, 用 golden sample 测试防变更 |
-| volcengine (方舟 Coding) | **已确认(用户实测)**: 控制台 XHR `GET https://console.volcengine.com/api/top/ark/cn-beijing/2024-01-01/GetCodingPlanUsage`, 依赖浏览器会话 Cookie | 中: 会话过期需重新粘贴 Cookie |
+| volcengine (方舟 Coding) | **已实测通过(2026-08-27)**: arkcli command 类 — `arkcli auth login --no-browser`(SSO 设备码两段式, 无头可用) + `arkcli usage plan`(JSON: session/weekly/monthly 三窗 percent+reset_at)。Cookie 控制台 XHR(GetCodingPlanUsage)降级为备用参考 | 低: 官方 CLI 管会话 |
 | aliyun token-plan | **首选 bl CLI**(`bl usage token-plan --output json`, 控制台会话由 CLI 维护), 待 2026-08-29 套餐重置后实测验证(当前额度耗尽 429, 且 njbx02 无头机器 console 登录有回调可达性问题, 计划用户本机登录后移植 config.json)。已证伪: 子账号 AK/SK 路线(个人版不对子账号开放 Console 网关)。**兜底: 控制台 Cookie 重放**, 端点已抓到 `POST https://bailian-cs.console.aliyun.com/cli/api.json`(api=zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage) | 中: 待重置后实测定案 |
 | meituan LongCat | 待查 | 中 |
 | opencode | **go 已实测(2026-08-27)**: `GET https://opencode.ai/zen/go/v1/usage` 返回 rolling/weekly/monthly 三窗 {status, percent, resetsAt}。**zen 是按量付费(balance)**, 余额端点待 spike(/zen/v1/usage 返回 SPA 非 API)。注: zen/go key 打 go 端点返回一致数据(账户级), 推理被地域封锁但用量 API 可达 | go 低 / zen 中 |
