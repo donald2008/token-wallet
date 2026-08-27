@@ -98,6 +98,17 @@
       border:1px solid var(--border);border-radius:9px;cursor:pointer;font-size:11.5px}
   .ch:hover{border-color:var(--accent)}
   .ch .badge2{font-size:9px;color:var(--faint);font-family:var(--font-mono)}
+  /* 树形通道选择 */
+  .tnode{margin-bottom:4px}
+  .trow{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer}
+  .trow:hover{background:var(--hover)}
+  .tplat{font-weight:600}
+  .tcaret{color:var(--faint);width:12px;transition:transform .12s;font-size:11px}
+  .tnode.collapsed .tcaret{transform:rotate(-90deg)}
+  .tnode.collapsed .tkids{display:none}
+  .tcount{margin-left:auto;font-size:10px;color:var(--faint);font-family:var(--font-mono)}
+  .tkids{margin-left:32px;border-left:1px solid var(--border);padding-left:4px}
+  .tleaf{font-size:12.5px}
   .fld{margin-bottom:12px}
   .fld label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
   .fld input{width:100%}
@@ -239,21 +250,11 @@
   </div>
 </div>
 
-<!-- 通道选择弹层: 两步 选平台 → 选产品 -->
+<!-- 通道选择弹层: 树形(平台 → 产品) -->
 <div class="overlay" id="picker">
   <div class="modal">
-    <h3><span id="pk-back" style="display:none;cursor:pointer;color:var(--muted)" onclick="pickerStep1()">← </span><span id="pk-title">选择平台</span> <button class="x" onclick="closeAll()">✕</button></h3>
-    <!-- step1: 平台 -->
-    <div class="chgrid" id="pk-platforms">
-      <div class="ch" onclick="pickerStep2('kimi')"><span class="logo" style="background:#6d28d9">K</span>Kimi<span class="badge2">2 种产品</span></div>
-      <div class="ch" onclick="pickerStep2('aliyun')"><span class="logo" style="background:#ff6a00">百</span>阿里云百炼<span class="badge2">3 种产品</span></div>
-      <div class="ch" onclick="pickerStep2('ark')"><span class="logo" style="background:#1664ff">火</span>火山方舟<span class="badge2">3 种产品</span></div>
-      <div class="ch" onclick="pickerStep2('deepseek')"><span class="logo" style="background:#4d6bfe">D</span>DeepSeek<span class="badge2">1 种产品</span></div>
-      <div class="ch" onclick="pickerStep2('opencode')"><span class="logo" style="background:#6b7280;font-size:8px">OC</span>opencode<span class="badge2">2 种产品</span></div>
-      <div class="ch" style="opacity:.45;cursor:default"><span class="logo" style="background:var(--none)">?</span>custom-http<span class="badge2">后置</span></div>
-    </div>
-    <!-- step2: 产品 -->
-    <div id="pk-products" style="display:none;flex-direction:column;gap:8px"></div>
+    <h3><span id="pk-title">添加 Provider</span> <button class="x" onclick="closeAll()">✕</button></h3>
+    <div id="pk-tree" style="font-size:13px"></div>
   </div>
 </div>
 
@@ -313,7 +314,7 @@
     btn.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
     btn.classList.add('on');
   }
-  // 弹层: 两步选择
+  // 弹层: 树形选择(平台 → 产品, 默认全展开)
   const PRODUCTS = {
     kimi:     [{id:'kimi-code', name:'Kimi Code (编程订阅)', type:'window', note:'sk-kimi- 开头的 Key'},
                {id:'kimi-platform', name:'开放平台 (按量)', type:'balance', note:'platform.kimi.com 的 Key'}],
@@ -331,27 +332,26 @@
     kimi:['Kimi','#6d28d9','K'], aliyun:['阿里云百炼','#ff6a00','百'], ark:['火山方舟','#1664ff','火'],
     deepseek:['DeepSeek','#4d6bfe','D'], opencode:['opencode','#6b7280','OC'],
   };
-  function openPicker(){ pickerStep1(); document.getElementById('picker').classList.add('open'); }
-  function pickerStep1(){
-    document.getElementById('pk-title').textContent='选择平台';
-    document.getElementById('pk-back').style.display='none';
-    document.getElementById('pk-platforms').style.display='grid';
-    document.getElementById('pk-products').style.display='none';
-  }
-  function pickerStep2(p){
-    const [pname] = PLATFORM_META[p];
-    document.getElementById('pk-title').textContent=pname+' · 选择产品';
-    document.getElementById('pk-back').style.display='inline';
-    document.getElementById('pk-platforms').style.display='none';
-    const box=document.getElementById('pk-products');
-    box.style.display='flex';
-    box.innerHTML = PRODUCTS[p].map(pr=>`
-      <div class="ch" style="flex-direction:row;justify-content:flex-start;gap:10px;padding:10px 12px"
-           onclick="openForm('${pr.id}','${pname} ${pr.name}','${PLATFORM_META[p][1]}','${PLATFORM_META[p][2]}')">
-        <span class="badge2" style="border:1px solid var(--border);border-radius:4px;padding:1px 6px">${pr.type}</span>
-        <span style="font-size:12.5px;font-weight:600">${pr.name}</span>
-        <span style="margin-left:auto;font-size:10px;color:var(--faint)">${pr.note}</span>
-      </div>`).join('');
+  function openPicker(){ renderTree(); document.getElementById('picker').classList.add('open'); }
+  function renderTree(){
+    const box = document.getElementById('pk-tree');
+    box.innerHTML = Object.entries(PLATFORM_META).map(([p,[pname,color,letter]])=>{
+      const prods = PRODUCTS[p];
+      return `<div class="tnode">
+        <div class="trow tplat" onclick="this.parentElement.classList.toggle('collapsed')">
+          <span class="tcaret">▾</span><span class="logo" style="background:${color}">${letter}</span>
+          <b>${pname}</b><span class="tcount">${prods.length} 种产品</span>
+        </div>
+        <div class="tkids">${prods.map(pr=>`
+          <div class="trow tleaf" onclick="openForm('${pr.id}','${pname} ${pr.name}','${color}','${letter}')">
+            <span class="badge2" style="border:1px solid var(--border);border-radius:4px;padding:1px 6px">${pr.type}</span>
+            <span style="font-weight:600">${pr.name}</span>
+            <span style="margin-left:auto;font-size:10px;color:var(--faint)">${pr.note}</span>
+          </div>`).join('')}</div>
+      </div>`;
+    }).join('') + `<div class="trow tleaf" style="opacity:.45;cursor:default;margin-top:6px">
+        <span class="badge2" style="border:1px solid var(--border);border-radius:4px;padding:1px 6px">custom</span>
+        <span>custom-http(高级, 后置)</span></div>`;
   }
   function closeAll(){ document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('open')); }
   const _seq = {};
