@@ -103,8 +103,7 @@ channels/
 ├── ark-coding/      scripted 实现,     params: { session_cookie }  (控制台 XHR + Chrome 会话)
 ├── aliyun-plan/     scripted 实现,     params: { access_key_id, access_key_secret }
 ├── longcat/         generic-http 实现, params: { api_key }
-├── opencode-go/     generic-http 实现, params: { api_key }  (/zen/go/v1/usage 已实测)
-├── opencode-zen/    generic-http 实现, params: { api_key }  (用量端点路径待确认)
+├── opencode/        generic-http 实现, params: { api_key }  (/zen/go/v1/usage 已实测, zen/go 共享账户级配额)
 └── custom-http/     高级通道: 暴露 URL+JSONPath 映射, 给折腾党(后置)
 ```
 
@@ -154,8 +153,7 @@ generic-http 只接"一次请求+静态映射"。
 | volcengine (方舟 Coding) | **已确认(用户实测)**: 控制台 XHR `GET https://console.volcengine.com/api/top/ark/cn-beijing/2024-01-01/GetCodingPlanUsage`, 依赖浏览器会话 Cookie | 中: 会话过期需重新粘贴 Cookie |
 | aliyun token-plan | T2 阿里云 CLI(bssopenapi/百炼套餐接口) | 中 |
 | meituan LongCat | 待查 | 中 |
-| opencode-go | **已实测通过(2026-08-27)**: `GET https://opencode.ai/zen/go/v1/usage`, Bearer key, 返回 rolling/weekly/monthly 三窗 {status, percent, resetsAt}。注: 推理被地域封锁但用量 API 可达 | 低 |
-| opencode-zen | `/zen/v1/usage` 返回 SPA(非 API), 正确路径待从 CLI 抓包确认 | 中 |
+| opencode (zen/go) | **已实测通过(2026-08-27)**: `GET https://opencode.ai/zen/go/v1/usage`, Bearer key, 返回 rolling/weekly/monthly 三窗 {status, percent, resetsAt}。**zen key 与 go key 打同一端点返回完全一致的配额数据 → 账户级配额共享, 合并为单一 opencode 通道**(有独立 zen 账户可加第二个实例)。注: 推理被地域封锁但用量 API 可达 | 低 |
 
 spike 产出 = YES/NO + 接口样本; NO 降级为 unsupported 卡片。
 
