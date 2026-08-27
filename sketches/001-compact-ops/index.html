@@ -44,13 +44,14 @@
   .st{margin-left:auto;font-size:11px;font-family:var(--font-mono)}
   .st.ok{color:var(--ok)} .st.warn{color:var(--warn)} .st.bad{color:var(--bad)} .st.none{color:var(--none)}
   .bar{position:relative;height:16px;background:var(--bar-bg);border-radius:4px;margin-top:6px;overflow:hidden}
-  .bar>.fill{position:absolute;inset:0 auto 0 0;border-radius:4px}
-  .bar>.lab{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;
-            padding:0 7px;font-size:10.5px;font-family:var(--font-mono);color:var(--fg);
-            text-shadow:0 1px 2px rgba(0,0,0,.35)}
-  [data-theme="light"] .bar>.lab{text-shadow:0 1px 2px rgba(255,255,255,.6)}
+  .bar>.fill{position:absolute;left:0;top:0;bottom:0;border-radius:4px;overflow:hidden}
+  /* 双层标签: track 层(前景色, 露在空槽上) + onfill 层(白字, 裁剪进填充宽度) */
+  .lab{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;justify-content:space-between;
+       padding:0 7px;font-size:10.5px;font-family:var(--font-mono);white-space:nowrap}
+  .bar>.lab.track{right:0;color:var(--fg)}
+  .fill>.lab.onfill{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4)}
   /* warn 黄底用深色文字保证对比度 */
-  .bar>.lab.on-warn{color:#231f00;text-shadow:0 1px 2px rgba(255,255,255,.35)}
+  .fill.warn>.lab.onfill{color:#231f00;text-shadow:0 1px 2px rgba(255,255,255,.35)}
   .fill.ok{background:var(--ok)} .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
   .meta{display:flex;gap:10px;margin-top:6px;font-size:11px;color:var(--muted);font-family:var(--font-mono)}
   .bignum{font-family:var(--font-mono);font-size:22px;font-weight:700;margin-top:2px}
@@ -85,15 +86,15 @@
   <!-- 最坏情况置顶 -->
   <div class="card">
     <div class="crow"><span class="cname">Kimi Code</span><span class="badge">window</span><span class="st bad">● 紧张</span></div>
-    <div class="bar"><div class="fill bad" style="width:82%"></div><div class="lab"><span>5小时窗</span><span>82% · 重置 1:23</span></div></div>
-    <div class="bar"><div class="fill warn" style="width:61%"></div><div class="lab on-warn"><span>本周</span><span>61% · 重置 3d</span></div></div>
-    <div class="bar"><div class="fill ok" style="width:28%"></div><div class="lab"><span>本月</span><span>28% · 重置 18d</span></div></div>
+    <div class="bar"><div class="lab track"><span>5小时窗</span><span>82% · 重置 1:23</span></div><div class="fill bad" style="width:82%"><div class="lab onfill" style="width:calc(10000%/82)"><span>5小时窗</span><span>82% · 重置 1:23</span></div></div></div>
+    <div class="bar"><div class="lab track"><span>本周</span><span>61% · 重置 3d</span></div><div class="fill warn" style="width:61%"><div class="lab onfill" style="width:calc(10000%/61)"><span>本周</span><span>61% · 重置 3d</span></div></div></div>
+    <div class="bar"><div class="lab track"><span>本月</span><span>28% · 重置 18d</span></div><div class="fill ok" style="width:28%"><div class="lab onfill" style="width:calc(10000%/28)"><span>本月</span><span>28% · 重置 18d</span></div></div></div>
   </div>
 
   <div class="card">
     <div class="crow"><span class="cname">方舟 Coding</span><span class="badge">window</span><span class="st warn">● 偏低</span></div>
-    <div class="bar"><div class="fill ok" style="width:31%"></div><div class="lab"><span>5小时窗</span><span>31% · 重置 2:47</span></div></div>
-    <div class="bar"><div class="fill warn" style="width:81%"></div><div class="lab on-warn"><span>本周</span><span>余19% · 重置 4d ⚠</span></div></div>
+    <div class="bar"><div class="lab track"><span>5小时窗</span><span>31% · 重置 2:47</span></div><div class="fill ok" style="width:31%"><div class="lab onfill" style="width:calc(10000%/31)"><span>5小时窗</span><span>31% · 重置 2:47</span></div></div></div>
+    <div class="bar"><div class="lab track"><span>本周</span><span>余19% · 重置 4d ⚠</span></div><div class="fill warn" style="width:81%"><div class="lab onfill" style="width:calc(10000%/81)"><span>本周</span><span>余19% · 重置 4d ⚠</span></div></div></div>
   </div>
 
   <div class="card">
@@ -128,7 +129,9 @@
     const h=document.documentElement;
     h.dataset.theme = h.dataset.theme==='dark' ? 'light' : 'dark';
   }
-  if (matchMedia('(prefers-color-scheme: light)').matches) document.documentElement.dataset.theme='light';
+  if (location.hash==='#light') document.documentElement.dataset.theme='light';
+  else if (location.hash==='#dark') document.documentElement.dataset.theme='dark';
+  else if (matchMedia('(prefers-color-scheme: light)').matches) document.documentElement.dataset.theme='light';
 </script>
 </body>
 </html>
