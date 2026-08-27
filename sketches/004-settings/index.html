@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>token-wallet · 设置页</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --font-mono: ui-monospace,"Cascadia Mono",Consolas,monospace;
+    --font-ui: -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  [data-theme="dark"]{
+    --bg:#0d1117; --panel:#161b22; --card:#1c2129; --border:#2b313a;
+    --fg:#e6e9ee; --muted:#8b939e; --faint:#5b636d;
+    --ok:#2ea043; --warn:#d29922; --warn-fg:#d29922; --bad:#f85149; --none:#6e7681;
+    --accent:#58a6ff; --input:#0d1117; --hover:#21262e;
+  }
+  [data-theme="light"]{
+    --bg:#eef0f3; --panel:#ffffff; --card:#f6f7f9; --border:#dfe3e8;
+    --fg:#1c2128; --muted:#5b636d; --faint:#9aa2ab;
+    --ok:#1a7f37; --warn:#eab308; --warn-fg:#92600a; --bad:#cf222e; --none:#8b939e;
+    --accent:#0969da; --input:#ffffff; --hover:#eceef2;
+  }
+  body{font-family:var(--font-ui);background:var(--bg);color:var(--fg);min-height:100vh;
+       display:flex;flex-direction:column;align-items:center;padding:28px 12px;-webkit-font-smoothing:antialiased}
+  .hint{color:var(--faint);font-size:12px;margin-bottom:14px;font-family:var(--font-mono)}
+  .win{width:660px;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+       overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.35);display:flex;min-height:480px}
+  /* 左导航 */
+  .nav{width:150px;border-right:1px solid var(--border);padding:12px 0;flex:none;background:var(--card)}
+  .nav .brand{font-family:var(--font-mono);font-weight:700;font-size:12px;padding:0 14px 12px;
+              border-bottom:1px solid var(--border);margin-bottom:8px;letter-spacing:.5px}
+  .nav button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;
+              color:var(--muted);padding:8px 14px;font-size:12.5px;cursor:pointer;text-align:left}
+  .nav button:hover{background:var(--hover);color:var(--fg)}
+  .nav button.active{background:var(--hover);color:var(--fg);border-right:2px solid var(--accent)}
+  /* 右内容 */
+  .main{flex:1;padding:16px 18px;overflow-y:auto}
+  .main h2{font-size:14px;margin-bottom:4px}
+  .main .desc{font-size:11.5px;color:var(--muted);margin-bottom:14px}
+  .section{display:none}
+  .section.active{display:block}
+  /* Provider 实例卡 */
+  .inst{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);
+        border-radius:8px;padding:10px 12px;margin-bottom:8px}
+  .logo{display:inline-flex;width:22px;height:22px;border-radius:5px;align-items:center;justify-content:center;
+        font-size:11px;font-weight:700;color:#fff;flex:none;font-family:var(--font-mono)}
+  .inst .name{font-weight:600;font-size:13px}
+  .inst .sub{font-size:10.5px;color:var(--muted);font-family:var(--font-mono)}
+  .st{margin-left:auto;font-size:11px;font-family:var(--font-mono);flex:none}
+  .st.ok{color:var(--ok)} .st.warn{color:var(--warn-fg)} .st.bad{color:var(--bad)}
+  .iconbtn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;
+           padding:3px 8px;cursor:pointer;font-size:11px;flex:none}
+  .iconbtn:hover{color:var(--fg);border-color:var(--muted)}
+  .addbtn{width:100%;padding:10px;border:1.5px dashed var(--border);border-radius:8px;background:none;
+          color:var(--muted);cursor:pointer;font-size:12.5px;margin-top:2px}
+  .addbtn:hover{border-color:var(--accent);color:var(--accent)}
+  /* 设置行 */
+  .srow{display:flex;align-items:center;justify-content:space-between;padding:10px 2px;
+        border-bottom:1px solid var(--border);font-size:13px}
+  .srow .lab{font-weight:500}
+  .srow .sub2{font-size:11px;color:var(--muted);margin-top:2px}
+  .seg{display:flex;border:1px solid var(--border);border-radius:7px;overflow:hidden}
+  .seg button{background:none;border:none;color:var(--muted);padding:5px 12px;font-size:12px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#fff}
+  select,input[type=text],input[type=password]{background:var(--input);border:1px solid var(--border);
+    color:var(--fg);border-radius:6px;padding:6px 9px;font-size:12.5px;font-family:var(--font-ui)}
+  /* 弹层: 通道选择 + 表单 */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center}
+  .overlay.open{display:flex}
+  .modal{width:440px;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+         padding:18px;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+  .modal h3{font-size:14px;margin-bottom:12px;display:flex;align-items:center}
+  .modal h3 .x{margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px}
+  .chgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .ch{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;background:var(--card);
+      border:1px solid var(--border);border-radius:9px;cursor:pointer;font-size:11.5px}
+  .ch:hover{border-color:var(--accent)}
+  .ch .badge2{font-size:9px;color:var(--faint);font-family:var(--font-mono)}
+  .fld{margin-bottom:12px}
+  .fld label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .fld input{width:100%}
+  .fld .help{font-size:10.5px;color:var(--faint);margin-top:3px}
+  .testrow{display:flex;gap:8px;align-items:center;margin:4px 0 12px}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:7px;padding:7px 14px;
+       font-size:12.5px;cursor:pointer}
+  .btn.ghost{background:none;border:1px solid var(--border);color:var(--fg)}
+  .testresult{font-size:11px;font-family:var(--font-mono);display:none}
+  .testresult.ok{display:block;color:var(--ok)}
+  .testresult.err{display:block;color:var(--bad)}
+  /* toast */
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card);
+         border:1px solid var(--border);color:var(--fg);padding:8px 16px;border-radius:8px;
+         font-size:12px;display:none;font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+<div class="hint">设置页 mockup · <a href="#" onclick="toggleTheme();return false" style="color:var(--accent)">切换主题</a> · 点击「添加 Provider」试交互流程</div>
+
+<div class="win">
+  <div class="nav">
+    <div class="brand">● TOKEN WALLET</div>
+    <button class="active" data-sec="providers">▦ Provider</button>
+    <button data-sec="appearance">◐ 外观</button>
+    <button data-sec="collect">⟳ 采集</button>
+    <button data-sec="notify">♪ 通知 <span style="color:var(--faint);font-size:9px">P3</span></button>
+    <button data-sec="data">▤ 数据</button>
+    <button data-sec="about">ⓘ 关于</button>
+  </div>
+
+  <div class="main">
+    <!-- Provider 管理 -->
+    <div class="section active" id="sec-providers">
+      <h2>Provider</h2>
+      <div class="desc">已启用的套餐实例。点「测试」立即采集一次并校验凭据。</div>
+
+      <div class="inst">
+        <span class="logo" style="background:#4d6bfe">D</span>
+        <div><div class="name">DeepSeek</div><div class="sub">balance · 5min</div></div>
+        <span class="st ok">● ¥451.86</span>
+        <button class="iconbtn" onclick="toast('deepseek: 测试通过 ✓ ¥451.86')">测试</button>
+        <button class="iconbtn" onclick="toast('编辑实例(同添加表单, 值回填)')">编辑</button>
+      </div>
+      <div class="inst">
+        <span class="logo" style="background:#6d28d9">K</span>
+        <div><div class="name">Kimi Code</div><div class="sub">window · 5min</div></div>
+        <span class="st bad">● 主配额 84/100</span>
+        <button class="iconbtn" onclick="toast('kimi-code: 测试通过 ✓ 5h窗 17/100')">测试</button>
+        <button class="iconbtn" onclick="toast('编辑实例')">编辑</button>
+      </div>
+      <div class="inst">
+        <span class="logo" style="background:#ff6a00">百</span>
+        <div><div class="name">百炼 Token Plan</div><div class="sub">window · command(bl)</div></div>
+        <span class="st bad">● auth expired</span>
+        <button class="iconbtn" onclick="toast('bl auth status: 会话失效 → 请运行 bl auth login --console')">测试</button>
+        <button class="iconbtn" onclick="toast('编辑实例')">编辑</button>
+      </div>
+      <div class="inst">
+        <span class="logo" style="background:#1664ff">火</span>
+        <div><div class="name">方舟 Coding</div><div class="sub">window · session(cookie)</div></div>
+        <span class="st ok">● ok</span>
+        <button class="iconbtn" onclick="toast('ark: 测试通过 ✓')">测试</button>
+        <button class="iconbtn" onclick="toast('编辑实例')">编辑</button>
+      </div>
+
+      <button class="addbtn" onclick="openPicker()">＋ 添加 Provider</button>
+    </div>
+
+    <!-- 外观 -->
+    <div class="section" id="sec-appearance">
+      <h2>外观</h2>
+      <div class="desc">主题与卡片模板。模板按原型分别生效。</div>
+      <div class="srow"><div><div class="lab">主题</div><div class="sub2">默认追随系统</div></div>
+        <div class="seg" id="seg-theme">
+          <button class="on">系统</button><button onclick="segSet(this)">深色</button><button onclick="segSet(this)">浅色</button>
+        </div></div>
+      <div class="srow"><div><div class="lab">窗口制模板</div><div class="sub2">window 原型默认模板</div></div>
+        <div class="seg"><button class="on">bars</button><button onclick="segSet(this)">gauge</button><button onclick="segSet(this)">battery</button></div></div>
+      <div class="srow"><div><div class="lab">余额制模板</div><div class="sub2">balance 原型默认模板</div></div>
+        <div class="seg"><button class="on">ticker</button><button onclick="segSet(this)">gauge</button></div></div>
+      <div class="srow" style="border-bottom:none"><div><div class="lab">悬浮窄条</div><div class="sub2">桌面常驻 mini 形态</div></div>
+        <div class="seg"><button class="on">关</button><button onclick="segSet(this)">开</button></div></div>
+    </div>
+
+    <!-- 采集 -->
+    <div class="section" id="sec-collect">
+      <h2>采集</h2>
+      <div class="desc">轮询节奏。per-instance 覆盖在 Provider 编辑里。</div>
+      <div class="srow"><div><div class="lab">默认轮询间隔</div><div class="sub2">T2 档推荐 5 分钟</div></div>
+        <select><option>1 分钟</option><option selected>5 分钟</option><option>15 分钟</option><option>30 分钟</option></select></div>
+      <div class="srow"><div><div class="lab">会话类通道间隔</div><div class="sub2">cookie 类(方舟等), 降低风控风险</div></div>
+        <select><option>15 分钟</option><option selected>30 分钟</option><option>60 分钟</option></select></div>
+      <div class="srow" style="border-bottom:none"><div><div class="lab">stale 判定</div><div class="sub2">超过 N 个周期未更新标记 stale</div></div>
+        <select><option selected>2 个周期</option><option>3 个周期</option></select></div>
+    </div>
+
+    <!-- 通知(占位) -->
+    <div class="section" id="sec-notify">
+      <h2>通知</h2>
+      <div class="desc">P3 实现, 配置项先行。</div>
+      <div class="srow"><div><div class="lab">启用通知</div><div class="sub2">阈值触发系统通知</div></div>
+        <div class="seg"><button class="on">关</button><button onclick="segSet(this)">开</button></div></div>
+      <div class="srow" style="border-bottom:none;opacity:.5"><div><div class="lab">告警阈值</div><div class="sub2">剩余低于该比例时通知</div></div>
+        <select disabled><option>20%</option><option>30%</option></select></div>
+    </div>
+
+    <!-- 数据 -->
+    <div class="section" id="sec-data">
+      <h2>数据</h2>
+      <div class="desc">快照历史与缓存。</div>
+      <div class="srow"><div><div class="lab">历史保留</div><div class="sub2">用于消耗速率/预计可用天数</div></div>
+        <select><option>7 天</option><option selected>30 天</option><option>90 天</option></select></div>
+      <div class="srow"><div><div class="lab">存储位置</div><div class="sub2" style="font-family:var(--font-mono)">~/.token-wallet/data/</div></div>
+        <button class="iconbtn" onclick="toast('打开数据目录')">打开</button></div>
+      <div class="srow" style="border-bottom:none"><div><div class="lab">清空缓存</div><div class="sub2">不影响实例配置与凭据</div></div>
+        <button class="iconbtn" onclick="toast('已清空快照缓存')">清空</button></div>
+    </div>
+
+    <!-- 关于 -->
+    <div class="section" id="sec-about">
+      <h2>关于</h2>
+      <div class="desc">token-wallet v0.1.0 · Apache-2.0</div>
+      <div class="srow"><div class="lab">版本</div><span style="font-family:var(--font-mono);font-size:12px;color:var(--muted)">0.1.0</span></div>
+      <div class="srow"><div class="lab">仓库</div><span style="font-family:var(--font-mono);font-size:12px;color:var(--accent)">gitee.com/ITEater/token-wallet</span></div>
+      <div class="srow" style="border-bottom:none"><div class="lab">通道数</div><span style="font-family:var(--font-mono);font-size:12px;color:var(--muted)">5 内置 + custom-http</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- 通道选择弹层 -->
+<div class="overlay" id="picker">
+  <div class="modal">
+    <h3>选择通道 <button class="x" onclick="closeAll()">✕</button></h3>
+    <div class="chgrid">
+      <div class="ch" onclick="openForm('deepseek','DeepSeek','#4d6bfe','D')"><span class="logo" style="background:#4d6bfe">D</span>DeepSeek<span class="badge2">balance</span></div>
+      <div class="ch" onclick="openForm('kimi-code','Kimi Code','#6d28d9','K')"><span class="logo" style="background:#6d28d9">K</span>Kimi Code<span class="badge2">window</span></div>
+      <div class="ch" onclick="openForm('opencode','opencode','#6b7280','OC')"><span class="logo" style="background:#6b7280;font-size:8px">OC</span>opencode<span class="badge2">window</span></div>
+      <div class="ch" onclick="openForm('ark-coding','方舟 Coding','#1664ff','火')"><span class="logo" style="background:#1664ff">火</span>方舟 Coding<span class="badge2">cookie</span></div>
+      <div class="ch" onclick="openForm('aliyun-plan','百炼 Plan','#ff6a00','百')"><span class="logo" style="background:#ff6a00">百</span>百炼 Plan<span class="badge2">bl CLI</span></div>
+      <div class="ch" style="opacity:.45;cursor:default"><span class="logo" style="background:var(--none)">?</span>custom-http<span class="badge2">后置</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- 参数表单弹层 -->
+<div class="overlay" id="formdlg">
+  <div class="modal">
+    <h3><span class="logo" id="f-logo">D</span>&nbsp;添加 <span id="f-name">DeepSeek</span> <button class="x" onclick="closeAll()">✕</button></h3>
+    <div class="fld">
+      <label id="f-p1-label">API Key</label>
+      <input type="password" id="f-p1" placeholder="sk-...">
+      <div class="help" id="f-p1-help">platform.deepseek.com → API Keys</div>
+    </div>
+    <div class="fld" id="f-cookie-fld" style="display:none">
+      <label>Session Cookie</label>
+      <input type="password" placeholder="F12 → 任意请求 → Cookie 头">
+      <div class="help">浏览器登录控制台后复制; 过期后卡片会提示重新粘贴</div>
+    </div>
+    <div class="fld">
+      <label>轮询间隔(可选, 默认继承全局)</label>
+      <select style="width:100%"><option>继承全局(5 分钟)</option><option>1 分钟</option><option>15 分钟</option></select>
+    </div>
+    <div class="testrow">
+      <button class="btn ghost" onclick="doTest()">测试连接</button>
+      <span class="testresult" id="tres"></span>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn ghost" onclick="closeAll()">取消</button>
+      <button class="btn" onclick="closeAll();toast('实例已保存, 首次采集中…')">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  function toggleTheme(){
+    const h=document.documentElement;
+    h.dataset.theme = h.dataset.theme==='dark' ? 'light' : 'dark';
+  }
+  if (matchMedia('(prefers-color-scheme: light)').matches) document.documentElement.dataset.theme='light';
+
+  // 导航切换
+  document.querySelectorAll('.nav button').forEach(b=>{
+    b.onclick=()=>{
+      document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+      document.getElementById('sec-'+b.dataset.sec).classList.add('active');
+    };
+  });
+  function segSet(btn){
+    btn.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    btn.classList.add('on');
+  }
+  // 弹层
+  function openPicker(){ document.getElementById('picker').classList.add('open'); }
+  function closeAll(){ document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('open')); }
+  function openForm(id, name, color, letter){
+    closeAll();
+    document.getElementById('f-name').textContent = name;
+    const lg = document.getElementById('f-logo');
+    lg.style.background = color; lg.textContent = letter;
+    document.getElementById('f-cookie-fld').style.display = (id==='ark-coding') ? 'block' : 'none';
+    document.getElementById('f-p1').parentElement.style.display = (id==='ark-coding') ? 'none' : 'block';
+    document.getElementById('tres').className='testresult';
+    document.getElementById('formdlg').classList.add('open');
+  }
+  function doTest(){
+    const t = document.getElementById('tres');
+    t.className='testresult ok';
+    t.textContent='✓ 连接成功 · ¥451.86 (218ms)';
+    setTimeout(()=>{ if(Math.random()<0.25){ t.className='testresult err'; t.textContent='✗ 401 unauthorized — 检查 key'; } }, 0);
+  }
+  function toast(msg){
+    const t=document.getElementById('toast');
+    t.textContent=msg; t.style.display='block';
+    clearTimeout(t._tm); t._tm=setTimeout(()=>t.style.display='none',2200);
+  }
+</script>
+</body>
+</html>
