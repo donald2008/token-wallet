@@ -97,14 +97,28 @@ Notifier          异常往哪报   P3 前空实现, 接口先行
 仓库内置请求方式与映射规则; 用户添加 provider = 选通道 + 填参数, 不接触 YAML/JSONPath。
 
 ```
-channels/
-├── deepseek/        generic-http 实现, params: { api_key }
-├── kimi-code/       generic-http 实现, params: { api_key }  (/coding/v1/usages 已实测)
-├── aliyun-plan/     command 实现(包装 bl CLI), params: { api_key }  (key 用于探针模式, 完整用量走 bl 会话)
-├── ark-coding/      session 实现,      params: { session_cookie }  (控制台 XHR + Cookie)
-├── opencode/        http 实现,         params: { api_key }  (/zen/go/v1/usage 已实测, zen/go 共享账户级配额)
+channels/  (两层模型: platform → product, D-025)
+├── kimi/
+│   ├── kimi-code/        http,  window,  params: { api_key }  (/coding/v1/usages 已实测)
+│   └── kimi-platform/    http,  balance, params: { api_key }  (开放平台 /v1/users/me/balance)
+├── aliyun-bailian/
+│   ├── token-plan/       command(bl), window, params: { api_key }  (探针; 完整用量走 bl 会话)
+│   ├── coding-plan/      command(bl), window, params: { api_key }
+│   └── pay-as-you-go/    http, balance, params: { api_key }  (后置)
+├── volcengine-ark/
+│   ├── coding-plan/      session, window, params: { session_cookie }  (GetCodingPlanUsage 已确认)
+│   └── pay-as-you-go/    后置
+├── deepseek/
+│   └── balance/          http, balance, params: { api_key }  (/user/balance 已实测)
+├── opencode/
+│   ├── go/               http, window,  params: { api_key }  (/zen/go/v1/usage 已实测, 订阅窗口制)
+│   └── zen/              http, balance, params: { api_key }  (按量付费, 余额端点待 spike)
 └── custom-http/     高级通道: 暴露 URL+JSONPath 映射, 给折腾党(后置)
 ```
+
+**平台 → 产品两层模型(D-025)**: 同一平台可有多种计费产品(coding plan 窗口制 / token plan / 按量余额),
+端点、凭据、配额语义各不相同。添加流程 = 选平台 → 选产品 → 填参数。
+同平台多产品实例在面板上可聚合为一张分组卡(内部分行)或独立成卡, 由模板层决定。
 
 (longcat 暂缓, 见 backlog)
 
@@ -204,7 +218,7 @@ generic-http 只接"一次请求+静态映射"。
 | volcengine (方舟 Coding) | **已确认(用户实测)**: 控制台 XHR `GET https://console.volcengine.com/api/top/ark/cn-beijing/2024-01-01/GetCodingPlanUsage`, 依赖浏览器会话 Cookie | 中: 会话过期需重新粘贴 Cookie |
 | aliyun token-plan | **首选 bl CLI**(`bl usage token-plan --output json`, 控制台会话由 CLI 维护), 待 2026-08-29 套餐重置后实测验证(当前额度耗尽 429, 且 njbx02 无头机器 console 登录有回调可达性问题, 计划用户本机登录后移植 config.json)。已证伪: 子账号 AK/SK 路线(个人版不对子账号开放 Console 网关)。**兜底: 控制台 Cookie 重放**, 端点已抓到 `POST https://bailian-cs.console.aliyun.com/cli/api.json`(api=zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage) | 中: 待重置后实测定案 |
 | meituan LongCat | 待查 | 中 |
-| opencode (zen/go) | **已实测通过(2026-08-27)**: `GET https://opencode.ai/zen/go/v1/usage`, Bearer key, 返回 rolling/weekly/monthly 三窗 {status, percent, resetsAt}。**zen key 与 go key 打同一端点返回完全一致的配额数据 → 账户级配额共享, 合并为单一 opencode 通道**(有独立 zen 账户可加第二个实例)。注: 推理被地域封锁但用量 API 可达 | 低 |
+| opencode | **go 已实测(2026-08-27)**: `GET https://opencode.ai/zen/go/v1/usage` 返回 rolling/weekly/monthly 三窗 {status, percent, resetsAt}。**zen 是按量付费(balance)**, 余额端点待 spike(/zen/v1/usage 返回 SPA 非 API)。注: zen/go key 打 go 端点返回一致数据(账户级), 推理被地域封锁但用量 API 可达 | go 低 / zen 中 |
 
 spike 产出 = YES/NO + 接口样本; NO 降级为 unsupported 卡片。
 

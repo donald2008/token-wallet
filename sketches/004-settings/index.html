@@ -239,18 +239,21 @@
   </div>
 </div>
 
-<!-- 通道选择弹层 -->
+<!-- 通道选择弹层: 两步 选平台 → 选产品 -->
 <div class="overlay" id="picker">
   <div class="modal">
-    <h3>选择通道 <button class="x" onclick="closeAll()">✕</button></h3>
-    <div class="chgrid">
-      <div class="ch" onclick="openForm('deepseek','DeepSeek','#4d6bfe','D')"><span class="logo" style="background:#4d6bfe">D</span>DeepSeek<span class="badge2">balance</span></div>
-      <div class="ch" onclick="openForm('kimi-code','Kimi Code','#6d28d9','K')"><span class="logo" style="background:#6d28d9">K</span>Kimi Code<span class="badge2">window</span></div>
-      <div class="ch" onclick="openForm('opencode','opencode','#6b7280','OC')"><span class="logo" style="background:#6b7280;font-size:8px">OC</span>opencode<span class="badge2">window</span></div>
-      <div class="ch" onclick="openForm('ark-coding','方舟 Coding','#1664ff','火')"><span class="logo" style="background:#1664ff">火</span>方舟 Coding<span class="badge2">cookie</span></div>
-      <div class="ch" onclick="openForm('aliyun-plan','百炼 Plan','#ff6a00','百')"><span class="logo" style="background:#ff6a00">百</span>百炼 Plan<span class="badge2">bl CLI</span></div>
+    <h3><span id="pk-back" style="display:none;cursor:pointer;color:var(--muted)" onclick="pickerStep1()">← </span><span id="pk-title">选择平台</span> <button class="x" onclick="closeAll()">✕</button></h3>
+    <!-- step1: 平台 -->
+    <div class="chgrid" id="pk-platforms">
+      <div class="ch" onclick="pickerStep2('kimi')"><span class="logo" style="background:#6d28d9">K</span>Kimi<span class="badge2">2 种产品</span></div>
+      <div class="ch" onclick="pickerStep2('aliyun')"><span class="logo" style="background:#ff6a00">百</span>阿里云百炼<span class="badge2">3 种产品</span></div>
+      <div class="ch" onclick="pickerStep2('ark')"><span class="logo" style="background:#1664ff">火</span>火山方舟<span class="badge2">2 种产品</span></div>
+      <div class="ch" onclick="pickerStep2('deepseek')"><span class="logo" style="background:#4d6bfe">D</span>DeepSeek<span class="badge2">1 种产品</span></div>
+      <div class="ch" onclick="pickerStep2('opencode')"><span class="logo" style="background:#6b7280;font-size:8px">OC</span>opencode<span class="badge2">2 种产品</span></div>
       <div class="ch" style="opacity:.45;cursor:default"><span class="logo" style="background:var(--none)">?</span>custom-http<span class="badge2">后置</span></div>
     </div>
+    <!-- step2: 产品 -->
+    <div id="pk-products" style="display:none;flex-direction:column;gap:8px"></div>
   </div>
 </div>
 
@@ -305,8 +308,45 @@
     btn.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
     btn.classList.add('on');
   }
-  // 弹层
-  function openPicker(){ document.getElementById('picker').classList.add('open'); }
+  // 弹层: 两步选择
+  const PRODUCTS = {
+    kimi:     [{id:'kimi-code', name:'Kimi Code (编程订阅)', type:'window', note:'sk-kimi- 开头的 Key'},
+               {id:'kimi-platform', name:'开放平台 (按量)', type:'balance', note:'platform.kimi.com 的 Key'}],
+    aliyun:   [{id:'aliyun-token-plan', name:'Token Plan 个人版', type:'window', note:'sk-sp- Key + bl CLI 会话'},
+               {id:'aliyun-coding-plan', name:'Coding Plan', type:'window', note:'sk-sp- Key + bl CLI 会话'},
+               {id:'aliyun-payg', name:'按量付费', type:'balance', note:'后置'}],
+    ark:      [{id:'ark-coding', name:'Coding Plan', type:'window', note:'控制台 Cookie'},
+               {id:'ark-payg', name:'按量付费', type:'balance', note:'后置'}],
+    deepseek: [{id:'deepseek', name:'按量余额', type:'balance', note:'platform.deepseek.com 的 Key'}],
+    opencode: [{id:'opencode-go', name:'Go (订阅)', type:'window', note:'zen/go/v1/usage'},
+               {id:'opencode-zen', name:'Zen (按量)', type:'balance', note:'余额端点待接入'}],
+  };
+  const PLATFORM_META = {
+    kimi:['Kimi','#6d28d9','K'], aliyun:['阿里云百炼','#ff6a00','百'], ark:['火山方舟','#1664ff','火'],
+    deepseek:['DeepSeek','#4d6bfe','D'], opencode:['opencode','#6b7280','OC'],
+  };
+  function openPicker(){ pickerStep1(); document.getElementById('picker').classList.add('open'); }
+  function pickerStep1(){
+    document.getElementById('pk-title').textContent='选择平台';
+    document.getElementById('pk-back').style.display='none';
+    document.getElementById('pk-platforms').style.display='grid';
+    document.getElementById('pk-products').style.display='none';
+  }
+  function pickerStep2(p){
+    const [pname] = PLATFORM_META[p];
+    document.getElementById('pk-title').textContent=pname+' · 选择产品';
+    document.getElementById('pk-back').style.display='inline';
+    document.getElementById('pk-platforms').style.display='none';
+    const box=document.getElementById('pk-products');
+    box.style.display='flex';
+    box.innerHTML = PRODUCTS[p].map(pr=>`
+      <div class="ch" style="flex-direction:row;justify-content:flex-start;gap:10px;padding:10px 12px"
+           onclick="openForm('${pr.id}','${pname} ${pr.name}','${PLATFORM_META[p][1]}','${PLATFORM_META[p][2]}')">
+        <span class="badge2" style="border:1px solid var(--border);border-radius:4px;padding:1px 6px">${pr.type}</span>
+        <span style="font-size:12.5px;font-weight:600">${pr.name}</span>
+        <span style="margin-left:auto;font-size:10px;color:var(--faint)">${pr.note}</span>
+      </div>`).join('');
+  }
   function closeAll(){ document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('open')); }
   function openForm(id, name, color, letter){
     closeAll();
