@@ -101,7 +101,7 @@ channels/
 ├── deepseek/        generic-http 实现, params: { api_key }
 ├── kimi-code/       generic-http 实现, params: { api_key }  (/coding/v1/usages 已实测)
 ├── ark-coding/      scripted 实现,     params: { session_cookie }  (控制台 XHR + Chrome 会话)
-├── aliyun-plan/     scripted 实现,     params: { session_cookie }  (控制台网关 + Cookie, CLI 路线已证伪)
+├── aliyun-plan/     scripted 实现,     params: { bl_session | session_cookie }  (首选 bl CLI 会话, Cookie 兜底, 8/29 重置后定案)
 ├── longcat/         generic-http 实现, params: { api_key }
 ├── opencode/        generic-http 实现, params: { api_key }  (/zen/go/v1/usage 已实测, zen/go 共享账户级配额)
 └── custom-http/     高级通道: 暴露 URL+JSONPath 映射, 给折腾党(后置)
@@ -151,7 +151,7 @@ generic-http 只接"一次请求+静态映射"。
 | deepseek-api | T1 官方 `GET /user/balance` | 无 |
 | kimi-k3 (Kimi Code) | **已实测通过(2026-08-27)**: `GET https://api.kimi.com/coding/v1/usages`, KIMI_K3_KEY(sk-kimi-xxx)直接可用, 返回主配额(usage)+滚动窗(limits[].window)+会员等级+并行数+加油包(boosterWallet)。注意: 非官方文档接口, 可能变动 | 低: 接口已验证, 用 golden sample 测试防变更 |
 | volcengine (方舟 Coding) | **已确认(用户实测)**: 控制台 XHR `GET https://console.volcengine.com/api/top/ark/cn-beijing/2024-01-01/GetCodingPlanUsage`, 依赖浏览器会话 Cookie | 中: 会话过期需重新粘贴 Cookie |
-| aliyun token-plan | **CLI 路线已证伪(2026-08-27 实测)**: bl CLI 的 [Console] 类用量命令对个人版订阅不开放子账号(RAM 策略+百炼授权齐全仍 `BailianGateway.Team.NotAuthorised`, 连 usage summary 都过不去)。**改用控制台 Cookie 模式**(与 ark-coding 同套路): 端点已从 verbose 抓到 `POST https://bailian-cs.console.aliyun.com/cli/api.json`(action=BroadScopeAspnGateway, api=zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage) | 中: Cookie 过期需重新粘贴 |
+| aliyun token-plan | **首选 bl CLI**(`bl usage token-plan --output json`, 控制台会话由 CLI 维护), 待 2026-08-29 套餐重置后实测验证(当前额度耗尽 429, 且 njbx02 无头机器 console 登录有回调可达性问题, 计划用户本机登录后移植 config.json)。已证伪: 子账号 AK/SK 路线(个人版不对子账号开放 Console 网关)。**兜底: 控制台 Cookie 重放**, 端点已抓到 `POST https://bailian-cs.console.aliyun.com/cli/api.json`(api=zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage) | 中: 待重置后实测定案 |
 | meituan LongCat | 待查 | 中 |
 | opencode (zen/go) | **已实测通过(2026-08-27)**: `GET https://opencode.ai/zen/go/v1/usage`, Bearer key, 返回 rolling/weekly/monthly 三窗 {status, percent, resetsAt}。**zen key 与 go key 打同一端点返回完全一致的配额数据 → 账户级配额共享, 合并为单一 opencode 通道**(有独立 zen 账户可加第二个实例)。注: 推理被地域封锁但用量 API 可达 | 低 |
 
