@@ -158,9 +158,9 @@
       </div>
       <div class="inst">
         <span class="logo" style="background:#1664ff">火</span>
-        <div><div class="name">方舟 Coding</div><div class="sub">window · session(cookie)</div></div>
+        <div><div class="name">方舟 Coding</div><div class="sub">window · command(arkcli)</div></div>
         <span class="st ok">● ok</span>
-        <button class="iconbtn" onclick="toast('ark: 测试通过 ✓')">测试</button>
+        <button class="iconbtn" onclick="toast('arkcli auth status: 已登录 ✓')">测试</button>
         <button class="iconbtn" onclick="toast('编辑实例')">编辑</button>
       </div>
 
@@ -247,7 +247,7 @@
     <div class="chgrid" id="pk-platforms">
       <div class="ch" onclick="pickerStep2('kimi')"><span class="logo" style="background:#6d28d9">K</span>Kimi<span class="badge2">2 种产品</span></div>
       <div class="ch" onclick="pickerStep2('aliyun')"><span class="logo" style="background:#ff6a00">百</span>阿里云百炼<span class="badge2">3 种产品</span></div>
-      <div class="ch" onclick="pickerStep2('ark')"><span class="logo" style="background:#1664ff">火</span>火山方舟<span class="badge2">2 种产品</span></div>
+      <div class="ch" onclick="pickerStep2('ark')"><span class="logo" style="background:#1664ff">火</span>火山方舟<span class="badge2">3 种产品</span></div>
       <div class="ch" onclick="pickerStep2('deepseek')"><span class="logo" style="background:#4d6bfe">D</span>DeepSeek<span class="badge2">1 种产品</span></div>
       <div class="ch" onclick="pickerStep2('opencode')"><span class="logo" style="background:#6b7280;font-size:8px">OC</span>opencode<span class="badge2">2 种产品</span></div>
       <div class="ch" style="opacity:.45;cursor:default"><span class="logo" style="background:var(--none)">?</span>custom-http<span class="badge2">后置</span></div>
@@ -321,6 +321,7 @@
                {id:'aliyun-coding-plan', name:'Coding Plan', type:'window', note:'sk-sp- Key + bl CLI 会话'},
                {id:'aliyun-payg', name:'按量付费', type:'balance', note:'后置'}],
     ark:      [{id:'ark-coding', name:'Coding Plan', type:'window', note:'arkcli SSO 登录, 零参数'},
+               {id:'ark-agent', name:'Agent Plan', type:'window', note:'arkcli 同命令, 零参数'},
                {id:'ark-payg', name:'按量付费', type:'balance', note:'后置'}],
     deepseek: [{id:'deepseek', name:'按量余额', type:'balance', note:'platform.deepseek.com 的 Key'}],
     opencode: [{id:'opencode-go', name:'Go (订阅)', type:'window', note:'zen/go/v1/usage'},

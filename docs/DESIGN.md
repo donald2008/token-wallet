@@ -116,6 +116,7 @@ channels/  (两层模型: platform → product, D-025)
 │   └── pay-as-you-go/    http, balance, params: { api_key }  (后置)
 ├── volcengine-ark/
 │   ├── coding-plan/      command(arkcli), window, params: {}  (arkcli usage plan 已实测, SSO --no-browser 设备码登录)
+│   ├── agent-plan/       command(arkcli), window, params: {}  (同命令自动发现, 已实测; 团队版需 --seat)
 │   └── pay-as-you-go/    后置
 ├── deepseek/
 │   └── balance/          http, balance, params: { api_key }  (/user/balance 已实测)
@@ -238,7 +239,7 @@ generic-http 只接"一次请求+静态映射"。
 |----------|------|------|
 | deepseek-api | T1 官方 `GET /user/balance` | 无 |
 | kimi-k3 (Kimi Code) | **已实测通过(2026-08-27)**: `GET https://api.kimi.com/coding/v1/usages`, KIMI_K3_KEY(sk-kimi-xxx)直接可用, 返回主配额(usage)+滚动窗(limits[].window)+会员等级+并行数+加油包(boosterWallet)。注意: 非官方文档接口, 可能变动 | 低: 接口已验证, 用 golden sample 测试防变更 |
-| volcengine (方舟 Coding) | **已实测通过(2026-08-27)**: arkcli command 类 — `arkcli auth login --no-browser`(SSO 设备码两段式, 无头可用) + `arkcli usage plan`(JSON: session/weekly/monthly 三窗 percent+reset_at)。Cookie 控制台 XHR(GetCodingPlanUsage)降级为备用参考 | 低: 官方 CLI 管会话 |
+| volcengine 方舟 | **已实测通过(2026-08-27)**: arkcli command 类 — `arkcli auth login --no-browser`(SSO 设备码两段式, 无头可用) + `arkcli usage plan --all` 一条命令覆盖 Coding Plan/Agent Plan × 个人/团队 4 SKU(团队版需 --seat)。Cookie 控制台 XHR(GetCodingPlanUsage)降级为备用参考 | 低: 官方 CLI 管会话 |
 | aliyun token-plan | **首选 bl CLI**(`bl usage token-plan --output json`, 控制台会话由 CLI 维护), 待 2026-08-29 套餐重置后实测验证(当前额度耗尽 429, 且 njbx02 无头机器 console 登录有回调可达性问题, 计划用户本机登录后移植 config.json)。已证伪: 子账号 AK/SK 路线(个人版不对子账号开放 Console 网关)。**兜底: 控制台 Cookie 重放**, 端点已抓到 `POST https://bailian-cs.console.aliyun.com/cli/api.json`(api=zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage) | 中: 待重置后实测定案 |
 | meituan LongCat | 待查 | 中 |
 | opencode | **go 已实测(2026-08-27)**: `GET https://opencode.ai/zen/go/v1/usage` 返回 rolling/weekly/monthly 三窗 {status, percent, resetsAt}。**zen 是按量付费(balance)**, 余额端点待 spike(/zen/v1/usage 返回 SPA 非 API)。注: zen/go key 打 go 端点返回一致数据(账户级), 推理被地域封锁但用量 API 可达 | go 低 / zen 中 |
