@@ -147,23 +147,36 @@ instances.yaml 示例(用户唯一能看到的配置面):
 version: 1
 instances:
   - id: deepseek
-    channel: deepseek
+    channel: deepseek/balance
+    name: "DeepSeek 按量 #1"          # 必填, 全局唯一; 默认 "<产品名> #N" 自动编号
     params:
       api_key: { source: store }       # store = 设置页录入的加密存储; env/command 供 headless
+  - id: deepseek-2
+    channel: deepseek/balance
+    name: "DS-小号"                    # 用户自定义, 便于面板区分账号
+    params:
+      api_key: { source: store }
   - id: kimi
-    channel: kimi-code
+    channel: kimi/kimi-code
+    name: "Kimi Code #1"
     poll_interval: 3m                   # 可选, 覆盖全局默认
     params:
       api_key: { source: store }
   - id: aliyun
-    channel: aliyun-plan
+    channel: aliyun-bailian/token-plan
+    name: "百炼 Token Plan"
     params:
       api_key: { source: store }       # sk-sp, 探针模式用; 完整用量依赖 bl 会话
   - id: ark
-    channel: ark-coding
+    channel: volcengine-ark/coding-plan
+    name: "方舟 Coding"
     params:
       session_cookie: { source: store }
 ```
+
+实例命名规则(D-026): 同平台同产品允许多实例(多账号); `name` 必填且全局唯一,
+默认 "<产品名> #N" 自动编号; 表单保存即时校验 + instances.yaml 加载 zod 双重拒绝重复;
+面板卡片标题显示实例名, 悬停显示 platform/product 全路径。
 
 凭据引用统一为 CredentialRef `{source: store|env|file|command, key?}`:
 桌面用户用 store(设置页写入); headless 部署用 env/command(我们接 Consul KV)。

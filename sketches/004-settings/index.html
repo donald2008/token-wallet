@@ -262,6 +262,11 @@
   <div class="modal">
     <h3><span class="logo" id="f-logo">D</span>&nbsp;添加 <span id="f-name">DeepSeek</span> <button class="x" onclick="closeAll()">✕</button></h3>
     <div class="fld">
+      <label>实例名称 <span style="color:var(--faint)">(唯一, 用于区分多账号)</span></label>
+      <input type="text" id="f-inst-name" value="">
+      <div class="help" id="f-name-help">默认自动编号; 重名保存时会被拒绝</div>
+    </div>
+    <div class="fld">
       <label id="f-p1-label">API Key</label>
       <input type="password" id="f-p1" placeholder="sk-...">
       <div class="help" id="f-p1-help">platform.deepseek.com → API Keys</div>
@@ -348,9 +353,12 @@
       </div>`).join('');
   }
   function closeAll(){ document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('open')); }
+  const _seq = {};
   function openForm(id, name, color, letter){
     closeAll();
     document.getElementById('f-name').textContent = name;
+    _seq[id] = (_seq[id]||0)+1;
+    document.getElementById('f-inst-name').value = name.split(' ').pop() + ' #' + _seq[id];
     const lg = document.getElementById('f-logo');
     lg.style.background = color; lg.textContent = letter;
     document.getElementById('f-cookie-fld').style.display = (id==='ark-coding') ? 'block' : 'none';
