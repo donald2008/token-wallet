@@ -1,0 +1,25 @@
+{
+  "name": "token-wallet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI 套餐/额度桌面仪表盘 — cloud plan quota & local agent usage at a glance",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm -C packages/app dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "mcp": "pnpm -C packages/mcp-server start"
+  },
+  "keywords": [
+    "llm",
+    "quota",
+    "dashboard",
+    "tauri",
+    "coding-plan",
+    "ai-usage"
+  ]
+}

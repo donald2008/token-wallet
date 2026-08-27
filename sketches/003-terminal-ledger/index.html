@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>token-wallet · 变体C 终端账本</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--font-mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,monospace}
+  [data-theme="dark"]{
+    --bg:#0a0a0a; --panel:#111311; --card:#161916; --border:#2a2f2a;
+    --fg:#c9d4c9; --muted:#7d8a7d; --faint:#4d574d;
+    --ok:#4ade80; --warn:#facc15; --bad:#f87171; --none:#6b7280; --accent:#5eead4;
+    --cell:#232823;
+  }
+  [data-theme="light"]{
+    --bg:#e8eae6; --panel:#fbfbf8; --card:#f1f2ec; --border:#d4d7cd;
+    --fg:#23281f; --muted:#5c665a; --faint:#98a094;
+    --ok:#15803d; --warn:#a16207; --bad:#b91c1c; --none:#8a9188; --accent:#0f766e;
+    --cell:#e3e5dc;
+  }
+  body{font-family:var(--font-mono);background:var(--bg);color:var(--fg);min-height:100vh;
+       display:flex;flex-direction:column;align-items:center;padding:32px 12px}
+  .hint{color:var(--faint);font-size:12px;margin-bottom:14px}
+  .panel{width:392px;background:var(--panel);border:1px solid var(--border);border-radius:6px;
+         overflow:hidden;box-shadow:0 10px 32px rgba(0,0,0,.4)}
+  .hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px}
+  .hdr .dot{color:var(--bad)}
+  .hdr .spacer{flex:1}
+  .hdr button{background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;
+              padding:2px 7px;cursor:pointer;font-family:var(--font-mono);font-size:11px}
+  .hdr button:hover{color:var(--fg)}
+  .card{padding:8px 12px;border-bottom:1px solid var(--border);background:var(--card);font-size:12px}
+  .crow{display:flex;gap:8px;align-items:baseline}
+  .cname{font-weight:700}
+  .badge{color:var(--faint);font-size:10px}
+  .st{margin-left:auto;font-size:11px}
+  .st.ok{color:var(--ok)} .st.warn{color:var(--warn)} .st.bad{color:var(--bad)} .st.none{color:var(--none)}
+  .blk{letter-spacing:1px;font-size:12px;line-height:1.7;white-space:nowrap}
+  .blk .c-ok{color:var(--ok)} .blk .c-warn{color:var(--warn)} .blk .c-bad{color:var(--bad)} .blk .c-none{color:var(--cell)}
+  .rowlab{color:var(--muted)}
+  .meta{color:var(--muted);font-size:10.5px;margin-top:2px}
+  .spark{display:block;margin-top:4px}
+  .bignum{font-size:20px;font-weight:700}
+  .bsub{color:var(--muted);font-size:10.5px}
+  .statext{color:var(--warn);font-size:11px;margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  td,th{padding:2.5px 0;text-align:left;border-bottom:1px dotted var(--border)}
+  th{color:var(--faint);font-weight:400;font-size:10px}
+  td.r,th.r{text-align:right}
+  .compare{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);color:var(--accent);font-size:11px}
+  .freshness{padding:6px 12px;font-size:10px;color:var(--faint);display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+<div class="hint">变体C · 终端账本 — 等宽字体+字符进度条+趋势 sparkline · <a href="#" onclick="toggleTheme();return false" style="color:var(--accent)">切换主题</a></div>
+
+<div class="panel">
+  <div class="hdr">
+    <span class="dot">●</span><b>token-wallet</b><span style="color:var(--faint)">v0.1.0</span>
+    <span class="spacer"></span>
+    <button onclick="alert('sync now')">sync</button>
+    <button onclick="alert('config')">cfg</button>
+    <button onclick="toggleTheme()">theme</button>
+  </div>
+
+  <div class="card">
+    <div class="crow"><span class="cname">kimi-code</span><span class="badge">[window]</span><span class="st bad">▲ CRIT</span></div>
+    <div class="blk"><span class="rowlab">5h </span><span class="c-bad">████████▌░</span><span class="c-none">░</span> 82% <span class="meta">rst 1:23</span></div>
+    <div class="blk"><span class="rowlab">7d </span><span class="c-warn">██████</span><span class="c-none">░░░░</span> 61% <span class="meta">rst 3d</span></div>
+    <div class="blk"><span class="rowlab">30d</span><span> </span><span class="c-ok">███</span><span class="c-none">░░░░░░░</span> 28% <span class="meta">rst 18d</span></div>
+    <svg class="spark" width="340" height="26" viewBox="0 0 340 26">
+      <polyline fill="none" stroke="var(--bad)" stroke-width="1.5"
+        points="0,20 24,19 48,19 72,17 96,17 120,15 144,14 168,12 192,10 216,9 240,7 264,6 288,4 312,3 336,2"/>
+      <text x="336" y="24" fill="var(--faint)" font-size="8" text-anchor="end">5h窗用量 14天趋势</text>
+    </svg>
+  </div>
+
+  <div class="card">
+    <div class="crow"><span class="cname">ark-coding</span><span class="badge">[window]</span><span class="st warn">● WARN</span></div>
+    <div class="blk"><span class="rowlab">5h </span><span class="c-ok">███</span><span class="c-none">░░░░░░░</span> 31% <span class="meta">rst 2:47</span></div>
+    <div class="blk"><span class="rowlab">7d </span><span class="c-warn">████████▏</span><span class="c-none">░░</span> 81% <span class="meta">rst 4d · 余19%</span></div>
+  </div>
+
+  <div class="card">
+    <div class="crow"><span class="cname">deepseek</span><span class="badge">[balance]</span><span class="st ok">● OK</span></div>
+    <div class="bignum">¥142.30 <span class="bsub">≈ 26d @ ¥5.4/d</span></div>
+    <svg class="spark" width="340" height="22" viewBox="0 0 340 22">
+      <polyline fill="none" stroke="var(--ok)" stroke-width="1.5"
+        points="0,3 28,4 56,5 84,6 112,8 140,9 168,10 196,12 224,13 252,15 280,16 308,18 336,19"/>
+      <text x="336" y="10" fill="var(--faint)" font-size="8" text-anchor="end">余额 14 天</text>
+    </svg>
+  </div>
+
+  <div class="card">
+    <div class="crow"><span class="cname">bailian-plan</span><span class="badge">[window]</span><span class="st bad">✕ AUTH</span></div>
+    <div class="statext">!! auth expired — relogin required (data 3h old)</div>
+  </div>
+
+  <div class="card">
+    <div class="crow"><span class="cname">opencode-go</span><span class="badge">[window]</span><span class="st none">○ N/A</span></div>
+    <div class="statext" style="color:var(--none)">-- geo-blocked, collection disabled</div>
+  </div>
+
+  <div class="card">
+    <div class="crow"><span class="cname" style="color:var(--muted)">local agents</span><span class="badge">[today]</span></div>
+    <table>
+      <tr><th>host</th><th>model</th><th class="r">tokens</th><th class="r">cost</th></tr>
+      <tr><td>njbx02</td><td>k3</td><td class="r">1.2M</td><td class="r">¥8.4</td></tr>
+      <tr><td>home-pc</td><td>ds-pro</td><td class="r">0.8M</td><td class="r">¥5.1</td></tr>
+      <tr><td>desktop</td><td>glm-5.2</td><td class="r">0.3M</td><td class="r">¥1.9</td></tr>
+    </table>
+    <div class="compare">→ deepseek 余额 ≈ 17 天当前强度</div>
+  </div>
+
+  <div class="freshness"><span>last_sync: 2min ago</span><span>poll: 5m [T2]</span></div>
+</div>
+
+<script>
+  function toggleTheme(){
+    const h=document.documentElement;
+    h.dataset.theme = h.dataset.theme==='dark' ? 'light' : 'dark';
+  }
+  if (matchMedia('(prefers-color-scheme: light)').matches) document.documentElement.dataset.theme='light';
+</script>
+</body>
+</html>

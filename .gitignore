@@ -1,0 +1,34 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+
+# env & credentials (never commit)
+.env
+.env.*
+credentials.yaml
+credentials.yml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+*.log
+
+# local data
+data/
+*.jsonl
+!sketches/**/*.jsonl
