@@ -50,8 +50,7 @@
        padding:0 7px;font-size:10.5px;font-family:var(--font-mono);white-space:nowrap}
   .bar>.lab.track{right:0;color:var(--fg)}
   .fill>.lab.onfill{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4)}
-  /* warn 黄底用深色文字保证对比度 */
-  .fill.warn>.lab.onfill{color:#231f00;text-shadow:0 1px 2px rgba(255,255,255,.35)}
+  /* 试版: warn 黄底同样用白字(原为深色字 #231f00, 见 git 历史) */
   .fill.ok{background:var(--ok)} .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
   .meta{display:flex;gap:10px;margin-top:6px;font-size:11px;color:var(--muted);font-family:var(--font-mono)}
   .bignum{font-family:var(--font-mono);font-size:22px;font-weight:700;margin-top:2px}
@@ -94,7 +93,7 @@
   <div class="card">
     <div class="crow"><span class="cname">方舟 Coding</span><span class="badge">window</span><span class="st warn">● 偏低</span></div>
     <div class="bar"><div class="lab track"><span>5小时窗</span><span>31% · 重置 2:47</span></div><div class="fill ok" style="width:31%"><div class="lab onfill" style="width:calc(10000%/31)"><span>5小时窗</span><span>31% · 重置 2:47</span></div></div></div>
-    <div class="bar"><div class="lab track"><span>本周</span><span>余19% · 重置 4d ⚠</span></div><div class="fill warn" style="width:81%"><div class="lab onfill" style="width:calc(10000%/81)"><span>本周</span><span>余19% · 重置 4d ⚠</span></div></div></div>
+    <div class="bar"><div class="lab track"><span>本周</span><span>81% · 重置 4d</span></div><div class="fill warn" style="width:81%"><div class="lab onfill" style="width:calc(10000%/81)"><span>本周</span><span>81% · 重置 4d</span></div></div></div>
   </div>
 
   <div class="card">
