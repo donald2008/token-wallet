@@ -358,7 +358,7 @@
     closeAll();
     document.getElementById('f-name').textContent = name;
     _seq[id] = (_seq[id]||0)+1;
-    document.getElementById('f-inst-name').value = name.split(' ').pop() + ' #' + _seq[id];
+    document.getElementById('f-inst-name').value = name.replace(/\s*\(.*?\)\s*/g,'').replace(' ','-') + ' #' + _seq[id];
     const lg = document.getElementById('f-logo');
     lg.style.background = color; lg.textContent = letter;
     document.getElementById('f-cookie-fld').style.display = (id==='ark-coding') ? 'block' : 'none';
