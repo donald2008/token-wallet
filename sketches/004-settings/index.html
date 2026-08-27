@@ -202,8 +202,8 @@
       <div class="desc">轮询节奏。per-instance 覆盖在 Provider 编辑里。</div>
       <div class="srow"><div><div class="lab">默认轮询间隔</div><div class="sub2">T2 档推荐 5 分钟</div></div>
         <select><option>1 分钟</option><option selected>5 分钟</option><option>15 分钟</option><option>30 分钟</option></select></div>
-      <div class="srow"><div><div class="lab">会话类通道间隔</div><div class="sub2">cookie 类(方舟等), 降低风控风险</div></div>
-        <select><option>15 分钟</option><option selected>30 分钟</option><option>60 分钟</option></select></div>
+      <div class="srow"><div><div class="lab">command 类通道间隔</div><div class="sub2">bl/arkcli 等 CLI 包装类, 避免高频拉起子进程</div></div>
+        <select><option>5 分钟</option><option selected>15 分钟</option><option>30 分钟</option></select></div>
       <div class="thresh" id="thresh" style="--p-red:10%;--p-yellow:30%">
         <div class="lab">状态阈值</div>
         <div class="sub2">剩余配额低于黄线转黄、低于红线转红; 拖动滑块调整, 耗尽/失效恒红</div>
