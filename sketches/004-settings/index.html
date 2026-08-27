@@ -71,6 +71,19 @@
                  background:#fff;transition:left .15s}
   .switch.on{background:var(--accent)}
   .switch.on::after{left:18px}
+  /* 双滑块阈值标尺 */
+  .thresh{padding:12px 2px;border-bottom:1px solid var(--border)}
+  .thresh .lab{font-weight:500;font-size:13px}
+  .thresh .sub2{font-size:11px;color:var(--muted);margin-top:2px}
+  .track2{position:relative;height:14px;border-radius:7px;margin:22px 8px 6px;
+          background:linear-gradient(to right, var(--bad) 0%, var(--bad) var(--p-red), var(--warn) var(--p-red), var(--warn) var(--p-yellow), var(--ok) var(--p-yellow), var(--ok) 100%)}
+  .thumb{position:absolute;top:50%;width:18px;height:18px;border-radius:50%;background:#fff;
+         border:2px solid var(--fg);transform:translate(-50%,-50%);cursor:grab;touch-action:none;z-index:2}
+  .thumb .tip{position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:10px;
+              font-family:var(--font-mono);color:var(--fg);background:var(--card);border:1px solid var(--border);
+              border-radius:4px;padding:1px 5px;white-space:nowrap}
+  .thresh .cap{display:flex;justify-content:space-between;font-size:10px;color:var(--faint);
+               font-family:var(--font-mono);margin:0 8px}
   select,input[type=text],input[type=password]{background:var(--input);border:1px solid var(--border);
     color:var(--fg);border-radius:6px;padding:6px 9px;font-size:12.5px;font-family:var(--font-ui)}
   /* 弹层: 通道选择 + 表单 */
@@ -180,11 +193,15 @@
         <select><option>1 分钟</option><option selected>5 分钟</option><option>15 分钟</option><option>30 分钟</option></select></div>
       <div class="srow"><div><div class="lab">会话类通道间隔</div><div class="sub2">cookie 类(方舟等), 降低风控风险</div></div>
         <select><option>15 分钟</option><option selected>30 分钟</option><option>60 分钟</option></select></div>
-      <div class="srow"><div><div class="lab">状态阈值</div><div class="sub2">剩余低于黄线转黄, 低于红线转红; 耗尽/失效恒红</div></div>
-        <div style="display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted)">
-          黄 <select><option>30%</option><option>20%</option><option>40%</option></select>
-          红 <select><option>10%</option><option>5%</option><option>15%</option></select>
-        </div></div>
+      <div class="thresh" id="thresh" style="--p-red:10%;--p-yellow:30%">
+        <div class="lab">状态阈值</div>
+        <div class="sub2">剩余配额低于黄线转黄、低于红线转红; 拖动滑块调整, 耗尽/失效恒红</div>
+        <div class="track2" id="track2">
+          <div class="thumb" id="th-red" style="left:10%"><span class="tip">红 <b>10%</b></span></div>
+          <div class="thumb" id="th-yellow" style="left:30%"><span class="tip">黄 <b>30%</b></span></div>
+        </div>
+        <div class="cap"><span>0%</span><span>剩余配额</span><span>100%</span></div>
+      </div>
       <div class="srow" style="border-bottom:none"><div><div class="lab">stale 判定</div><div class="sub2">超过 N 个周期未更新标记 stale</div></div>
         <select><option selected>2 个周期</option><option>3 个周期</option></select></div>
     </div>
@@ -312,6 +329,35 @@
     t.textContent=msg; t.style.display='block';
     clearTimeout(t._tm); t._tm=setTimeout(()=>t.style.display='none',2200);
   }
+
+  // 双滑块阈值: 红黄不允许交叉, 最小间隔 5%
+  (function(){
+    const wrap=document.getElementById('thresh'), track=document.getElementById('track2');
+    const thR=document.getElementById('th-red'), thY=document.getElementById('th-yellow');
+    let red=10, yellow=30;
+    function render(){
+      wrap.style.setProperty('--p-red', red+'%');
+      wrap.style.setProperty('--p-yellow', yellow+'%');
+      thR.style.left=red+'%'; thY.style.left=yellow+'%';
+      thR.querySelector('b').textContent=red+'%';
+      thY.querySelector('b').textContent=yellow+'%';
+    }
+    function drag(th, isRed){
+      th.addEventListener('pointerdown', e=>{
+        th.setPointerCapture(e.pointerId);
+        const move=ev=>{
+          const r=track.getBoundingClientRect();
+          let p=Math.round((ev.clientX-r.left)/r.width*100);
+          p=Math.max(0,Math.min(100,p));
+          if(isRed) red=Math.min(p, yellow-5); else yellow=Math.max(p, red+5);
+          render();
+        };
+        th.addEventListener('pointermove', move);
+        th.addEventListener('pointerup', ()=>th.removeEventListener('pointermove', move), {once:true});
+      });
+    }
+    drag(thR,true); drag(thY,false); render();
+  })();
 </script>
 </body>
 </html>
