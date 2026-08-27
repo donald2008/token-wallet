@@ -308,12 +308,23 @@ SQLite schema 核心表:
 | 数据类型 | Windows | macOS | Linux | API |
 |---------|---------|-------|-------|-----|
 | 配置(instances.yaml/settings) | %APPDATA%\token-wallet\ | ~/Library/Application Support/ | ~/.config/token-wallet/ | Tauri app_config_dir |
-| 快照数据(JSONL/SQLite) | %LOCALAPPDATA%\token-wallet\ | 同上 | ~/.local/share/token-wallet/ | Tauri app_data_dir(大文件不进 Roaming) |
-| 凭据(store 源) | Windows 凭据管理器 | Keychain | Secret Service | keyring crate; headless 降级 600 权限文件 |
+| 快照数据(SQLite) | %LOCALAPPDATA%\token-wallet\ | 同上 | ~/.local/share/token-wallet/ | Tauri app_data_dir(大文件不进 Roaming) |
+| 凭据(store 源) | Windows 凭据管理器 | Keychain | Secret Service | keyring crate; headless 降级链 env → command → 600 权限文件(D-029) |
 
 - 代码零路径字面量; mcp-server(Node 侧)用 env-paths 保持同一约定
 - 配置与数据分家: 清缓存不丢配置
 - 设置页显示运行时解析的真实路径, 不写死示例路径
+
+### 7.2 凭据安全(D-029)
+
+威胁模型(按现实程度): 同机进程读文件 > 误提交/误贴日志 > 备份上云; 物理拿到解锁机器放弃抵抗。
+
+- **桌面端一律 OS 钥匙串**(keyring crate); 不自己发明加密
+- **instances.yaml 只存 CredentialRef 引用**, 永不存值
+- **内存纪律**: key 读出后只活在请求构造瞬间; 不进 UI 状态/日志/错误消息;
+  日志统一出口做模式脱敏(`sk-***` / `Bearer ***`)
+- 数据目录权限 0700; 删除实例同步删除钥匙串条目
+- headless 降级链: env → command(如 Consul KV) → 600 权限文件(README 显著警告)
 
 ## 8. MCP 数据面
 
