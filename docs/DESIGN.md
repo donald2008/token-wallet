@@ -100,7 +100,7 @@ Notifier          异常往哪报   P3 前空实现, 接口先行
 channels/
 ├── deepseek/        generic-http 实现, params: { api_key }
 ├── kimi-code/       scripted 实现,     params: { api_key }
-├── ark-coding/      scripted 实现,     params: 待 spike(ARK_KEY 或 ak+sk)
+├── ark-coding/      scripted 实现,     params: { session_cookie }  (控制台 XHR + Chrome 会话)
 ├── aliyun-plan/     scripted 实现,     params: { access_key_id, access_key_secret }
 ├── longcat/         generic-http 实现, params: { api_key }
 ├── opencode-zen/    generic-http 实现, params: { api_key }
@@ -150,7 +150,7 @@ generic-http 只接"一次请求+静态映射"。
 |----------|------|------|
 | deepseek-api | T1 官方 `GET /user/balance` | 无 |
 | kimi-k3 (Kimi Code) | T2 逆向 CLI /usage 背后的 api.kimi.com 内部端点 | 中: 非公开接口可能变更 |
-| volcengine (方舟 Coding) | T2 火山 OpenAPI/控制台 XHR(用户判断有对应 API) | 中 |
+| volcengine (方舟 Coding) | **已确认(用户实测)**: 控制台 XHR `GET https://console.volcengine.com/api/top/ark/cn-beijing/2024-01-01/GetCodingPlanUsage`, 依赖浏览器会话 Cookie | 中: 会话过期需重新粘贴 Cookie |
 | aliyun token-plan | T2 阿里云 CLI(bssopenapi/百炼套餐接口) | 中 |
 | meituan LongCat | 待查 | 中 |
 | opencode-zen | T2 dashboard API | 低-中 |
