@@ -161,6 +161,8 @@
         <div class="seg"><button class="on">ticker</button><button onclick="segSet(this)">gauge</button></div></div>
       <div class="srow" style="border-bottom:none"><div><div class="lab">悬浮窄条</div><div class="sub2">桌面常驻 mini 形态</div></div>
         <div class="seg"><button class="on">关</button><button onclick="segSet(this)">开</button></div></div>
+      <div class="srow" style="border-bottom:none"><div><div class="lab">开机自启</div><div class="sub2">默认关, 由用户决定</div></div>
+        <div class="seg"><button class="on">关</button><button onclick="segSet(this)">开</button></div></div>
     </div>
 
     <!-- 采集 -->
@@ -171,6 +173,11 @@
         <select><option>1 分钟</option><option selected>5 分钟</option><option>15 分钟</option><option>30 分钟</option></select></div>
       <div class="srow"><div><div class="lab">会话类通道间隔</div><div class="sub2">cookie 类(方舟等), 降低风控风险</div></div>
         <select><option>15 分钟</option><option selected>30 分钟</option><option>60 分钟</option></select></div>
+      <div class="srow"><div><div class="lab">状态阈值</div><div class="sub2">剩余低于黄线转黄, 低于红线转红; 耗尽/失效恒红</div></div>
+        <div style="display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted)">
+          黄 <select><option>30%</option><option>20%</option><option>40%</option></select>
+          红 <select><option>10%</option><option>5%</option><option>15%</option></select>
+        </div></div>
       <div class="srow" style="border-bottom:none"><div><div class="lab">stale 判定</div><div class="sub2">超过 N 个周期未更新标记 stale</div></div>
         <select><option selected>2 个周期</option><option>3 个周期</option></select></div>
     </div>

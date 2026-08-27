@@ -257,8 +257,12 @@ StorageBackend 接口 P0 定义, 双宿主约束: mcp-server 是 Node 进程, ap
 
 | 实现 | 阶段 | 说明 |
 |------|------|------|
-| JsonlStore | MVP | 追加 JSONL + latest.json, 零依赖双宿主通用 |
-| SqliteStore | P3 评估 | mcp-server 用 node:sqlite(Node 22+ 内置); app 走 Tauri sql plugin。当 MCP 需要应答 quota_history 区间聚合时引入 |
+| SqliteStore | **P0 主力(D-020)** | 每时段×每模型×每 provider 消耗记录 + 聚合查询。app 走 tauri-plugin-sql(Rust 侧执行); mcp-server 走 node:sqlite(Node 22+ 内置)。同一 schema |
+| JsonlStore | 调试/导出 | 快照导出为人可读 JSONL, 非主存储 |
+
+SQLite schema 核心表:
+- `snapshots(id, provider_id, fetched_at, status, raw_json)` — 原始快照
+- `usage_records(id, provider_id, model, window_start, window_end, tokens, credits, cost_cny)` — 分模型分时段消耗(本地 agent 通道与云端窗口数据都落这张)
 
 ### 7.1 存储位置: 按平台解析, 零硬编码(D-019)
 
@@ -284,12 +288,28 @@ providers ──> core(采集/归一化/缓存) ──> StorageBackend ──> M
 协议: streamable-http, 复用我们 kanban-mcp 的 header 鉴权经验。
 Agent 对接唯一通道 = MCP, 不维护第二套 HTTP API。
 
-## 9. 告警
+## 9. 告警与状态阈值
 
-P3 实现, Notifier 接口 P0 先行(空实现), 配置 `notifications.enabled=false` 占位。
-阈值触发 Windows 原生通知(Tauri notification), 同一告警冷却期防轰炸。
+状态四色: 绿(健康) / 黄(低于黄线) / 红(低于红线) / 灰(unsupported/stale)。
 
-## 10. 阶段划分
+- **阈值全局可配置(D-022)**: 黄线默认 30%, 红线默认 10%(剩余百分比); 设置页可调
+- auth_expired / 额度耗尽(100%) 恒为红, 不走阈值
+- 通知 P3 实现, Notifier 接口 P0 先行(空实现), 配置 `notifications.enabled=false` 占位
+- 阈值触发 Windows 原生通知(Tauri notification → 操作中心), 同一告警冷却期防轰炸
+- 我们自己的部署可另接 MM 作战室通道
+
+## 10. 分发与首开(D-021)
+
+- Windows 标准安装包(Tauri NSIS),  installs per-user
+- 首开向导: **隐私声明页(零遥测/零上报/数据不出本机, 须点同意)** → 引导添加第一个 provider(通道选择器)
+- 初始状态零 provider 配置
+- 托盘/应用图标: 自设计 token-wallet logo
+- 开机自启: 设置页开关, **默认关**
+- command 通道依赖检测与安装(D-023): 添加 aliyun-plan 实例时检测 `bl` 是否在 PATH,
+  缺失则显示"一键安装"按钮 — app spawn PowerShell 跑官方二进制脚本(`irm https://bailian.aliyun.com/cli/install.ps1 | iex`, 无需 Node),
+  stdout 实时流入设置页的 log 抽屉展示进度; 装完引导 `bl auth login --console`
+
+## 11. 阶段划分
 
 | 阶段 | 内容 |
 |------|------|

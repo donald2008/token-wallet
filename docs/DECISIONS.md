@@ -23,3 +23,8 @@
 | D-017 | 2026-08-27 | 平台对接=预置通道(channel)+参数录入; 用户不接触 YAML/JSONPath; 设置页动态表单+测试连接; custom-http 高级通道后置 | 映射规则是通道内部实现细节不是用户输入面; 录入即验证(测试连接) |
 | D-018 | 2026-08-27 | 适配器实现四类: http / command(包装官方 CLI) / session(Cookie) / local-agent; 配置三层分离(内置通道目录/实例/全局设置); 凭据统一 CredentialRef(store/env/file/command) | 由 7 家实战收敛; aliyun 走 bl CLI(command 类首实例), api_key 保留用于探针模式; longcat 暂缓 |
 | D-019 | 2026-08-27 | 存储位置按平台解析(Tauri path API / env-paths), 零硬编码; 配置(Roaming)与数据(Local)分家; 凭据进 OS 钥匙串, headless 降级 600 文件 | Windows 为主平台, Roaming 漫游同步不应拖快照大文件 |
+| D-020 | 2026-08-27 | 持久化转正 SQLite 为 P0 主力(推翻 D-006 的 JSONL-first): app 走 tauri-plugin-sql, mcp-server 走 node:sqlite; JsonlStore 降级为调试导出 | 每时段×每模型消耗记录是核心需求, 聚合查询需要索引, JSONL 全扫扛不住 |
+| D-021 | 2026-08-27 | 分发=标准 Windows 安装包(NSIS); 首开向导=隐私声明(零遥测, 须同意) → 引导添加首个 provider; 初始零配置 | 用户明确定调标准安装形态 |
+| D-022 | 2026-08-27 | 状态阈值全局可配置(黄线默认 30%, 红线默认 10%); auth_expired/耗尽恒红不走阈值 | 用户要求阈值入配置 |
+| D-023 | 2026-08-27 | command 通道依赖由 app 内一键安装(bl 走官方二进制脚本 irm|iex, 无需 Node), 安装过程 stdout 实时流入 log 抽屉 | 用户要求安装进度可视化; bl 官方提供免 Node 二进制安装 |
+| D-024 | 2026-08-27 | 托盘/应用图标为自设计 token-wallet logo; 开机自启开关默认关; mcp-server 同机本地部署; local-agent 通道 v1 仅预留占位 | 用户定调; MCP 设计后置 |
