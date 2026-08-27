@@ -91,17 +91,60 @@ Notifier          异常往哪报   P3 前空实现, 接口先行
 收敛声明: core 机制通用(采集→归一化→缓存→分发), schema 语义限定套餐/用量领域;
 不做热加载插件市场, 加平台 = 加适配器发新版。先实现再抽象, 接过 8-10 个平台后再谈进一步泛化。
 
-## 5. 适配器体系
+## 5. 适配器体系: 预置通道 + 参数录入 (D-017)
 
-两级适配, 加新 T1 provider 零代码:
+**通道是预制代码, 录入只是填参数。** 每种平台是一个预置通道(channel),
+仓库内置请求方式与映射规则; 用户添加 provider = 选通道 + 填参数, 不接触 YAML/JSONPath。
+
+```
+channels/
+├── deepseek/        generic-http 实现, params: { api_key }
+├── kimi-code/       scripted 实现,     params: { api_key }
+├── ark-coding/      scripted 实现,     params: 待 spike(ARK_KEY 或 ak+sk)
+├── aliyun-plan/     scripted 实现,     params: { access_key_id, access_key_secret }
+├── longcat/         generic-http 实现, params: { api_key }
+├── opencode-zen/    generic-http 实现, params: { api_key }
+└── custom-http/     高级通道: 暴露 URL+JSONPath 映射, 给折腾党(后置)
+```
+
+### 5.0 通道描述符 (ChannelDescriptor)
+
+```json
+{
+  "channel": "deepseek",
+  "display_name": "DeepSeek",
+  "plan_type": "balance",
+  "logo": "deepseek",
+  "params_schema": [
+    {"key": "api_key", "label": "API Key", "type": "secret", "required": true,
+     "help": "platform.deepseek.com → API Keys"}
+  ]
+}
+```
+
+- 设置页"添加 Provider": 通道选择器(logo 网格) → 动态表单(params_schema 生成,
+  secret 字段密码框, 不回显已存密钥) → **测试连接**(立即跑一次采集, 成功显示余额快照,
+  失败显示具体错误) → 保存即上面板
+- 表单校验与实例配置校验复用同一份 zod schema
+- 实例持久化: `{id, channel, poll_interval?, params: {k: CredentialRef}}`,
+  凭据值走 CredentialSource, 实例配置只存引用
+- 两条录入路径等价: 设置页 UI(桌面用户) / 实例配置文件(mcp-server headless, 我们用 command 源接 Consul KV)
+
+### 5.1 通道实现两级(内部机制, 用户不可见)
 
 | 类型 | 用法 | 适用 |
 |------|------|------|
-| GenericHttpAdapter | YAML 声明 url/headers/JSONPath 映射 | DeepSeek /user/balance, OpenRouter /credits 等标准接口 |
-| ScriptedAdapter | TS 类 | Kimi Code 逆向端点, 火山方舟 OpenAPI, 阿里云 CLI 包装 |
+| GenericHttpAdapter | 通道内置 URL/headers/JSONPath 映射 | DeepSeek /user/balance, OpenRouter /credits 等标准接口 |
+| ScriptedAdapter | TS 类 | Kimi Code 逆向端点, 火山方舟签名, 阿里云 CLI 包装 |
 | LocalAgentAdapter | 拉 Hermes gateway /api/sessions 聚合 | 本地 agent 用量 |
 
-### 5.1 各平台采集方式初判(待 P2 spike 验证)
+能力边界: 需要签名、多步请求、派生计算(reset_at 推算)、会话保活 → scripted;
+generic-http 只接"一次请求+静态映射"。
+
+安全约束: JSONPath 用 jsonpath-plus 纯求值; 状态断言用受限比较表达式,
+禁止 eval/new Function; 管道过滤器白名单(number/string/round/duration)。
+
+### 5.2 各平台采集方式初判(待 P2 spike 验证)
 
 | Provider | 路径 | 风险 |
 |----------|------|------|
