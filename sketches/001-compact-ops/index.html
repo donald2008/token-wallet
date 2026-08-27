@@ -13,13 +13,13 @@
   [data-theme="dark"]{
     --bg:#0d1117; --panel:#161b22; --card:#1c2129; --border:#2b313a;
     --fg:#e6e9ee; --muted:#8b939e; --faint:#5b636d;
-    --ok:#2ea043; --warn:#d29922; --bad:#f85149; --none:#6e7681;
+    --ok:#2ea043; --warn:#d29922; --warn-fg:#d29922; --bad:#f85149; --none:#6e7681;
     --bar-bg:#2b313a; --accent:#58a6ff;
   }
   [data-theme="light"]{
     --bg:#eef0f3; --panel:#ffffff; --card:#f6f7f9; --border:#dfe3e8;
     --fg:#1c2128; --muted:#5b636d; --faint:#9aa2ab;
-    --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --none:#8b939e;
+    --ok:#1a7f37; --warn:#eab308; --warn-fg:#92600a; --bad:#cf222e; --none:#8b939e;
     --bar-bg:#e2e6ea; --accent:#0969da;
   }
   body{font-family:var(--font-ui);background:var(--bg);color:var(--fg);
@@ -42,7 +42,7 @@
   .badge{font-size:10px;color:var(--muted);border:1px solid var(--border);
          border-radius:4px;padding:1px 5px;font-family:var(--font-mono)}
   .st{margin-left:auto;font-size:11px;font-family:var(--font-mono)}
-  .st.ok{color:var(--ok)} .st.warn{color:var(--warn)} .st.bad{color:var(--bad)} .st.none{color:var(--none)}
+  .st.ok{color:var(--ok)} .st.warn{color:var(--warn-fg)} .st.bad{color:var(--bad)} .st.none{color:var(--none)}
   .bar{position:relative;height:16px;background:var(--bar-bg);border-radius:4px;margin-top:6px;overflow:hidden}
   .bar>.fill{position:absolute;left:0;top:0;bottom:0;border-radius:4px;overflow:hidden}
   /* 双层标签: track 层(前景色, 露在空槽上) + onfill 层(白字, 裁剪进填充宽度) */
@@ -56,7 +56,7 @@
   .meta{display:flex;gap:10px;margin-top:6px;font-size:11px;color:var(--muted);font-family:var(--font-mono)}
   .bignum{font-family:var(--font-mono);font-size:22px;font-weight:700;margin-top:2px}
   .bsub{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px}
-  .statext{margin-top:6px;font-size:12px;color:var(--warn);font-family:var(--font-mono)}
+  .statext{margin-top:6px;font-size:12px;color:var(--warn-fg);font-family:var(--font-mono)}
   .sec{padding:6px 12px;background:none;border:none;width:100%;text-align:left;color:var(--muted);
        font-size:12px;cursor:pointer;font-family:var(--font-ui)}
   .sec:hover{color:var(--fg)}
