@@ -22,3 +22,4 @@
 | D-016 | 2026-08-27 | 语义色拆双 token: --warn(填充/图形) 与 --warn-fg(文字) | 浅色主题下亮黄填充上文字必须深色, 共用单一色值会把黄色压成棕色; 同一语义不同角色不同色值, ok/bad 同理预留 |
 | D-017 | 2026-08-27 | 平台对接=预置通道(channel)+参数录入; 用户不接触 YAML/JSONPath; 设置页动态表单+测试连接; custom-http 高级通道后置 | 映射规则是通道内部实现细节不是用户输入面; 录入即验证(测试连接) |
 | D-018 | 2026-08-27 | 适配器实现四类: http / command(包装官方 CLI) / session(Cookie) / local-agent; 配置三层分离(内置通道目录/实例/全局设置); 凭据统一 CredentialRef(store/env/file/command) | 由 7 家实战收敛; aliyun 走 bl CLI(command 类首实例), api_key 保留用于探针模式; longcat 暂缓 |
+| D-019 | 2026-08-27 | 存储位置按平台解析(Tauri path API / env-paths), 零硬编码; 配置(Roaming)与数据(Local)分家; 凭据进 OS 钥匙串, headless 降级 600 文件 | Windows 为主平台, Roaming 漫游同步不应拖快照大文件 |

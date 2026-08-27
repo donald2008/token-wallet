@@ -260,6 +260,18 @@ StorageBackend 接口 P0 定义, 双宿主约束: mcp-server 是 Node 进程, ap
 | JsonlStore | MVP | 追加 JSONL + latest.json, 零依赖双宿主通用 |
 | SqliteStore | P3 评估 | mcp-server 用 node:sqlite(Node 22+ 内置); app 走 Tauri sql plugin。当 MCP 需要应答 quota_history 区间聚合时引入 |
 
+### 7.1 存储位置: 按平台解析, 零硬编码(D-019)
+
+| 数据类型 | Windows | macOS | Linux | API |
+|---------|---------|-------|-------|-----|
+| 配置(instances.yaml/settings) | %APPDATA%\token-wallet\ | ~/Library/Application Support/ | ~/.config/token-wallet/ | Tauri app_config_dir |
+| 快照数据(JSONL/SQLite) | %LOCALAPPDATA%\token-wallet\ | 同上 | ~/.local/share/token-wallet/ | Tauri app_data_dir(大文件不进 Roaming) |
+| 凭据(store 源) | Windows 凭据管理器 | Keychain | Secret Service | keyring crate; headless 降级 600 权限文件 |
+
+- 代码零路径字面量; mcp-server(Node 侧)用 env-paths 保持同一约定
+- 配置与数据分家: 清缓存不丢配置
+- 设置页显示运行时解析的真实路径, 不写死示例路径
+
 ## 8. MCP 数据面
 
 mcp-server 是 7×24 采集与持久化宿主, 不只是 Agent 接口:
