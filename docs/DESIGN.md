@@ -99,7 +99,7 @@ Notifier          异常往哪报   P3 前空实现, 接口先行
 ```
 channels/
 ├── deepseek/        generic-http 实现, params: { api_key }
-├── kimi-code/       scripted 实现,     params: { api_key }
+├── kimi-code/       generic-http 实现, params: { api_key }  (/coding/v1/usages 已实测)
 ├── ark-coding/      scripted 实现,     params: { session_cookie }  (控制台 XHR + Chrome 会话)
 ├── aliyun-plan/     scripted 实现,     params: { access_key_id, access_key_secret }
 ├── longcat/         generic-http 实现, params: { api_key }
@@ -149,7 +149,7 @@ generic-http 只接"一次请求+静态映射"。
 | Provider | 路径 | 风险 |
 |----------|------|------|
 | deepseek-api | T1 官方 `GET /user/balance` | 无 |
-| kimi-k3 (Kimi Code) | T2 逆向 CLI /usage 背后的 api.kimi.com 内部端点 | 中: 非公开接口可能变更 |
+| kimi-k3 (Kimi Code) | **已实测通过(2026-08-27)**: `GET https://api.kimi.com/coding/v1/usages`, KIMI_K3_KEY(sk-kimi-xxx)直接可用, 返回主配额(usage)+滚动窗(limits[].window)+会员等级+并行数+加油包(boosterWallet)。注意: 非官方文档接口, 可能变动 | 低: 接口已验证, 用 golden sample 测试防变更 |
 | volcengine (方舟 Coding) | **已确认(用户实测)**: 控制台 XHR `GET https://console.volcengine.com/api/top/ark/cn-beijing/2024-01-01/GetCodingPlanUsage`, 依赖浏览器会话 Cookie | 中: 会话过期需重新粘贴 Cookie |
 | aliyun token-plan | T2 阿里云 CLI(bssopenapi/百炼套餐接口) | 中 |
 | meituan LongCat | 待查 | 中 |
