@@ -1,0 +1,9 @@
+# 统一换行策略: text 文件按仓库格式(LF)处理, 防止 Windows autocrlf 误报 modified
+* text=auto
+
+# 明确二进制/关键文件
+*.png binary
+*.ico binary
+*.exe binary
+*.dll binary
+*.lock text
