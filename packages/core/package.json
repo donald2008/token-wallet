@@ -1,0 +1,36 @@
+{
+  "name": "@token-wallet/core",
+  "private": true,
+  "version": "0.1.0",
+  "description": "token-wallet 采集核心 — 纯 TS 库(schema/通道注册表/凭据源/存储/调度器), 零 UI 依赖",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "jsonpath-plus": "^10.3.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "~5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
