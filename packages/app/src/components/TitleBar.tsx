@@ -21,17 +21,24 @@ interface Props {
 /** 标题栏(§6.5): 全局状态点 / 手动刷新 / 主题 / 设置 */
 export function TitleBar(props: Props) {
   return (
-    <header className="titlebar">
-      <span title={props.tooltip} style={{ display: "inline-flex" }}>
+    <header className="titlebar" data-tauri-drag-region>
+      <span
+        title={props.tooltip}
+        style={{ display: "inline-flex" }}
+        data-tauri-drag-region="false"
+      >
         <StatusDot health={props.health} size={10} />
       </span>
-      <span className="app-title">token-wallet</span>
+      <span className="app-title" data-tauri-drag-region="false">
+        token-wallet
+      </span>
       <span className="spacer" />
       <button
         type="button"
         className={`btn btn-icon${props.refreshing ? " spinning" : ""}`}
         data-testid="refresh-btn"
         title="手动刷新(mock)"
+        data-tauri-drag-region="false"
         onClick={props.onRefresh}
       >
         <span className="icon-refresh">⟳</span>
@@ -41,6 +48,7 @@ export function TitleBar(props: Props) {
         className="btn"
         data-testid="theme-toggle"
         title={`主题: ${THEME_LABEL[props.themeMode]}(点击切换)`}
+        data-tauri-drag-region="false"
         onClick={props.onCycleTheme}
       >
         {THEME_LABEL[props.themeMode]}
@@ -50,6 +58,7 @@ export function TitleBar(props: Props) {
         className="btn btn-icon"
         data-testid="settings-btn"
         title="设置"
+        data-tauri-drag-region="false"
         onClick={props.onOpenSettings}
       >
         ⚙

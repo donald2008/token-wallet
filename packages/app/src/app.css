@@ -12,7 +12,8 @@ body,
 }
 
 body {
-  background: var(--bg);
+  /* 透明无边框窗口(D-031 形态): 背景透明, 面板自身画圆角卡片 */
+  background: transparent;
   color: var(--fg);
   font-family:
     "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -21,11 +22,17 @@ body {
   overflow: hidden;
 }
 
+/* 无边框透明窗口: 面板 = 悬浮圆角卡片(四周留透明边) */
 .panel {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  width: 100%;
+  height: calc(100% - 16px);
+  width: calc(100% - 16px);
+  margin: 8px;
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
 }
 
 /* ---- 标题栏(§6.5: 全局状态点 / 手动刷新 / 设置) ---- */
