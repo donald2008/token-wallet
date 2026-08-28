@@ -115,12 +115,13 @@ try {
     corepack pnpm install --frozen-lockfile
     if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败" }
 
-    # Tauri 工具链(NSIS/WiX/WebView2)下载镜像: Tauri 从 GitHub 拉工具时替换为
-    # 国内可达镜像。首次下载成功后缓存进 %LOCALAPPDATA%\tauri, 后续零下载。
+    # Tauri 工具链(NSIS/WiX/WebView2)下载镜像: Tauri 从 GitHub 拉工具时按模板
+    # 替换 URL 为国内可达镜像。首次下载成功后缓存进 %LOCALAPPDATA%\tauri, 后续零下载。
+    # ⚠️ 变量名必须是 *_TEMPLATE(占位符模板, 2.11 实测), 旧名 TAURI_BUNDLER_TOOLS_GITHUB_MIRROR 已不生效。
     # 外部已设置该变量时(如 CI/内网镜像)不覆盖。
-    if (-not $env:TAURI_BUNDLER_TOOLS_GITHUB_MIRROR) {
-        $env:TAURI_BUNDLER_TOOLS_GITHUB_MIRROR = "https://ghfast.top/"
-        Write-Host "[提示] 已设置 TAURI_BUNDLER_TOOLS_GITHUB_MIRROR=https://ghfast.top/ (工具链走国内镜像)" -ForegroundColor Yellow
+    if (-not $env:TAURI_BUNDLER_TOOLS_GITHUB_MIRROR_TEMPLATE) {
+        $env:TAURI_BUNDLER_TOOLS_GITHUB_MIRROR_TEMPLATE = "https://ghfast.top/https://github.com/<owner>/<repo>/releases/download/<version>/<asset>"
+        Write-Host "[提示] 已设置 TAURI_BUNDLER_TOOLS_GITHUB_MIRROR_TEMPLATE (工具链走 ghfast.top 镜像)" -ForegroundColor Yellow
     }
 
     Write-Step "tauri build (Windows 安装包)"
