@@ -33,3 +33,5 @@
 | D-027 | 2026-08-27 | 调度器全异步并发: 实例独立循环/防重叠/超时硬切断/启动抖动/失败指数退避/auth_expired 停摆 | 单实例故障零影响他人; 防风控叠加 |
 | D-028 | 2026-08-27 | 采集方式收敛为两类: http(API 直调) + command(官方 CLI 包装); session/控制台 Cookie 模拟类整体移除(含阿里 Cookie 兜底) | 官方 CLI(bl/arkcli)已覆盖原需 Cookie 的平台; 少一类少一份会话维护与风控风险; 用户定调 |
 | D-029 | 2026-08-27 | 凭据存储: 桌面端一律 OS 钥匙串(Windows 凭据管理器/macOS Keychain, keyring crate); headless 降级链 env → command(Consul) → 600 权限文件(文档显著警告)。内存纪律: key 只活在请求构造瞬间, 日志统一出口模式脱敏, 数据目录 0700, 删实例同步删钥匙串条目 | 威胁模型: 同机进程读文件 > 误提交/误贴 > 备份上云; 主密码加密文件体验不可接受 |
+| D-030 | 2026-08-28 | 前端 E2E = Playwright browser 模式(tauri-plugin-playwright): headless Chromium + mock Tauri IPC, Linux/CI 可跑全平台 | 官方 WebDriver(tauri-driver+WebdriverIO)配置繁琐/flaky 社区差评多; browser 模式无 Windows 依赖, 与 visual-test 同构; 真 E2E(tauri/cdp 模式)后置 |
+| D-031 | 2026-08-28 | 安装实施: 无代码签名(P4 前), Windows 本机 `pnpm tauri build` 唯一构建渠道, WebView2 downloadBootstrapper, 自动更新后置(更新=重装), gitee release 挂 NSIS + SHA256 | 签名/updater 是 P4 商业化/发布项; Linux/WSL2 无法可靠 cross 出 Windows 包; 不为低频发版维护 Windows gateway |

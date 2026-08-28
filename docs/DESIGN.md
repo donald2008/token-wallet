@@ -359,6 +359,35 @@ Agent 对接唯一通道 = MCP, 不维护第二套 HTTP API。
   缺失则显示"一键安装"按钮 — app spawn PowerShell 跑官方二进制脚本(`irm https://bailian.aliyun.com/cli/install.ps1 | iex`, 无需 Node),
   stdout 实时流入设置页的 log 抽屉展示进度; 装完引导 `bl auth login --console`
 
+### 10.1 安装实施(D-031, 2026-08-28 定案)
+
+| 决策点 | 定案 | 备注 |
+|--------|------|------|
+| 代码签名 | **暂缓**(P4 前无签名) | README 显著写: 首次安装点「更多信息 → 仍要运行」; SmartScreen 未认证提示是预期行为 |
+| 构建渠道 | **Windows 本机 `pnpm tauri build`** 唯一渠道 | Linux/WSL2 无可靠 cross; 不出 Windows 包, 不为低频发版维护 Windows gateway |
+| WebView2 | downloadBootstrapper(Tauri 默认) | Win11 预装, Win10 联网静默安装引导 |
+| 自动更新 | **后置 P4** | P0~P2 更新 = 下载新版重装; updater 需签名 key + 清单 JSON + 静态托管, P4 统一解决 |
+| 分发 | gitee release 挂 NSIS 安装包 + SHA256 | 见 RELEASE.md |
+
+发版流程(谁、怎么发)详见根目录 `RELEASE.md`。
+
+### 10.2 测试流程(D-030, 2026-08-28 定案)
+
+**关键分野: web 可 headless 自检, 原生桌面不可。** 前端交互验证走 Playwright browser 模式(任何 Linux 可跑),
+Windows 人肉只留"桌面外壳本身"(安装/托盘/WebView2)。
+
+| 层 | 测什么 | 工具 | 位置 | 自动化 |
+|----|--------|------|------|--------|
+| L1 单元 | core: schema/registry/credential/store/调度器(D-027 语义) | vitest | 任何机 | ✅ 全自动 |
+| L2 前端 E2E | app 交互全流程: 首开向导/设置表单/测试连接/面板模板/排序 | **Playwright browser 模式**(mock Tauri IPC) | Linux/CI | ✅ 全自动 |
+| L3 真通道 | 真 API + 真余额(敏感 key 不落库) | 手动触发 + golden sample 防接口变动 | 我们的机器 | ⚠️ 半自动 |
+| L4 Windows 冒烟 | 安装包/托盘/WebView2/首开真实打开 | 手动 | Windows 本机 | ❌ 人肉 |
+
+- **L2 技术前提**(tauri-plugin-playwright browser 模式): app 开 `withGlobalTauri: true` + 可选 Rust feature `e2e-testing`, 生产构建不受影响
+- 每条 P0 卡内嵌 L1/L2 测试, 证据链 = 测试跑绿 + commit hash, 无测试 review 打回
+- CI: P0~P2 worker 内测; P4 上 gitee Actions/自建 runner 全自动
+- 测试矩阵详见根目录 `TESTING.md`
+
 ## 11. 阶段划分
 
 | 阶段 | 内容 |
