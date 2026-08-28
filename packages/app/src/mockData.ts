@@ -5,16 +5,25 @@ import type { ProviderSnapshot } from "./types";
  * 真实数据链路等 P0-5; 场景切换器仅 dev 环境渲染(import.meta.env.DEV)。
  */
 
-export type ScenarioId = "loading" | "empty" | "all-ok" | "warn" | "expired" | "stale" | "mixed";
+export type ScenarioId =
+  | "loading"
+  | "empty"
+  | "all-ok"
+  | "warn"
+  | "expired"
+  | "stale"
+  | "error"
+  | "mixed";
 
 export const SCENARIOS: { id: ScenarioId; label: string; expectHealth: string }[] = [
   { id: "loading", label: "加载中", expectHealth: "-" },
   { id: "empty", label: "空态", expectHealth: "-" },
   { id: "all-ok", label: "全绿", expectHealth: "ok" },
   { id: "warn", label: "黄(偏低)", expectHealth: "warn" },
-  { id: "expired", label: "红(过期)", expectHealth: "bad" },
+  { id: "expired", label: "黄(auth_expired)", expectHealth: "warn" },
   { id: "stale", label: "灰(stale)", expectHealth: "unknown" },
-  { id: "mixed", label: "混合示例", expectHealth: "bad" },
+  { id: "error", label: "红(error)", expectHealth: "bad" },
+  { id: "mixed", label: "混合示例", expectHealth: "warn" },
 ];
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -27,7 +36,7 @@ const MOCK: Record<Exclude<ScenarioId, "loading" | "empty">, ProviderSnapshot[]>
       plan_type: "balance",
       fetched_at: NOW - 60,
       status: "ok",
-      metrics: [{ key: "balance", kind: "balance", unit: "cny", used: 48.14, limit: 500 }],
+      metrics: [{ key: "balance", kind: "balance", unit: "cny", used: 48.14, limit: 500, daily_rate: 8.2 }],
       alerts: [],
     },
     {
@@ -62,7 +71,7 @@ const MOCK: Record<Exclude<ScenarioId, "loading" | "empty">, ProviderSnapshot[]>
       plan_type: "balance",
       fetched_at: NOW - 60,
       status: "ok",
-      metrics: [{ key: "balance", kind: "balance", unit: "cny", used: 48.14, limit: 500 }],
+      metrics: [{ key: "balance", kind: "balance", unit: "cny", used: 48.14, limit: 500, daily_rate: 8.2 }],
       alerts: [],
     },
   ],
@@ -75,6 +84,7 @@ const MOCK: Record<Exclude<ScenarioId, "loading" | "empty">, ProviderSnapshot[]>
       status: "auth_expired",
       metrics: [],
       alerts: ["bl 会话已失效"],
+      setup_hint: "请运行 `bl auth login --console` 重新授权",
     },
   ],
   stale: [
@@ -88,6 +98,17 @@ const MOCK: Record<Exclude<ScenarioId, "loading" | "empty">, ProviderSnapshot[]>
       alerts: [],
     },
   ],
+  error: [
+    {
+      provider_id: "deepseek",
+      display_name: "DeepSeek-按量 #1",
+      plan_type: "balance",
+      fetched_at: NOW - 240,
+      status: "error",
+      metrics: [],
+      alerts: ["429 quota exceeded: 今日按量已超限"],
+    },
+  ],
   mixed: [
     {
       provider_id: "deepseek",
@@ -95,7 +116,7 @@ const MOCK: Record<Exclude<ScenarioId, "loading" | "empty">, ProviderSnapshot[]>
       plan_type: "balance",
       fetched_at: NOW - 60,
       status: "ok",
-      metrics: [{ key: "balance", kind: "balance", unit: "cny", used: 48.14, limit: 500 }],
+      metrics: [{ key: "balance", kind: "balance", unit: "cny", used: 48.14, limit: 500, daily_rate: 8.2 }],
       alerts: [],
     },
     {
@@ -117,7 +138,8 @@ const MOCK: Record<Exclude<ScenarioId, "loading" | "empty">, ProviderSnapshot[]>
       fetched_at: NOW - 7200,
       status: "auth_expired",
       metrics: [],
-      alerts: ["bl 会话已失效, 请重新 bl auth login --console"],
+      alerts: ["bl 会话已失效, 请重新授权"],
+      setup_hint: "请运行 `bl auth login --console` 重新授权",
     },
     {
       provider_id: "ark",

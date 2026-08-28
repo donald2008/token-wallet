@@ -157,6 +157,86 @@ body {
   margin-top: 4px;
 }
 
+/* ---- 异常卡: 黄灯 + 恢复指引(§2.1) ---- */
+.abnormal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* auth_expired 亮黄灯(§2.1): 自绘圆点, 填充 --warn(D-016), 带光晕提示待处理 */
+.lamp {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--warn);
+  text-shadow:
+    0 0 2px var(--warn),
+    0 0 6px var(--warn);
+  vertical-align: middle;
+}
+
+.setup-hint {
+  font-size: 12px;
+  color: var(--warn-fg);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  margin-top: 4px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+/* ---- 本地 Agent 区(§6.5): 默认折叠占位(P3) ---- */
+.local-agent {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+
+.local-agent-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--font-size);
+  cursor: pointer;
+  text-align: left;
+}
+.local-agent-head:hover {
+  background: var(--bg-hover);
+}
+
+.local-agent-chevron {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--fg-dim);
+  transition: transform 0.15s ease;
+}
+.local-agent-chevron[data-open] {
+  transform: rotate(90deg);
+}
+
+.local-agent-title {
+  font-weight: 600;
+  flex: 1;
+}
+
+.local-agent-tag {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+
+.local-agent-body {
+  padding: 4px 12px 10px 28px;
+}
+
 /* ---- 进度条(手写 bars 模板微部件, D-002) ---- */
 .bar-row {
   display: flex;
@@ -213,6 +293,16 @@ body {
   flex: 0 0 auto;
   font-size: 11px;
   color: var(--fg-dim);
+}
+
+/* bars 模板: 最紧窗口置顶标红(§6.3) — 薄红左缘 + 标签加粗红字, 一眼定位最先耗尽的风险窗 */
+.bar-row[data-tightest] {
+  border-left: 2px solid var(--bad);
+  padding-left: 4px;
+}
+.bar-row[data-tightest] .bar-label {
+  font-weight: 700;
+  color: var(--bad-fg);
 }
 
 /* balance 大数字(ticker 模板) */

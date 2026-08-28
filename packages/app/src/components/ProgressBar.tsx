@@ -10,15 +10,16 @@ function resetText(resetAt?: number): string {
   return h > 0 ? `${h}h${m}m 后重置` : `${m}m 后重置`;
 }
 
-/** bars 模板微部件: 手写进度条 + 压字(D-002, 不引组件库/Chart.js) */
-export function ProgressBar({ metric }: { metric: Metric }) {
+/** bars 模板微部件: 手写进度条 + 压字(D-002, 不引组件库/Chart.js)。
+ * tightest: 该窗口是"最紧窗口"(bars 模板置顶标红, §6.3)。 */
+export function ProgressBar({ metric, tightest = false }: { metric: Metric; tightest?: boolean }) {
   const pct =
     metric.limit !== undefined && metric.limit > 0
       ? Math.min(100, Math.max(0, (metric.used / metric.limit) * 100))
       : 0;
   const health = metricHealth(metric);
   return (
-    <div className="bar-row">
+    <div className="bar-row" data-tightest={tightest || undefined}>
       <span className="bar-label" title={metric.key}>
         {metric.key}
       </span>

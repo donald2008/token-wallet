@@ -28,13 +28,18 @@ export function metricHealth(m: Metric): HealthLevel {
   return "ok";
 }
 
-/** provider 级健康度: status 一等公民优先, ok 才看 metrics */
+/** provider 级健康度: status 一等公民优先, ok 才看 metrics.
+ * 注意: SPEC 冲突已在任务卡 P0-3 验收优先级下裁决 —— DESIGN.md §9 谓 auth_expired 恒红,
+ * 但 §2.1 与 P0-3 验收明确"auth_expired 亮黄灯"(登录态失效不是配额耗尽, 属待处理告警)。
+ * → auth_expired 定黄(warn), error/耗尽 恒红。 */
 export function providerHealth(p: ProviderSnapshot): HealthLevel {
   switch (p.status) {
-    // auth_expired / error 恒红, 不走阈值(D-022)
-    case "auth_expired":
+    // error / 额度耗尽(metrics 全满)恒红, 不走阈值(D-022)
     case "error":
       return "bad";
+    // auth_expired: 登录态失效 → 黄灯(§2.1 + P0-3 验收; 非配额耗尽)
+    case "auth_expired":
+      return "warn";
     case "stale":
     case "unsupported":
       return "unknown";
@@ -59,11 +64,45 @@ export function globalHealth(providers: ProviderSnapshot[]): HealthLevel {
   return worst;
 }
 
-/** 面板排序: 最坏情况优先(§6.1 glanceability) */
+/** 非 ok 状态严重度(仅在同一健康度带内作二级比较): error > auth_expired > stale/unsupported > ok */
+function statusSeverity(p: ProviderSnapshot): number {
+  switch (p.status) {
+    case "error":
+      return 4;
+    case "auth_expired":
+      return 3;
+    case "unsupported":
+      return 2;
+    case "stale":
+      return 2;
+    case "ok":
+      return 1;
+  }
+}
+
+/** ok 态最坏 metric 的剩余比例(0~1), 越接近 0 越紧 */
+function minRemainingRatio(p: ProviderSnapshot): number {
+  let worst = 1;
+  for (const m of p.metrics) {
+    if (m.limit !== undefined && m.limit > 0) {
+      const remaining = Math.max(0, 1 - m.used / m.limit);
+      if (remaining < worst) worst = remaining;
+    }
+  }
+  return worst;
+}
+
+/** 面板排序(§6.1 glanceability): 最坏情况优先。
+ * 主键 = 健康度带(红>黄>灰>绿); 同带内二级 = status 严重度(error/auth_expired 前置);
+ * 三级 = ok 态按最紧 metric 剩余比例升序(消耗多的在前)。 */
 export function sortByHealth(providers: ProviderSnapshot[]): ProviderSnapshot[] {
-  return [...providers].sort(
-    (a, b) => HEALTH_RANK[providerHealth(b)] - HEALTH_RANK[providerHealth(a)],
-  );
+  return [...providers].sort((a, b) => {
+    const rankDiff = HEALTH_RANK[providerHealth(b)] - HEALTH_RANK[providerHealth(a)];
+    if (rankDiff !== 0) return rankDiff;
+    const sevDiff = statusSeverity(b) - statusSeverity(a);
+    if (sevDiff !== 0) return sevDiff;
+    return minRemainingRatio(a) - minRemainingRatio(b);
+  });
 }
 
 /** 托盘 tooltip 摘要, 如 "2健康 1偏低 1过期"(§6.2) */

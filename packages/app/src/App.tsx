@@ -9,6 +9,7 @@ import { ProviderCard } from "./components/ProviderCard";
 import { ConsentPage, EmptyState, LoadingState } from "./components/States";
 import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
+import { LocalAgentSection } from "./components/LocalAgentSection";
 
 const THEME_CYCLE: ThemeMode[] = ["system", "light", "dark"];
 
@@ -114,6 +115,7 @@ export default function App() {
           ))}
         </main>
       )}
+      <LocalAgentSection />
       <ScenarioBar scenario={scenario} onChange={setScenario} />
     </div>
   );

@@ -23,6 +23,8 @@ export interface Metric {
   limit?: number;
   /** epoch seconds */
   reset_at?: number;
+  /** 近 7 天平均日消耗(余额制速率, ticker 模板算预计可用天数; P0-5 接历史快照计算) */
+  daily_rate?: number;
 }
 
 export interface ProviderSnapshot {
@@ -34,6 +36,11 @@ export interface ProviderSnapshot {
   status: ProviderStatus;
   metrics: Metric[];
   alerts: string[];
+  /**
+   * auth_expired 时的"如何恢复"指引(§5.0 command 类健康检查), 如
+   * "请运行 `bl auth login --console`"。异常卡黄灯展示; 非 auth_expired 忽略。
+   */
+  setup_hint?: string;
 }
 
 /** 全局设置(P0-2 壳只落 theme, 阈值/通知为占位, 见 D-022/D-009) */

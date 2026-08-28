@@ -1,6 +1,6 @@
 import type { ProviderSnapshot } from "../types";
 import { HEALTH_LABEL, providerHealth } from "../health";
-import { ProgressBar } from "./ProgressBar";
+import { getTemplateFor } from "../templates/registry";
 
 /** 品牌色块(§6.1 第 4 条): 16px 平台识别色, 正式版替换为内置单色 SVG 品牌图标 */
 const BRAND_COLORS: Record<string, string> = {
@@ -25,13 +25,30 @@ function agoText(fetchedAt: number): string {
   return `${Math.floor(s / 3600)} 小时前`;
 }
 
-/** 异常状态整卡文字替代图表, 不显示假数据(§2.1) */
+/**
+ * 异常状态卡(§2.1): status=auth_expired/stale/unsupported/error 时
+ * 整卡文字替代图表, 不显示假数据(无进度条/无余额大数字)。
+ * - auth_expired: 亮黄灯(§2.1: 登录态失效非配额耗尽) + setup_hint 指引恢复
+ * - stale / unsupported: 灰
+ * - error: 红
+ */
 function AbnormalBody({ p }: { p: ProviderSnapshot }) {
+  const health = providerHealth(p);
   return (
-    <div>
-      <div className={`card-status-text text-${providerHealth(p)}`}>
+    <div className="abnormal-body" data-testid="abnormal-body">
+      <div className={`card-status-text text-${health}`}>
+        {p.status === "auth_expired" && (
+          <span className="lamp" data-lamp="auth_expired" title="登录态失效, 亮黄灯" aria-label="auth_expired 黄灯">
+            ●
+          </span>
+        )}
         {STATUS_TEXT[p.status] ?? p.status}
       </div>
+      {p.status === "auth_expired" && p.setup_hint && (
+        <div className="setup-hint" data-testid="setup-hint">
+          ⚑ {p.setup_hint}
+        </div>
+      )}
       <div className="card-error-note">
         上次更新: {agoText(p.fetched_at)}
         {p.alerts.length > 0 ? ` — ${p.alerts.join("; ")}` : ""}
@@ -40,36 +57,9 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
   );
 }
 
-function OkBody({ p }: { p: ProviderSnapshot }) {
-  if (p.plan_type === "balance") {
-    const m = p.metrics[0];
-    const remaining = m?.limit !== undefined ? m.limit - m.used : undefined;
-    return (
-      <div>
-        <div className="ticker-number">
-          {remaining !== undefined ? `¥${remaining.toFixed(2)}` : "—"}
-        </div>
-        <div className="ticker-sub">余额 · 预计可用天数待消耗速率接入(P1)</div>
-      </div>
-    );
-  }
-  if (p.plan_type === "window") {
-    return (
-      <div>
-        {p.metrics.map((m) => (
-          <ProgressBar key={m.key} metric={m} />
-        ))}
-      </div>
-    );
-  }
-  // local: P3 预留, 壳先简单罗列
-  return (
-    <div className="ticker-sub">本地 Agent 用量(P3)</div>
-  );
-}
-
 export function ProviderCard({ p }: { p: ProviderSnapshot }) {
   const health = providerHealth(p);
+  const Template = getTemplateFor(p).component;
   return (
     <section className="card" data-testid="provider-card" data-provider={p.provider_id} data-health={health}>
       <div className="card-head">
@@ -82,7 +72,7 @@ export function ProviderCard({ p }: { p: ProviderSnapshot }) {
         </span>
         <span className={`card-status-text text-${health}`}>{HEALTH_LABEL[health]}</span>
       </div>
-      {p.status === "ok" ? <OkBody p={p} /> : <AbnormalBody p={p} />}
+      {p.status === "ok" ? <Template p={p} /> : <AbnormalBody p={p} />}
     </section>
   );
 }
