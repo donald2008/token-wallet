@@ -81,7 +81,7 @@ fn toggle_main_window(app: &AppHandle) {
 }
 
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // 单实例锁: 二次启动聚焦已有实例, 不重复开窗口
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
@@ -130,9 +130,7 @@ pub fn run() {
 
     // D-030 L2 技术前提: e2e-testing feature 仅测试构建开启, 生产构建不受影响
     #[cfg(feature = "e2e-testing")]
-    {
-        builder = builder.plugin(tauri_plugin_playwright::init());
-    }
+    let builder = builder.plugin(tauri_plugin_playwright::init());
 
     builder
         .run(tauri::generate_context!())
