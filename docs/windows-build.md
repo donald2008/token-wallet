@@ -75,6 +75,27 @@ WebView2 离线安装器（~130MB）打进 NSIS 安装包**，安装过程不联
 
 使用方**无需** Node / Rust / VS Build Tools 任何开发环境——那是构建机的事。
 
+## crates 镜像配置（Cargo 拉取 Rust 依赖）
+
+国内镜像有时**同步滞后于 Cargo.lock 锁定的版本**（实测 2026-08-28：tuna 缺
+flate2 1.1.10，rsproxy 有）。报错特征：`failed to select a version for the
+requirement flate2 = "^1.0.35" (locked to 1.1.10)`。推荐 rsproxy（字节，同步快）：
+
+```toml
+# %USERPROFILE%\.cargo\config.toml
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[registries.crates-io]
+protocol = "sparse"
+```
+
+不想换源时临时绕过：在 src-tauri 目录执行
+`cargo update -p flate2 --precise 1.1.9`（用镜像现有版本降锁，仅本地生效）。
+
 ## 常见问题
 
 ### 便携/绿色版（免安装）
@@ -88,6 +109,7 @@ Tauri v2 NSIS 支持 `portable` target：单文件 exe 双击即用、免安装�
 | 症状 | 原因 | 处理 |
 |---|---|---|
 | `'pnpm' is not recognized`（tauri beforeBuildCommand 阶段） | Windows 下 corepack prepare 不创建 pnpm shim | 已双保险：tauri.conf.json 的 before/after 命令走 `corepack pnpm`；脚本构建前会自动 `corepack enable`。老包需 `git pull` 取最新配置 |
+| `failed to select a version for the requirement flate2`（cargo 报 locked to 高版本） | crates 镜像同步滞后于 Cargo.lock | 换 rsproxy 镜像（见上节）或 `cargo update -p flate2 --precise <镜像现有版本>` 临时降锁 |
 | `link.exe 未找到` / MSVC 报错 | VS Build Tools 未装或未勾选 C++ 桌面开发 | 重装 Build Tools 勾选后重跑 |
 | `tauri build` 慢 / 卡 | 首次 Rust 全量编译（依赖多） | 正常，5-15 分钟，增量后秒级 |
 | 磁盘空间不足 | target 目录大 | 预留 ≥10GB；`pnpm -C packages/app tauri clean` 可清 |
