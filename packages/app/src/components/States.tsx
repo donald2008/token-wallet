@@ -38,3 +38,17 @@ export function LoadingState() {
     </div>
   );
 }
+
+/** 配置损坏 fail-fast(§5.0.1/P0-7): instances.yaml 解析/校验失败时停在此页, 不静默丢配置 */
+export function ConfigErrorState({ error }: { error: string }) {
+  return (
+    <div className="placeholder" data-testid="config-error">
+      <h2>配置加载失败</h2>
+      <p>
+        实例配置(instances.yaml)损坏或未通过校验。为避免覆盖你的配置,
+        应用已停止加载, 请修复配置文件后重启。
+      </p>
+      <p data-testid="config-error-detail">{error}</p>
+    </div>
+  );
+}

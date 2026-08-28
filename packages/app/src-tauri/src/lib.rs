@@ -34,7 +34,7 @@ fn status_icon(status: &str) -> Image<'static> {
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct Bootstrap {
-    /// 首开判定占位(§10): 初始零 provider 配置, 持久化接入前恒为 true
+    /// 首开判定(§10): 由 configDir/settings.json 的 consent 状态决定(P0-7 接真)
     first_run: bool,
     /// 主题默认追随系统(D-010), 可配置覆盖接入 settings 后返回用户值
     theme: String,
@@ -251,10 +251,102 @@ fn sqlite_query(
     })
 }
 
+// ---------------- P0-7: 实例配置持久化(DESIGN §5.0.1, D-019/D-032) ----------------
+
+/// instances.yaml 路径: configDir/instances.yaml(配置 Roaming 与数据 Local 分家 D-019)
+fn instances_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("instances.yaml"))
+}
+
+/// 读 instances.yaml → JSON 值(YAML 解析在 Rust, zod 校验权威仍在前端 schema.ts)。
+/// 文件不存在/空 → Ok(None)(首开零配置); YAML 语法损坏 → Err(fail-fast, 不静默丢配置)。
 #[tauri::command]
-fn get_bootstrap() -> Bootstrap {
+fn instances_load(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
+    let path = instances_file_path(&app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("读取 instances.yaml 失败: {e}"))?;
+    if text.trim().is_empty() {
+        return Ok(None);
+    }
+    let yaml: serde_yaml::Value =
+        serde_yaml::from_str(&text).map_err(|e| format!("instances.yaml 解析失败: {e}"))?;
+    serde_json::to_value(yaml)
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
+/// 写 instances.yaml(入参已由前端 zod 校验): 原子写(tmp+rename), 防半写损坏。
+/// 落盘的只有 CredentialRef 引用, secret 值只进 OS 钥匙串(D-029 不变)。
+#[tauri::command]
+fn instances_save(app: AppHandle, file: serde_json::Value) -> Result<(), String> {
+    let path = instances_file_path(&app)?;
+    let yaml = serde_yaml::to_string(&file).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("yaml.tmp");
+    std::fs::write(&tmp, yaml).map_err(|e| format!("写入 instances.yaml 失败: {e}"))?;
+    // Windows rename 不覆盖既有文件: 先删再改名
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
+
+// ---- 首开判定(§10/D-021): consent 落 configDir/settings.json(配置侧 D-019) ----
+
+/// 全局设置文件(§5.0.1 三层之 settings 层; P0-7 先落 consent, 主题/轮询等后续并入)
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct SettingsFile {
+    version: u32,
+    consent_agreed: bool,
+    /// 同意时间(unix 秒)
+    consent_at: Option<u64>,
+}
+
+fn settings_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("settings.json"))
+}
+
+fn read_settings(app: &AppHandle) -> SettingsFile {
+    let Ok(path) = settings_file_path(app) else {
+        return SettingsFile::default();
+    };
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return SettingsFile::default();
+    };
+    // settings 损坏时保守回退首开态(重弹 consent), 不带崩应用
+    serde_json::from_str(&text).unwrap_or_default()
+}
+
+/// 用户同意隐私声明 → 落盘(§10): 之后 get_bootstrap 返回 first_run=false
+#[tauri::command]
+fn record_consent(app: AppHandle) -> Result<(), String> {
+    let path = settings_file_path(&app)?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let settings = SettingsFile {
+        version: 1,
+        consent_agreed: true,
+        consent_at: Some(now),
+    };
+    let text = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| format!("写入 settings.json 失败: {e}"))
+}
+
+#[tauri::command]
+fn get_bootstrap(app: AppHandle) -> Bootstrap {
+    let settings = read_settings(&app);
     Bootstrap {
-        first_run: true,
+        // 首开判定接真(§10): consent 已同意 → 不再弹隐私声明页
+        first_run: !settings.consent_agreed,
         theme: "system".into(),
         version: env!("CARGO_PKG_VERSION").into(),
     }
@@ -311,7 +403,10 @@ pub fn run() {
             http_get_json,
             sqlite_batch,
             sqlite_exec,
-            sqlite_query
+            sqlite_query,
+            instances_load,
+            instances_save,
+            record_consent
         ])
         .setup(|app| {
             let show_item = MenuItem::with_id(app, "show", "打开面板", true, None::<&str>)?;

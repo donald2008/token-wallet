@@ -26,6 +26,8 @@ keyring = "3"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "rustls-native-certs"] }
 # D-020: app 侧 SQLite 由 Rust 执行(SCHEMA_SQL 单一来源来自 core)
 rusqlite = { version = "0.32", features = ["bundled"] }
+# P0-7: instances.yaml 读写(§5.0.1)在 Rust 侧解析/生成, 前端零 YAML 依赖(D-032)
+serde_yaml = "0.9"
 
 [features]
 default = []

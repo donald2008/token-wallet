@@ -1,16 +1,17 @@
 /**
  * 实例存储抽象 — DESIGN.md §5.0.1 / 验收(删除实例同步清钥匙串条目)
  *
- * store 接口本卡用内存 mock 撑住(D-029 说 OS 钥匙串真实现 P0-5/P1)。
+ * 持久化(P0-7 接真): 启动时 loadPersistedInstances() 从 instances.yaml 预填;
+ * 增/删实例 → attachPersister 钩子写回 instances.yaml(Rust IPC, configDir, D-019)。
  * 语义对齐 core 的 KeychainBackend + StoreCredentialSource:
- *   - 实例配置只存 CredentialRef 引用(值在钥匙串)
+ *   - 实例配置只存 CredentialRef 引用(secret 值在钥匙串, D-029 不变)
  *   - 删除实例 → 同步删除该实例钥匙串条目(D-029)
  *   - 表单保存时: secret 值写入钥匙串, 实例配置存 store 引用
  */
 import { useEffect, useRef, useState } from "react";
 import type { InstanceConfig, CredentialRef } from "./schema";
-import { makeCredentialRef } from "./schema";
-import { isTauriRuntime, keyringDelete, keyringGet, keyringSet } from "../ipc";
+import { InstancesFileSchema, makeCredentialRef, parseInstances } from "./schema";
+import { instancesLoad, instancesSave, isTauriRuntime, keyringDelete, keyringGet, keyringSet } from "../ipc";
 
 /** 钥匙串后端抽象(D-029: Windows 凭据管理器 / Keychain / Secret Service) */
 export interface KeyringBackend {
@@ -52,10 +53,25 @@ export class TauriKeyring implements KeyringBackend {
   }
 }
 
-/** 订阅型实例存储(内存 mock)。增删 → notify → 组件重渲染。 */
+/** 增/删后的持久化钩子(P0-7): 由 getSharedStore 默认挂 instances.yaml 写回 */
+export type InstancesPersister = (instances: InstanceConfig[]) => void;
+
+/** 订阅型实例存储(内存为主, P0-7 起经 persister 写回 instances.yaml)。增删 → notify → 组件重渲染。 */
 export class MemoryInstanceStore {
   private items: InstanceConfig[] = [];
   private listeners = new Set<() => void>();
+  private persister: InstancesPersister | null = null;
+
+  /** 挂载持久化钩子: 增/删实例后触发写回 */
+  attachPersister(fn: InstancesPersister): void {
+    this.persister = fn;
+  }
+
+  /** 启动预填(P0-7): instances.yaml 载入的实例直接放入内存, 不触发写回 */
+  hydrate(instances: InstanceConfig[]): void {
+    this.items = [...instances];
+    this.emit();
+  }
 
   list(): InstanceConfig[] {
     return [...this.items];
@@ -63,6 +79,7 @@ export class MemoryInstanceStore {
   add(inst: InstanceConfig): void {
     this.items = [...this.items, inst];
     this.emit();
+    this.persist();
   }
   /** 删除实例 + 同步清钥匙串条目(D-029) */
   remove(id: string, keyring: KeyringBackend): void {
@@ -77,6 +94,7 @@ export class MemoryInstanceStore {
       }
     }
     this.emit();
+    this.persist();
   }
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn);
@@ -85,13 +103,60 @@ export class MemoryInstanceStore {
   private emit(): void {
     for (const fn of this.listeners) fn();
   }
+  private persist(): void {
+    this.persister?.(this.list());
+  }
 }
 
-// 全局共享实例 store(mock: 仅前端内存, 不落盘)
+/** 内存实例 → instances.yaml 文件对象; 写回前再过一次 zod 双重唯一校验(D-026 第 2 道) */
+export function buildInstancesFile(instances: InstanceConfig[]): {
+  version: 1;
+  instances: InstanceConfig[];
+} {
+  const parsed = InstancesFileSchema.safeParse({ version: 1, instances });
+  if (!parsed.success) {
+    throw new Error(`实例配置校验失败: ${parsed.error.issues[0]?.message ?? "未知错误"}`);
+  }
+  return parsed.data;
+}
+
+/** 全局共享实例 store(内存 + persister 写回 instances.yaml) */
 let sharedStoreInstance: MemoryInstanceStore | null = null;
 export function getSharedStore(): MemoryInstanceStore {
-  if (!sharedStoreInstance) sharedStoreInstance = new MemoryInstanceStore();
+  if (!sharedStoreInstance) {
+    sharedStoreInstance = new MemoryInstanceStore();
+    // 默认持久化: 增/删 → zod 校验 → Rust 转 YAML 原子落盘(configDir, D-019/D-032)。
+    // 写盘失败不阻塞 UI(内存态仍在), 记 console 由日志出口脱敏(不含凭据)。
+    sharedStoreInstance.attachPersister((instances) => {
+      void (async () => instancesSave(buildInstancesFile(instances)))().catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error("[instances] 写回 instances.yaml 失败:", err instanceof Error ? err.message : err);
+      });
+    });
+  }
   return sharedStoreInstance;
+}
+
+/**
+ * 启动加载 instances.yaml → zod 校验(fail-fast D-026) → 预填共享 store。
+ * 返回 null = 成功(含首开零配置); 返回 string = 失败原因(调用方须展示配置错误页,
+ * 不静默丢配置)。
+ */
+export async function loadPersistedInstances(): Promise<string | null> {
+  let raw: unknown;
+  try {
+    raw = await instancesLoad();
+  } catch (err) {
+    return `instances.yaml 读取失败: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  if (raw === null || raw === undefined) {
+    getSharedStore().hydrate([]);
+    return null;
+  }
+  const parsed = parseInstances(raw);
+  if (!parsed.ok) return `instances.yaml 校验失败: ${parsed.error ?? "未知错误"}`;
+  getSharedStore().hydrate(parsed.instances ?? []);
+  return null;
 }
 
 /** 钥匙串 mock 单例共享(纯浏览器 dev 用) */

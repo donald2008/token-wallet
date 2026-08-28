@@ -53,11 +53,50 @@ export async function updateTrayStatus(status: HealthLevel, tooltip: string): Pr
   return Promise.resolve();
 }
 
-export function persistConsent(): void {
+export function persistConsent(): Promise<void> {
+  // Tauri 运行时: consent 落 configDir/settings.json(Rust record_consent, D-019 配置侧)
+  if (isTauriRuntime()) {
+    return tauriInvoke<void>("record_consent")!.then(() => undefined);
+  }
+  // 纯浏览器 fallback: localStorage 模拟首开判定
   try {
     localStorage.setItem(CONSENT_KEY, "1");
   } catch {
     /* webview 隐私模式下忽略 */
+  }
+  return Promise.resolve();
+}
+
+// ---------------- P0-7: 实例配置持久化(§5.0.1/D-019/D-032) ----------------
+// instances.yaml 读写走 Rust(serde_yaml 解析/生成, 原子写); 前端零 YAML 依赖,
+// IPC 传 JSON, zod(schema.ts)仍是唯一校验权威。纯浏览器 dev 降级 localStorage。
+
+const INSTANCES_FALLBACK_KEY = "token-wallet.instances.v1";
+
+/**
+ * 加载 instances.yaml → JSON 值。返回 null = 文件不存在(首开零配置)。
+ * YAML 语法损坏 / JSON 损坏 → reject(fail-fast, 由调用方转成配置错误页, 不静默丢配置)。
+ */
+export async function instancesLoad(): Promise<unknown | null> {
+  if (isTauriRuntime()) {
+    // 注意: 不能用 invoke 返回值判空区分运行时(null 同时是"文件不存在"的合法值)
+    return (await tauriInvoke<unknown | null>("instances_load")) as unknown | null;
+  }
+  const raw = localStorage.getItem(INSTANCES_FALLBACK_KEY);
+  if (!raw) return null;
+  return JSON.parse(raw); // 损坏即抛错 = fail-fast
+}
+
+/** 写回 instances.yaml(入参须已过 InstancesFileSchema); 浏览器降级写 localStorage */
+export async function instancesSave(file: unknown): Promise<void> {
+  if (isTauriRuntime()) {
+    await tauriInvoke<void>("instances_save", { file });
+    return;
+  }
+  try {
+    localStorage.setItem(INSTANCES_FALLBACK_KEY, JSON.stringify(file));
+  } catch {
+    /* 隐私模式等写入失败: 内存仍在, 下次启动丢失由用户感知 */
   }
 }
 

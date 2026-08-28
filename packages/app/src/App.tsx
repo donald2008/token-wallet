@@ -6,11 +6,11 @@ import { scenarioProviders, type ScenarioId } from "./mockData";
 import { useTheme, type ThemeMode } from "./theme";
 import { TitleBar } from "./components/TitleBar";
 import { ProviderCard } from "./components/ProviderCard";
-import { ConsentPage, EmptyState, LoadingState } from "./components/States";
+import { ConsentPage, ConfigErrorState, EmptyState, LoadingState } from "./components/States";
 import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { LocalAgentSection } from "./components/LocalAgentSection";
-import { useInstances } from "./instances/store";
+import { loadPersistedInstances, useInstances } from "./instances/store";
 import { RuntimeEngine, type EngineOutput } from "./runtime/engine";
 
 const THEME_CYCLE: ThemeMode[] = ["system", "light", "dark"];
@@ -51,6 +51,8 @@ export default function App() {
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [consented, setConsented] = useState(false);
+  // instances.yaml 损坏/校验失败 → fail-fast 错误页(§5.0.1, 不静默丢配置)
+  const [configError, setConfigError] = useState<string | null>(null);
   const [scenario, setScenario] = useState<ScenarioId>("mixed");
   const [refreshing, setRefreshing] = useState(false);
   // 页内导航仅留给首开向导(D-021 一次性引导); 设置入口 = 模态弹窗(P0-6)
@@ -62,15 +64,23 @@ export default function App() {
   const { engine, output } = useRealEngine(instances);
   const hasInstances = instances.length > 0;
 
-  // 首开判定(§10 占位): Rust 侧 get_bootstrap; 纯浏览器 fallback 用 localStorage
+  // 首开判定(§10, P0-7 接真): Rust get_bootstrap 读 settings.json consent;
+  // 并行加载 instances.yaml → 预填内存 store(面板重启后实例仍在)
   useEffect(() => {
     let alive = true;
-    getBootstrap().then((b) => {
+    void (async () => {
+      const [b, instErr] = await Promise.all([getBootstrap(), loadPersistedInstances()]);
       if (!alive) return;
+      if (instErr) {
+        // fail-fast: 配置损坏时停在错误页, 不用空配置覆盖/继续
+        setConfigError(instErr);
+        setBootstrap(b);
+        return;
+      }
       setBootstrap(b);
       setConsented(!b.firstRun);
       if (b.theme !== "system") setThemeMode(b.theme);
-    });
+    })();
     return () => {
       alive = false;
     };
@@ -109,7 +119,7 @@ export default function App() {
   }, [themeMode, setThemeMode]);
 
   const onAgree = useCallback(() => {
-    persistConsent();
+    void persistConsent(); // P0-7: 落盘 settings.json(Tauri) / localStorage(浏览器)
     setConsented(true);
     setScenario("empty"); // 初始零 provider 配置(§10)
   }, []);
@@ -144,6 +154,14 @@ export default function App() {
     return (
       <div className="panel">
         <LoadingState />
+      </div>
+    );
+  }
+
+  if (configError) {
+    return (
+      <div className="panel">
+        <ConfigErrorState error={configError} />
       </div>
     );
   }
