@@ -343,7 +343,7 @@ Agent 对接唯一通道 = MCP, 不维护第二套 HTTP API。
 状态四色: 绿(健康) / 黄(低于黄线) / 红(低于红线) / 灰(unsupported/stale)。
 
 - **阈值全局可配置(D-022)**: 黄线默认 30%, 红线默认 10%(剩余百分比); 设置页可调
-- auth_expired / 额度耗尽(100%) 恒为红, 不走阈值
+- error / 额度耗尽(100%) 恒为红, 不走阈值; auth_expired 亮黄灯(待处理告警), 不走阈值
 - 通知 P3 实现, Notifier 接口 P0 先行(空实现), 配置 `notifications.enabled=false` 占位
 - 阈值触发 Windows 原生通知(Tauri notification → 操作中心), 同一告警冷却期防轰炸
 - 我们自己的部署可另接 MM 作战室通道

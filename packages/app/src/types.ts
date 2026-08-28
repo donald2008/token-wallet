@@ -9,7 +9,7 @@ export type PlanType = "balance" | "window" | "local";
 /** status 一等公民(D-005): 异常状态整卡文字替代图表, 不显示假数据 */
 export type ProviderStatus = "ok" | "stale" | "auth_expired" | "unsupported" | "error";
 
-/** UI 健康度四色(D-003/§9): 绿(健康) / 黄(低于黄线) / 红(低于红线或 auth_expired/耗尽) / 灰(stale/unsupported) */
+/** UI 健康度四色(D-003/§9): 绿(健康) / 黄(auth_expired 待处理或低于黄线) / 红(低于红线、error 或耗尽) / 灰(stale/unsupported) */
 export type HealthLevel = "ok" | "warn" | "bad" | "unknown";
 
 export type MetricKind = "window" | "balance" | "counter";

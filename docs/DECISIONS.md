@@ -25,7 +25,7 @@
 | D-019 | 2026-08-27 | 存储位置按平台解析(Tauri path API / env-paths), 零硬编码; 配置(Roaming)与数据(Local)分家; 凭据进 OS 钥匙串, headless 降级 600 文件 | Windows 为主平台, Roaming 漫游同步不应拖快照大文件 |
 | D-020 | 2026-08-27 | 持久化转正 SQLite 为 P0 主力(推翻 D-006 的 JSONL-first): app 走 tauri-plugin-sql, mcp-server 走 node:sqlite; JsonlStore 降级为调试导出 | 每时段×每模型消耗记录是核心需求, 聚合查询需要索引, JSONL 全扫扛不住 |
 | D-021 | 2026-08-27 | 分发=标准 Windows 安装包(NSIS); 首开向导=隐私声明(零遥测, 须同意) → 引导添加首个 provider; 初始零配置 | 用户明确定调标准安装形态 |
-| D-022 | 2026-08-27 | 状态阈值全局可配置(黄线默认 30%, 红线默认 10%); auth_expired/耗尽恒红不走阈值 | 用户要求阈值入配置 |
+| D-022 | 2026-08-27 | 状态阈值全局可配置(黄线默认 30%, 红线默认 10%); error/耗尽恒红不走阈值; auth_expired 定黄(见 §2.1) | 用户要求阈值入配置 |
 | D-023 | 2026-08-27 | command 通道依赖由 app 内一键安装(bl 走官方二进制脚本 irm|iex, 无需 Node), 安装过程 stdout 实时流入 log 抽屉 | 用户要求安装进度可视化; bl 官方提供免 Node 二进制安装 |
 | D-024 | 2026-08-27 | 托盘/应用图标为自设计 token-wallet logo; 开机自启开关默认关; mcp-server 同机本地部署; local-agent 通道 v1 仅预留占位 | 用户定调; MCP 设计后置 |
 | D-025 | 2026-08-27 | 通道两层模型: platform → product(同平台多计费产品: coding plan/token plan/按量); 添加流程两步(选平台→选产品→填参数); 同平台实例面板可聚合 | 单层通道无法表达"同一平台多种计费形态"; 用户指出 |
