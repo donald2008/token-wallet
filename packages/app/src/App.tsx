@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Bootstrap } from "./types";
 import { globalHealth, sortByHealth, tooltipSummary } from "./health";
 import { getBootstrap, persistConsent, updateTrayStatus } from "./ipc";
@@ -10,8 +10,42 @@ import { ConsentPage, EmptyState, LoadingState } from "./components/States";
 import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { LocalAgentSection } from "./components/LocalAgentSection";
+import { useInstances } from "./instances/store";
+import { RuntimeEngine, type EngineOutput } from "./runtime/engine";
 
 const THEME_CYCLE: ThemeMode[] = ["system", "light", "dark"];
+
+/** 真实引擎绑定: 实例变更 → 重建引擎 → 订阅快照(面板只读内存 latest, 启动从库恢复) */
+function useRealEngine(instances: ReturnType<typeof useInstances>): {
+  engine: RuntimeEngine | null;
+  output: EngineOutput;
+} {
+  const [output, setOutput] = useState<EngineOutput>({ snapshots: [], stats: {} });
+  const engineRef = useRef<RuntimeEngine | null>(null);
+  const instancesKey = useMemo(() => instances.map((i) => i.id).join(","), [instances]);
+
+  useEffect(() => {
+    // 实例集合变化(增/删) → 重建引擎
+    engineRef.current?.stop();
+    if (instances.length === 0) {
+      engineRef.current = null;
+      setOutput({ snapshots: [], stats: {} });
+      return;
+    }
+    const engine = new RuntimeEngine(instances);
+    engineRef.current = engine;
+    const unsub = engine.subscribe(setOutput);
+    engine.start();
+    return () => {
+      unsub();
+      engineRef.current?.stop();
+      engineRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instancesKey]);
+
+  return { engine: engineRef.current, output };
+}
 
 export default function App() {
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
@@ -21,6 +55,10 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<"panel" | "settings">("panel");
   const [settingsStep, setSettingsStep] = useState<"overview" | "add-channel" | "fill-form">("overview");
+
+  const instances = useInstances();
+  const { engine, output } = useRealEngine(instances);
+  const hasInstances = instances.length > 0;
 
   // 首开判定(§10 占位): Rust 侧 get_bootstrap; 纯浏览器 fallback 用 localStorage
   useEffect(() => {
@@ -37,7 +75,11 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const providers = useMemo(() => scenarioProviders(scenario), [scenario]);
+  // 真实实例存在 → 引擎快照; 否则 dev 场景(仅 dev 渲染)
+  const providers = useMemo(
+    () => (hasInstances ? output.snapshots : scenarioProviders(scenario)),
+    [hasInstances, output.snapshots, scenario],
+  );
   const health = providers === null || providers.length === 0 ? "unknown" : globalHealth(providers);
   const tooltip = useMemo(
     () => (providers === null ? "token-wallet — 加载中" : tooltipSummary(providers)),
@@ -50,10 +92,14 @@ export default function App() {
   }, [health, tooltip]);
 
   const onRefresh = useCallback(() => {
-    // mock: 真实刷新 = 触发适配器立即同步(P0-5)
+    // 真实刷新: 触发适配器立即同步(§3.1); 无实例时 mock 空转
     setRefreshing(true);
-    window.setTimeout(() => setRefreshing(false), 800);
-  }, []);
+    if (engine) {
+      void engine.refreshAll().finally(() => setRefreshing(false));
+    } else {
+      window.setTimeout(() => setRefreshing(false), 800);
+    }
+  }, [engine]);
 
   const onCycleTheme = useCallback(() => {
     const next = THEME_CYCLE[(THEME_CYCLE.indexOf(themeMode) + 1) % THEME_CYCLE.length];
@@ -129,7 +175,7 @@ export default function App() {
         </main>
       )}
       <LocalAgentSection />
-      <ScenarioBar scenario={scenario} onChange={setScenario} />
+      {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}
     </div>
   );
 }

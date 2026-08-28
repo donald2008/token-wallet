@@ -319,6 +319,15 @@ body {
   margin: 2px 0;
 }
 
+/* granted/topped_up 拆分(D-029 无凭据, 纯数值) */
+.ticker-split {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--fg-dim);
+  margin: 2px 0;
+}
+
 .ticker-sub {
   font-size: 12px;
   color: var(--fg-dim);

@@ -51,7 +51,7 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
       )}
       <div className="card-error-note">
         上次更新: {agoText(p.fetched_at)}
-        {p.alerts.length > 0 ? ` — ${p.alerts.join("; ")}` : ""}
+        {p.alerts.length > 0 ? ` — ${p.alerts.map((a) => a.message).join("; ")}` : ""}
       </div>
     </div>
   );

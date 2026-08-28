@@ -102,3 +102,71 @@ export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
     /* ignore */
   }
 }
+
+// ---------------- P0-5 真实链路桥接(Rust 侧执行, D-029/D-020) ----------------
+
+/** 是否处于 Tauri 运行时(真 webview 或 Playwright browser mock); 纯浏览器 dev 为 false */
+export function isTauriRuntime(): boolean {
+  const w = window as unknown as {
+    __TAURI__?: TauriGlobal;
+    __TAURI_INTERNALS__?: TauriInternals;
+  };
+  return Boolean(w.__TAURI__?.core?.invoke || w.__TAURI_INTERNALS__?.invoke);
+}
+
+/** OS 钥匙串读取(null=条目不存在) */
+export async function keyringGet(service: string, key: string): Promise<string | null> {
+  const viaTauri = await tauriInvoke<string | null>("keyring_get", { service, key });
+  if (viaTauri !== null) return viaTauri;
+  return null;
+}
+
+/** OS 钥匙串写入(D-029) */
+export async function keyringSet(service: string, key: string, value: string): Promise<void> {
+  const viaTauri = await tauriInvoke<void>("keyring_set", { service, key, value });
+  if (viaTauri) await viaTauri;
+}
+
+/** OS 钥匙串删除(删实例同步清条目) */
+export async function keyringDelete(service: string, key: string): Promise<void> {
+  const viaTauri = await tauriInvoke<void>("keyring_delete", { service, key });
+  if (viaTauri) await viaTauri;
+}
+
+/** 真实 http GET — Rust reqwest 执行, 规避 webview CORS/CSP。body 已脱敏(D-029) */
+export interface HttpJsonResponse {
+  status: number;
+  body: string;
+}
+
+export async function httpGetJson(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+): Promise<HttpJsonResponse> {
+  const viaTauri = await tauriInvoke<HttpJsonResponse>("http_get_json", { url, headers, timeoutMs });
+  if (viaTauri) return viaTauri;
+  // 纯浏览器 dev 降级: 直接 fetch(仅本地预览用; 生产走 Rust 命令)
+  const resp = await fetch(url, { headers });
+  return { status: resp.status, body: await resp.text() };
+}
+
+/** SQLite 批量执行(建表); SQL 文本单一来源 = core SCHEMA_SQL */
+export async function sqliteBatch(sql: string): Promise<void> {
+  const viaTauri = await tauriInvoke<void>("sqlite_batch", { sql });
+  if (viaTauri) await viaTauri;
+}
+
+/** SQLite 单条 SQL + 参数(INSERT/UPDATE/DELETE) */
+export async function sqliteExec(sql: string, params: unknown[]): Promise<number> {
+  const viaTauri = await tauriInvoke<number>("sqlite_exec", { sql, params });
+  if (viaTauri !== null) return viaTauri;
+  return 0;
+}
+
+/** SQLite 查询; 返回行数组(每行数组, 与列序一致) */
+export async function sqliteQuery(sql: string, params: unknown[]): Promise<unknown[][]> {
+  const viaTauri = await tauriInvoke<unknown[][]>("sqlite_query", { sql, params });
+  if (viaTauri) return viaTauri;
+  return [];
+}

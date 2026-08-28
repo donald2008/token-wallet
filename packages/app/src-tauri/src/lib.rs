@@ -10,6 +10,8 @@ use tauri::{
     AppHandle, Manager, WindowEvent,
 };
 
+mod redact;
+
 const TRAY_ID: &str = "main-tray";
 const MAIN_WINDOW: &str = "main";
 
@@ -70,6 +72,185 @@ fn get_launch_at_login() -> bool {
 #[tauri::command]
 fn set_launch_at_login(_enabled: bool) {} 
 
+// ---------------- P0-5 真实数据链路(D-029/D-020) ----------------
+
+/// OS 钥匙串读取 — keyring crate(Windows 凭据管理器 / Keychain / Secret Service)
+#[tauri::command]
+fn keyring_get(service: String, key: String) -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new(&service, &key).map_err(|e| e.to_string())?;
+    match entry.get_password() {
+        Ok(v) => Ok(Some(v)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// OS 钥匙串写入(D-029: 设置页保存凭据)
+#[tauri::command]
+fn keyring_set(service: String, key: String, value: String) -> Result<(), String> {
+    let entry = keyring::Entry::new(&service, &key).map_err(|e| e.to_string())?;
+    entry.set_password(&value).map_err(|e| e.to_string())
+}
+
+/// OS 钥匙串删除(删实例同步清条目 D-029)
+#[tauri::command]
+fn keyring_delete(service: String, key: String) -> Result<(), String> {
+    let entry = keyring::Entry::new(&service, &key).map_err(|e| e.to_string())?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// 真实 http GET — Rust 侧执行, 规避 webview CORS/CSP 限制。
+/// 返回 { status, body }: body 已统一脱敏(D-029), 供前端 GenericHttpAdapter 判定状态码。
+/// ⚠️ 不落日志 headers(Authorization 等敏感头不打印)。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HttpJsonResponse {
+    status: u16,
+    body: String,
+}
+
+#[tauri::command]
+async fn http_get_json(
+    url: String,
+    headers: std::collections::HashMap<String, String>,
+    timeout_ms: u64,
+) -> Result<HttpJsonResponse, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(timeout_ms))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut req = client.get(&url);
+    for (k, v) in headers {
+        req = req.header(k, v);
+    }
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let status = resp.status().as_u16();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    // 统一出口脱敏(D-029): 即使上游错误体回显 key 也打码
+    Ok(HttpJsonResponse {
+        status,
+        body: crate::redact::redact(&text),
+    })
+}
+
+// ---- SQLite(Rust 侧执行, SCHEMA_SQL 单一来源来自 core 前端) ----
+
+use std::sync::Mutex;
+
+struct DbState(Mutex<Option<rusqlite::Connection>>);
+
+/// 打开/复用 app_data_dir 下的 token-wallet.db(数据与配置分家 D-019)
+fn db_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("token-wallet.db"))
+}
+
+fn with_conn<T>(
+    app: &tauri::AppHandle,
+    state: &tauri::State<'_, DbState>,
+    f: impl FnOnce(&rusqlite::Connection) -> Result<T, String>,
+) -> Result<T, String> {
+    let mut guard = state.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    if guard.is_none() {
+        let path = db_path(app)?;
+        *guard = Some(
+            rusqlite::Connection::open(&path)
+                .map_err(|e| format!("open sqlite: {e}"))?,
+        );
+    }
+    f(guard.as_ref().expect("db initialized"))
+}
+
+/// JSON 值 → rusqlite 值(参数绑定)
+fn json_to_sqlite_values(params: Vec<serde_json::Value>) -> Vec<rusqlite::types::Value> {
+    params
+        .into_iter()
+        .map(|v| match v {
+            serde_json::Value::Null => rusqlite::types::Value::Null,
+            serde_json::Value::Bool(b) => rusqlite::types::Value::Integer(b as i64),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    rusqlite::types::Value::Integer(i)
+                } else {
+                    rusqlite::types::Value::Real(n.as_f64().unwrap_or(0.0))
+                }
+            }
+            serde_json::Value::String(s) => rusqlite::types::Value::Text(s),
+            other => rusqlite::types::Value::Text(other.to_string()),
+        })
+        .collect()
+}
+
+fn sqlite_row_to_json(v: rusqlite::types::Value) -> serde_json::Value {
+    match v {
+        rusqlite::types::Value::Null => serde_json::Value::Null,
+        rusqlite::types::Value::Integer(i) => serde_json::Value::from(i),
+        rusqlite::types::Value::Real(r) => serde_json::Value::from(r),
+        rusqlite::types::Value::Text(t) => serde_json::Value::String(t),
+        rusqlite::types::Value::Blob(b) => {
+            serde_json::Value::String(String::from_utf8_lossy(&b).into_owned())
+        }
+    }
+}
+
+/// 批量执行 SQL(建表); SQL 文本由前端从 core SCHEMA_SQL 传入(单一来源)
+#[tauri::command]
+fn sqlite_batch(app: tauri::AppHandle, state: tauri::State<'_, DbState>, sql: String) -> Result<(), String> {
+    with_conn(&app, &state, |conn| conn.execute_batch(&sql).map_err(|e| e.to_string()))
+}
+
+/// 单条 SQL + 参数执行(INSERT/UPDATE/DELETE); 返回影响行数
+#[tauri::command]
+fn sqlite_exec(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DbState>,
+    sql: String,
+    params: Vec<serde_json::Value>,
+) -> Result<usize, String> {
+    with_conn(&app, &state, |conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let params: Vec<rusqlite::types::Value> = json_to_sqlite_values(params);
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
+        stmt.execute(param_refs.as_slice()).map_err(|e| e.to_string())
+    })
+}
+
+/// 查询 SQL; 返回行数组(每行数组, 与列序一致)。参数 JSON 数组。
+#[tauri::command]
+fn sqlite_query(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DbState>,
+    sql: String,
+    params: Vec<serde_json::Value>,
+) -> Result<Vec<Vec<serde_json::Value>>, String> {
+    with_conn(&app, &state, |conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let col_count = stmt.column_count();
+        let params = json_to_sqlite_values(params);
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
+        let rows = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                let mut out: Vec<serde_json::Value> = Vec::with_capacity(col_count);
+                for i in 0..col_count {
+                    let v = row.get::<_, rusqlite::types::Value>(i).unwrap_or(rusqlite::types::Value::Null);
+                    out.push(sqlite_row_to_json(v));
+                }
+                Ok(out)
+            })
+            .map_err(|e| e.to_string())?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(|e| e.to_string())?);
+        }
+        Ok(out)
+    })
+}
+
 #[tauri::command]
 fn get_bootstrap() -> Bootstrap {
     Bootstrap {
@@ -117,12 +298,20 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
+        .manage(DbState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             get_bootstrap,
             update_tray_status,
             get_storage_paths,
             get_launch_at_login,
-            set_launch_at_login
+            set_launch_at_login,
+            keyring_get,
+            keyring_set,
+            keyring_delete,
+            http_get_json,
+            sqlite_batch,
+            sqlite_exec,
+            sqlite_query
         ])
         .setup(|app| {
             let show_item = MenuItem::with_id(app, "show", "打开面板", true, None::<&str>)?;

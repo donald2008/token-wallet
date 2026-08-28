@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { InstanceConfig, CredentialRef } from "./schema";
 import { makeCredentialRef } from "./schema";
+import { isTauriRuntime, keyringDelete, keyringGet, keyringSet } from "../ipc";
 
 /** 钥匙串后端抽象(D-029: Windows 凭据管理器 / Keychain / Secret Service) */
 export interface KeyringBackend {
@@ -20,7 +21,7 @@ export interface KeyringBackend {
 
 export const KEYRING_SERVICE = "token-wallet";
 
-/** 内存钥匙串 mock —— 本卡(P0-4)撑住 store 接口; local-only, 不落盘 */
+/** 内存钥匙串 mock —— 纯浏览器 dev/localStorage 无 Tauri 时兜底; local-only, 不落盘 */
 export class MemoryKeyring implements KeyringBackend {
   private readonly store = new Map<string, string>();
 
@@ -32,6 +33,22 @@ export class MemoryKeyring implements KeyringBackend {
   }
   async delete(service: string, key: string): Promise<void> {
     this.store.delete(`${service}:${key}`);
+  }
+}
+
+/**
+ * OS 钥匙串真实现(D-029): Rust keyring crate 经 IPC 桥接。
+ * Windows 凭据管理器 / macOS Keychain / Linux Secret Service。
+ */
+export class TauriKeyring implements KeyringBackend {
+  async get(service: string, key: string): Promise<string | null> {
+    return keyringGet(service, key);
+  }
+  async set(service: string, key: string, value: string): Promise<void> {
+    await keyringSet(service, key, value);
+  }
+  async delete(service: string, key: string): Promise<void> {
+    await keyringDelete(service, key);
   }
 }
 
@@ -77,11 +94,22 @@ export function getSharedStore(): MemoryInstanceStore {
   return sharedStoreInstance;
 }
 
-/** 钥匙串 mock 单例共享 */
-let sharedKeyring: MemoryKeyring | null = null;
-export function getSharedKeyring(): MemoryKeyring {
-  if (!sharedKeyring) sharedKeyring = new MemoryKeyring();
-  return sharedKeyring;
+/** 钥匙串 mock 单例共享(纯浏览器 dev 用) */
+let sharedMemoryKeyring: MemoryKeyring | null = null;
+/** Tauri 运行时钥匙串单例(真 OS 钥匙串 D-029) */
+let sharedTauriKeyring: TauriKeyring | null = null;
+
+/**
+ * 共享钥匙串后端: Tauri 运行时 → OS 钥匙串(keyring crate);
+ * 纯浏览器 dev/Playwright browser 模式(无 Tauri invoke)→ 内存 mock。
+ */
+export function getSharedKeyring(): KeyringBackend {
+  if (isTauriRuntime()) {
+    if (!sharedTauriKeyring) sharedTauriKeyring = new TauriKeyring();
+    return sharedTauriKeyring;
+  }
+  if (!sharedMemoryKeyring) sharedMemoryKeyring = new MemoryKeyring();
+  return sharedMemoryKeyring;
 }
 
 /** React 绑定: 订阅 store 变更返回最新实例列表 */

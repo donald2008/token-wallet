@@ -84,11 +84,29 @@ function fmtMoney(n: number): string {
   return n.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
 }
 
+/** 币种符号: CNY/人民币 → ¥; 其他用 ISO 码兜底 */
+function currencySymbol(currency?: string): string {
+  if (!currency) return "¥";
+  const upper = currency.toUpperCase();
+  if (upper === "CNY" || upper === "RMB") return "¥";
+  if (upper === "USD") return "$";
+  if (upper === "EUR") return "€";
+  return `${currency} `;
+}
+
+/** 余额制: 当前剩余 = remaining 优先, 否则 limit-used 推导(旧 mock 兼容) */
+function currentRemaining(m: Metric): number | null {
+  if (m.remaining !== undefined) return m.remaining;
+  if (m.limit !== undefined) return m.limit - m.used;
+  return null;
+}
+
 /** 近 7 天速率 → 预计可用天数(§2 数字回答"还能撑多久") */
 function estimatedDays(m: Metric): number | null {
-  if (!m.daily_rate || m.daily_rate <= 0 || m.limit === undefined) return null;
-  const remaining = m.limit - m.used;
+  const remaining = currentRemaining(m);
+  if (remaining === null) return null;
   if (remaining <= 0) return 0;
+  if (!m.daily_rate || m.daily_rate <= 0) return null;
   return remaining / m.daily_rate;
 }
 
@@ -97,25 +115,33 @@ function fmtDays(days: number): string {
 }
 
 /**
- * ticker 模板: 剩余大数字 + 按近 7 天速率的预计可用天数。
- * daily_rate(近 7 天平均日消耗)由 P0-5 真实数据链路从历史快照计算; mock 阶段由数据方给出。
+ * ticker 模板: 剩余大数字 + 币种 + granted/topped_up 拆分 + 按近 7 天速率的预计可用天数。
+ * daily_rate(近 7 天平均日消耗)由 P0-5 RuntimeEngine 从历史快照计算附着。
  */
 export function TickerTemplate({ p }: { p: ProviderSnapshot }) {
-  const m = p.metrics[0];
-  const remaining = m?.limit !== undefined ? m.limit - m.used : undefined;
+  const m = p.metrics.find((x) => x.kind === "balance") ?? p.metrics[0];
+  const remaining = m ? currentRemaining(m) : null;
+  const symbol = currencySymbol(m?.currency);
   const days = m ? estimatedDays(m) : null;
+  const showSplit = m && (m.granted !== undefined || m.topped_up !== undefined);
   return (
     <div className="ticker-template" data-testid="ticker-template">
       <div className="ticker-number">
-        {remaining !== undefined ? `¥${fmtMoney(remaining)}` : "—"}
+        {remaining !== null ? `${symbol}${fmtMoney(remaining)}` : "—"}
       </div>
+      {showSplit && (
+        <div className="ticker-split" data-testid="ticker-split">
+          {m!.granted !== undefined && <span>赠送 {symbol}{fmtMoney(m!.granted!)}</span>}
+          {m!.topped_up !== undefined && <span>充值 {symbol}{fmtMoney(m!.topped_up!)}</span>}
+        </div>
+      )}
       <div className="ticker-sub">
         {days !== null ? (
           <>
             近 7 天 ~{m!.daily_rate}/天 · <span data-testid="ticker-days">预计可用约 {fmtDays(days)} 天</span>
           </>
         ) : (
-          "余额 · 预计可用天数待消耗速率数据(P0-5)"
+          "余额 · 预计可用天数待消耗速率数据(历史积累后显示)"
         )}
       </div>
     </div>

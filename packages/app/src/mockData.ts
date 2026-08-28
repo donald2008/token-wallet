@@ -83,7 +83,7 @@ const MOCK: Record<Exclude<ScenarioId, "loading" | "empty">, ProviderSnapshot[]>
       fetched_at: NOW - 7200,
       status: "auth_expired",
       metrics: [],
-      alerts: ["bl 会话已失效"],
+      alerts: [{ level: "warn", message: "bl 会话已失效" }],
       setup_hint: "请运行 `bl auth login --console` 重新授权",
     },
   ],
@@ -106,7 +106,7 @@ const MOCK: Record<Exclude<ScenarioId, "loading" | "empty">, ProviderSnapshot[]>
       fetched_at: NOW - 240,
       status: "error",
       metrics: [],
-      alerts: ["429 quota exceeded: 今日按量已超限"],
+      alerts: [{ level: "critical", message: "429 quota exceeded: 今日按量已超限" }],
     },
   ],
   mixed: [
@@ -138,7 +138,7 @@ const MOCK: Record<Exclude<ScenarioId, "loading" | "empty">, ProviderSnapshot[]>
       fetched_at: NOW - 7200,
       status: "auth_expired",
       metrics: [],
-      alerts: ["bl 会话已失效, 请重新授权"],
+      alerts: [{ level: "warn", message: "bl 会话已失效, 请重新授权" }],
       setup_hint: "请运行 `bl auth login --console` 重新授权",
     },
     {

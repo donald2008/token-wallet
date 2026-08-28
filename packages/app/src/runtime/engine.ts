@@ -1,0 +1,228 @@
+/**
+ * RuntimeEngine — P0-5 真实链路: 实例配置 → GenericHttpAdapter → Scheduler → SqliteStore → 面板
+ *
+ * 数据流(DESIGN §3.1 cache-first):
+ *   Scheduler(后台轮询) → GenericHttpAdapter.fetchSnapshot
+ *     → onResult → SnapshotStorage.saveSnapshot(SqliteStore)
+ *     → 近 7 天速率附着(daily_rate) → 通知面板订阅者
+ *
+ * 关键纪律:
+ * - 凭据 key 只活请求构造瞬间(D-029): resolveCredential 从 OS 钥匙串读取,
+ *   返回后立即被 adapter 拼进 header, 不进 UI 状态/日志。
+ * - 通道映射零代码(§5.1): GenericHttpAdapter + DEEPSEEK_BALANCE_MAPPING。
+ */
+import { GenericHttpAdapter, type AdapterContext } from "@token-wallet/core/generic-http";
+import { DEEPSEEK_BALANCE, DEEPSEEK_BALANCE_MAPPING } from "@token-wallet/core/channels/deepseek";
+import { Scheduler } from "@token-wallet/core/scheduler";
+import { dailyRateFromHistory } from "@token-wallet/core/rate";
+import type { ProviderSnapshot } from "../types";
+import type { InstanceConfig, CredentialRef } from "../instances/schema";
+import { KEYRING_SERVICE, getSharedKeyring } from "../instances/store";
+import { getSharedStorage, type SnapshotStorage } from "./storage";
+import { httpGetJson } from "../ipc";
+
+const HTTP_TIMEOUT_MS = 10_000;
+
+/** 解析轮询间隔文本("5m"/"30s"/"1h") → 毫秒; 缺省 5min(D-011 T2) */
+export function parsePollIntervalMs(text?: string): number {
+  if (!text) return 5 * 60_000;
+  const m = /^(\d+)\s*(s|m|h)?$/.exec(text.trim());
+  if (!m) return 5 * 60_000;
+  const n = Number(m[1]);
+  switch (m[2]) {
+    case "s":
+      return n * 1_000;
+    case "h":
+      return n * 3_600_000;
+    default:
+      return n * 60_000;
+  }
+}
+
+/**
+ * Tauri 运行时 fetch 桥: 经 Rust reqwest 执行(Rust 侧 http_get_json),
+ * 规避 webview CORS/CSP; 响应体已由 Rust 脱敏(D-029)。
+ * 纯浏览器 dev(无 invoke)→ 直接 fetch(本地预览; 生产不会走到)。
+ */
+async function runtimeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  const headers: Record<string, string> = {};
+  for (const [k, v] of Object.entries(init?.headers ?? {})) headers[k] = String(v);
+  const timeoutMs = HTTP_TIMEOUT_MS;
+  const { status, body } = await httpGetJson(url, headers, timeoutMs);
+  return new Response(body, { status, headers: { "content-type": "application/json" } });
+}
+
+/** 凭据解析(D-029): CredentialRef{source:store} → OS 钥匙串读取; key 只活构造瞬间 */
+async function resolveCredential(ref: unknown): Promise<string> {
+  const r = ref as CredentialRef | undefined;
+  if (!r || typeof r !== "object") throw new Error("凭据引用非法");
+  if (r.source === "store") {
+    const key = r.key ?? "default";
+    const value = await getSharedKeyring().get(KEYRING_SERVICE, key);
+    if (value === null || value === "") {
+      throw new Error(`钥匙串条目不存在: ${key}`);
+    }
+    return value;
+  }
+  if (r.source === "env") {
+    const name = r.key ?? "";
+    const value = import.meta.env?.[name];
+    if (typeof value !== "string" || value === "") throw new Error(`环境变量未设置: ${name}`);
+    return value;
+  }
+  throw new Error(`凭据源暂不支持: ${r.source}`);
+}
+
+/** 引擎输出: 面板订阅的最新快照 + 调度统计 */
+export interface EngineOutput {
+  snapshots: ProviderSnapshot[];
+  /** provider_id → InstanceStats(面板/调试展示可选) */
+  stats: Record<string, { state: string; consecutiveFailures: number; lastRunAt?: number }>;
+}
+
+export type EngineListener = (out: EngineOutput) => void;
+
+export class RuntimeEngine {
+  private readonly scheduler = new Scheduler({ httpTimeoutMs: HTTP_TIMEOUT_MS });
+  private readonly storage: SnapshotStorage;
+  private readonly latest = new Map<string, ProviderSnapshot>();
+  private readonly listeners = new Set<EngineListener>();
+  private started = false;
+
+  constructor(
+    private readonly instances: InstanceConfig[],
+    storage: SnapshotStorage = getSharedStorage(),
+  ) {
+    this.storage = storage;
+  }
+
+  /** 注册实例到调度器; 未认领的通道(仅 deepseek/balance 本卡)跳过并告警 */
+  private buildInstances(): void {
+    for (const inst of this.instances) {
+      // 通道 → 声明式映射(零代码 §5.1); 其他通道本卡不接(等待各自适配器)
+      let adapter: GenericHttpAdapter | null = null;
+      let descriptor = DEEPSEEK_BALANCE;
+      if (inst.channel === "deepseek/balance") {
+        adapter = new GenericHttpAdapter(DEEPSEEK_BALANCE_MAPPING, runtimeFetch);
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn(`[engine] 通道 ${inst.channel} 暂无真实适配器, 跳过`);
+        continue;
+      }
+      if (!adapter) continue;
+
+      const coreInstance = {
+        id: inst.id,
+        channel: inst.channel,
+        name: inst.name,
+        params: inst.params as Record<string, unknown>,
+      };
+
+      this.scheduler.add({
+        id: inst.id,
+        kind: "http",
+        intervalMs: parsePollIntervalMs(inst.poll_interval),
+        fetch: async (ctx) => {
+          const adapterCtx: AdapterContext = {
+            signal: ctx.signal,
+            timeoutMs: ctx.timeoutMs,
+            resolveCredential,
+            fetchedAt: Math.floor(Date.now() / 1000),
+          };
+          return adapter.fetchSnapshot(descriptor, coreInstance, adapterCtx);
+        },
+        onResult: (snap) => void this.onResult(inst.id, snap),
+      });
+    }
+  }
+
+  /** 一次采集结果: 落库 → 速率附着 → 通知面板 */
+  private async onResult(providerId: string, snap: ProviderSnapshot): Promise<void> {
+    // 落库(cache-first 的写侧; 面板永远读内存 latest, 启动时从库恢复)
+    try {
+      await this.storage.init();
+      await this.storage.saveSnapshot(snap);
+    } catch (err) {
+      // 落库失败不阻塞 UI; 记一次(不含凭据)
+      // eslint-disable-next-line no-console
+      console.warn(`[engine] 落库失败 ${providerId}:`, err instanceof Error ? err.message : err);
+    }
+
+    // 近 7 天速率: 用历史快照(含本次)算 daily_rate, 附着到 balance 指标
+    if (snap.status === "ok") {
+      try {
+        const history = await this.storage.history(providerId, Math.floor(Date.now() / 1000) - 7 * 86_400, 200);
+        const rate = dailyRateFromHistory([...history, snap]);
+        if (rate !== null) {
+          snap.metrics = snap.metrics.map((m) =>
+            m.kind === "balance" ? { ...m, daily_rate: rate } : m,
+          );
+        }
+      } catch {
+        /* 速率计算失败不影响展示 */
+      }
+    }
+
+    this.latest.set(providerId, snap);
+    this.emit();
+  }
+
+  /** 从存储恢复最新快照(启动时面板秒出数) */
+  async hydrate(): Promise<void> {
+    try {
+      await this.storage.init();
+      const snaps = await this.storage.latestSnapshots();
+      for (const s of snaps) this.latest.set(s.provider_id, s);
+    } catch {
+      /* 无历史数据则从空开始 */
+    }
+    this.emit();
+  }
+
+  start(): void {
+    if (this.started) return;
+    this.started = true;
+    this.buildInstances();
+    // 先恢复库内最新快照 → 启动即出数; 再启动调度(首次采集带抖动)
+    // 附加一次立即同步(§3.1 手动刷新语义): 添加实例后面板马上出数, 不等 0~30s jitter
+    void this.hydrate().then(() => {
+      this.scheduler.startAll();
+      void this.scheduler.refreshAll();
+    });
+  }
+
+  stop(): void {
+    this.started = false;
+    this.scheduler.stopAll();
+    this.latest.clear();
+  }
+
+  /** 手动刷新 = 触发所有实例立即同步(§3.1) */
+  refreshAll(): Promise<void> {
+    return this.scheduler.refreshAll();
+  }
+
+  get snapshots(): ProviderSnapshot[] {
+    return [...this.latest.values()];
+  }
+
+  get stats(): Record<string, { state: string; consecutiveFailures: number; lastRunAt?: number }> {
+    const out: Record<string, { state: string; consecutiveFailures: number; lastRunAt?: number }> = {};
+    for (const [id, st] of Object.entries(this.scheduler.listStats())) {
+      out[id] = { state: st.state, consecutiveFailures: st.consecutiveFailures, lastRunAt: st.lastRunAt };
+    }
+    return out;
+  }
+
+  subscribe(fn: EngineListener): () => void {
+    this.listeners.add(fn);
+    fn({ snapshots: this.snapshots, stats: this.stats });
+    return () => this.listeners.delete(fn);
+  }
+
+  private emit(): void {
+    const out: EngineOutput = { snapshots: this.snapshots, stats: this.stats };
+    for (const fn of this.listeners) fn(out);
+  }
+}

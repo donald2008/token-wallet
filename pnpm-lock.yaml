@@ -10,6 +10,9 @@ importers:
 
   packages/app:
     dependencies:
+      '@token-wallet/core':
+        specifier: workspace:*
+        version: link:../core
       react:
         specifier: ^19.1.0
         version: 19.2.8
