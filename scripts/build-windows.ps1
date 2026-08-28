@@ -98,6 +98,19 @@ try {
     corepack prepare pnpm@9.15.0 --activate
     if ($LASTEXITCODE -ne 0) { throw "corepack prepare 失败" }
 
+    # Windows 下 corepack prepare 不创建 pnpm shim——tauri 的 beforeBuildCommand
+    # 走裸 pnpm 会报 'pnpm' is not recognized。corepack enable 把 pnpm.cmd 写进
+    # node 目录(PATH 已含), 使裸 pnpm 全局可用; 权限不足时 by beforeBuildCommand
+    # 已改为 corepack pnpm (tauri.conf.json), 双保险。
+    Write-Step "激活 pnpm shim (corepack enable)"
+    corepack enable
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[提示] corepack enable 失败(可能需管理员), 不影响构建: beforeBuildCommand 已走 corepack pnpm" -ForegroundColor Yellow
+    }
+    if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+        Write-Host "[提示] 裸 pnpm 仍不可用(重启终端后可用), 构建继续走 corepack 路径" -ForegroundColor Yellow
+    }
+
     Write-Step "pnpm install (frozen-lockfile)"
     corepack pnpm install --frozen-lockfile
     if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败" }

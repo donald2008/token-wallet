@@ -87,6 +87,7 @@ Tauri v2 NSIS 支持 `portable` target：单文件 exe 双击即用、免安装�
 
 | 症状 | 原因 | 处理 |
 |---|---|---|
+| `'pnpm' is not recognized`（tauri beforeBuildCommand 阶段） | Windows 下 corepack prepare 不创建 pnpm shim | 已双保险：tauri.conf.json 的 before/after 命令走 `corepack pnpm`；脚本构建前会自动 `corepack enable`。老包需 `git pull` 取最新配置 |
 | `link.exe 未找到` / MSVC 报错 | VS Build Tools 未装或未勾选 C++ 桌面开发 | 重装 Build Tools 勾选后重跑 |
 | `tauri build` 慢 / 卡 | 首次 Rust 全量编译（依赖多） | 正常，5-15 分钟，增量后秒级 |
 | 磁盘空间不足 | target 目录大 | 预留 ≥10GB；`pnpm -C packages/app tauri clean` 可清 |
