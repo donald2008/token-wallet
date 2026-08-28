@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "corepack pnpm dev",
-    "beforeBuildCommand": "corepack pnpm build"
+    "beforeDevCommand": "corepack pnpm --filter @token-wallet/core build && corepack pnpm dev",
+    "beforeBuildCommand": "corepack pnpm --filter @token-wallet/core build && corepack pnpm build"
   },
   "app": {
     "withGlobalTauri": true,

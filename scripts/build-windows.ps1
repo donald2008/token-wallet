@@ -125,6 +125,9 @@ try {
     }
 
     Write-Step "tauri build (Windows 安装包)"
+    # app 依赖 @token-wallet/core 的子路径(exports→dist), 必须先 build core 再打 app
+    corepack pnpm --filter @token-wallet/core build
+    if ($LASTEXITCODE -ne 0) { throw "core build 失败" }
     corepack pnpm -C packages/app tauri build
     if ($LASTEXITCODE -ne 0) { throw "tauri build 失败(最常见原因: MSVC 链接器缺失/磁盘空间不足, 见 docs/windows-build.md)" }
 } finally {
