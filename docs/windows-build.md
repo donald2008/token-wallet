@@ -57,6 +57,32 @@ Get-FileHash .\token-wallet_0.1.0_x64-setup.exe -Algorithm SHA256
 
 正式发版按 `RELEASE.md`：产物 + SHA256 挂 gitee release，README 指向下载。
 
+## 独立安装包（离线，无任何运行时依赖）
+
+已配置 `webviewInstallMode: offlineInstaller`（tauri.conf.json）：**构建时把全量
+WebView2 离线安装器（~130MB）打进 NSIS 安装包**，安装过程不联网、不依赖系统已装
+组件——旧 Win10 无 WebView2 的机器也能直接装，真·独立安装包。
+
+安装包体积对比：
+| 模式 | 包体 | 效果 |
+|---|---|---|
+| downloadBootstrapper（默认） | ~10MB | 安装时联网下载 WebView2（~1.5MB 引导+在线源） |
+| **offlineInstaller（本项目当前）** | ~140MB | 完全离线，装完即用，任意 Windows 10/11 |
+| skip | ~10MB | 要求系统已有 WebView2，否则不可用 |
+
+> 需要切换回小体积模式时改 `bundle.windows.webviewInstallMode.type` 为
+> `"downloadBootstrapper"` 即可（构建机需联网时 Tauri 会自动拉取）。
+
+使用方**无需** Node / Rust / VS Build Tools 任何开发环境——那是构建机的事。
+
+## 常见问题
+
+### 便携/绿色版（免安装）
+
+Tauri v2 NSIS 支持 `portable` target：单文件 exe 双击即用、免安装、免管理员。
+需要时在 `bundle.targets` 加 `"portable"`（产物增加一个 `*_x64-portable.exe`，
+随包附带同体积 WebView2 离线依赖语义）。
+
 ## 故障排查
 
 | 症状 | 原因 | 处理 |
