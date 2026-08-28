@@ -8,12 +8,12 @@
   - `GenericHttpAdapter`: YAML 声明 url/headers/JSONPath 映射, 标准余额接口零代码接入
   - `ScriptedAdapter`: TS 类, 处理多窗口/签名/CLI 包装等复杂逻辑
   - `LocalAgentAdapter`: 拉本地 Agent(如 Hermes gateway)用量
-- **轮询调度器** — per-provider interval, 默认 5min(T2 档), 配置热加载
+- **轮询调度器** — per-provider interval, 默认 5min(T2 档), D-027 全语义(并发/防重叠/超时硬切/启动抖动/失败退避/auth_expired 停摆)
 - **StorageBackend** — cache-first 快照存储
-  - MVP: `JsonlStore`(追加 JSONL + latest.json)
-  - 后续: `SqliteStore`(见 docs/DECISIONS.md D-006)
-- **统一 schema** — `ProviderSnapshot`(见 docs/DESIGN.md §数据模型)
-- **CredentialSource** — env / file / command 三种凭据来源
+  - P0 主力: `SqliteStore`(node:sqlite, D-020; app 侧 tauri-plugin-sql 同一 schema)
+  - 调试导出: `JsonlStore`(后置)
+- **统一 schema** — `ProviderSnapshot` zod 校验(见 docs/DESIGN.md §2.1)
+- **CredentialSource** — store(宿主注入钥匙串) / env / file(强制 600) / command 四种凭据来源(D-029)
 - **Notifier** — 接口先行, P3 前为空实现
 
 ## 边界(防过度设计)
