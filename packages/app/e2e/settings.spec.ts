@@ -156,8 +156,73 @@ test("开机自启默认关 + 可切换(D-024)", async ({ tauriPage, page }) => 
   await pwExpect(toggle).not.toBeChecked();
 });
 
-/** 从面板标题栏"设置"按钮进入设置页 */
+/** 从面板标题栏"设置"按钮进入设置(弹窗, P0-6) */
 async function openSettings(page: import("@playwright/test").Page) {
   await page.getByTestId("settings-btn").click();
   await pwExpect(page.getByTestId("settings-view")).toBeVisible();
 }
+
+/* ---------- P0-6: 设置 = 模态弹窗(overlay 叠面板), 非页内导航 ---------- */
+
+/** 打开设置弹窗: 遮罩 + 弹层可见, 面板内容仍在下方 */
+async function openSettingsModal(page: import("@playwright/test").Page) {
+  await page.getByTestId("settings-btn").click();
+  await pwExpect(page.getByTestId("settings-overlay")).toBeVisible();
+  await pwExpect(page.getByTestId("settings-view")).toBeVisible();
+}
+
+test("设置弹窗: 打开后叠在面板上方, × 关闭回面板(P0-6)", async ({ tauriPage, page }) => {
+  void tauriPage;
+  await agree(page);
+  await page.getByTestId("scenario-mixed").click();
+  await openSettingsModal(page);
+  // 弹层叠在面板上方: 面板标题栏/卡片仍在 DOM 且渲染
+  await pwExpect(page.getByTestId("settings-btn")).toBeVisible();
+  await pwExpect(page.getByTestId("card-list")).toBeVisible();
+  // 弹窗内是设置内容, 无"返回"导航概念
+  await pwExpect(page.getByTestId("settings-close")).toBeVisible();
+  await pwExpect(page.getByTestId("settings-back")).toHaveCount(0);
+  // × 关闭 → 回面板
+  await page.getByTestId("settings-close").click();
+  await pwExpect(page.getByTestId("settings-overlay")).toHaveCount(0);
+  await pwExpect(page.getByTestId("card-list")).toBeVisible();
+});
+
+test("设置弹窗: 点遮罩关闭(P0-6)", async ({ tauriPage, page }) => {
+  void tauriPage;
+  await agree(page);
+  await openSettingsModal(page);
+  // 点遮罩(弹层外角落)关闭
+  await page.getByTestId("settings-overlay").click({ position: { x: 4, y: 4 } });
+  await pwExpect(page.getByTestId("settings-overlay")).toHaveCount(0);
+});
+
+test("设置弹窗: ESC 键关闭(P0-6)", async ({ tauriPage, page }) => {
+  void tauriPage;
+  await agree(page);
+  await openSettingsModal(page);
+  await page.keyboard.press("Escape");
+  await pwExpect(page.getByTestId("settings-overlay")).toHaveCount(0);
+});
+
+test("设置弹窗: 内容完整(实例管理/存储路径/开机自启/主题)(P0-6)", async ({ tauriPage, page }) => {
+  void tauriPage;
+  await agree(page);
+  await openSettingsModal(page);
+  const modal = page.getByTestId("settings-overlay");
+  await pwExpect(modal.getByTestId("instance-list").or(modal.getByTestId("no-instances"))).toBeVisible();
+  await pwExpect(modal.getByTestId("add-instance")).toBeVisible();
+  await pwExpect(modal.getByTestId("storage-paths")).toBeVisible();
+  await pwExpect(modal.getByTestId("autostart-toggle")).toBeVisible();
+  await pwExpect(modal.getByTestId("theme-seg")).toBeVisible();
+});
+
+test("首开向导回归: 空态添加 Provider 仍走页内导航, 不弹模态(D-021)", async ({ tauriPage, page }) => {
+  void tauriPage;
+  await agree(page);
+  await openAddFlow(page);
+  // 页内导航: 设置视图直接替换面板, 无遮罩弹层
+  await pwExpect(page.getByTestId("settings-overlay")).toHaveCount(0);
+  await pwExpect(page.getByTestId("settings-view")).toBeVisible();
+  await pwExpect(page.getByTestId("settings-back")).toBeVisible();
+});

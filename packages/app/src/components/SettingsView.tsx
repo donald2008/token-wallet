@@ -17,6 +17,8 @@ interface Props {
   themeMode: ThemeMode;
   onThemeMode: (m: ThemeMode) => void;
   onBack: () => void;
+  /** page = 首开向导页内导航(D-021); modal = 设置弹窗(P0-6), 头部渲染 × 关闭 */
+  variant?: "page" | "modal";
   /** 首开引导(D-021): 从空态"添加 Provider"进入时直接开添加流程 */
   initialStep?: "overview" | "add-channel" | "fill-form";
 }
@@ -29,7 +31,7 @@ interface Props {
  * - 存储路径显示(D-019): 运行时解析
  * - 开机自启开关(D-024): 默认关
  */
-export function SettingsView({ themeMode, onThemeMode, onBack, initialStep = "overview" }: Props) {
+export function SettingsView({ themeMode, onThemeMode, onBack, variant = "page", initialStep = "overview" }: Props) {
   const instances = useInstances();
   const [step, setStep] = useState<"overview" | "add-channel" | "fill-form">(initialStep);
   const [selectedChannel, setSelectedChannel] = useState<MockChannelDescriptor | null>(null);
@@ -69,9 +71,21 @@ export function SettingsView({ themeMode, onThemeMode, onBack, initialStep = "ov
     <div className="settings-view" data-testid="settings-view">
       <div className="settings-head">
         <h3>设置</h3>
-        <button type="button" className="btn" data-testid="settings-back" onClick={onBack}>
-          ← 返回
-        </button>
+        {variant === "modal" ? (
+          <button
+            type="button"
+            className="btn btn-icon"
+            data-testid="settings-close"
+            aria-label="关闭设置"
+            onClick={onBack}
+          >
+            ×
+          </button>
+        ) : (
+          <button type="button" className="btn" data-testid="settings-back" onClick={onBack}>
+            ← 返回
+          </button>
+        )}
       </div>
 
       {step === "add-channel" && (

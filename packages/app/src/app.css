@@ -24,6 +24,7 @@ body {
 
 /* 无边框透明窗口: 面板 = 悬浮圆角卡片(四周留透明边) */
 .panel {
+  position: relative; /* 设置弹窗 overlay 的定位容器(P0-6) */
   display: flex;
   flex-direction: column;
   height: calc(100% - 16px);
@@ -399,6 +400,32 @@ body {
 .scenario-bar .btn.active {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* ---- 设置弹窗(P0-6): 半透明遮罩叠在面板上方, 弹层自画圆角+阴影(无边框透明窗口) ---- */
+.settings-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  border-radius: 14px; /* 与 .panel 圆角卡片协调(被 overflow:hidden 裁齐) */
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+}
+
+.settings-modal {
+  flex: 1;
+  display: flex;
+  margin: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.settings-modal .settings-view {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ---- 设置抽屉占位 ---- */

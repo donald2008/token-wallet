@@ -53,7 +53,9 @@ export default function App() {
   const [consented, setConsented] = useState(false);
   const [scenario, setScenario] = useState<ScenarioId>("mixed");
   const [refreshing, setRefreshing] = useState(false);
+  // 页内导航仅留给首开向导(D-021 一次性引导); 设置入口 = 模态弹窗(P0-6)
   const [view, setView] = useState<"panel" | "settings">("panel");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsStep, setSettingsStep] = useState<"overview" | "add-channel" | "fill-form">("overview");
 
   const instances = useInstances();
@@ -112,16 +114,31 @@ export default function App() {
     setScenario("empty"); // 初始零 provider 配置(§10)
   }, []);
 
-  // D-021 首开引导: 空态"添加 Provider" → 进入设置页添加流程(引导首个 provider)
+  // D-021 首开引导: 空态"添加 Provider" → 页内导航进设置添加流程(一次性引导, 保持现状)
   const openAddProvider = useCallback(() => {
     setSettingsStep("add-channel");
     setView("settings");
   }, []);
 
+  // 设置入口 = 模态弹窗(P0-6): 叠在面板上, × / 点遮罩 / ESC 关闭
   const openSettings = useCallback(() => {
     setSettingsStep("overview");
-    setView("settings");
+    setSettingsOpen(true);
   }, []);
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+  }, []);
+
+  // ESC 关闭设置弹窗
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeSettings();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [settingsOpen, closeSettings]);
 
   if (!bootstrap) {
     return (
@@ -140,9 +157,11 @@ export default function App() {
   }
 
   if (view === "settings") {
+    // 首开向导(D-021): 一次性引导流程保持页内导航
     return (
       <div className="panel">
         <SettingsView
+          variant="page"
           themeMode={themeMode}
           onThemeMode={setThemeMode}
           initialStep={settingsStep}
@@ -176,6 +195,26 @@ export default function App() {
       )}
       <LocalAgentSection />
       {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}
+      {settingsOpen && (
+        // 设置模态弹窗(P0-6): 半透明遮罩叠在面板上方, 点遮罩关闭; 弹层自身圆角+阴影(D-031 无边框窗口)
+        <div className="settings-overlay" data-testid="settings-overlay" onClick={closeSettings}>
+          <div
+            className="settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="设置"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <SettingsView
+              variant="modal"
+              themeMode={themeMode}
+              onThemeMode={setThemeMode}
+              initialStep={settingsStep}
+              onBack={closeSettings}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
