@@ -1,5 +1,6 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { SqliteStore, SCHEMA_SQL } from "../src/storage/sqlite.js";
+import { SqliteStore } from "../src/storage/sqlite.js";
+import { SCHEMA_SQL } from "../src/storage/schema-sql.js";
 import type { ProviderSnapshot } from "../src/schema.js";
 import type { UsageRecord } from "../src/storage/backend.js";
 

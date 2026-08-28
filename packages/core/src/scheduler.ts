@@ -179,6 +179,21 @@ export class Scheduler {
     this.start(id);
   }
 
+  /**
+   * 手动刷新 = 触发对应适配器立即同步(§3.1)。
+   * 立即跑一次采集并走 onResult; 不改变既定节拍(下个周期仍按 interval 排)。
+   * 与周期 tick 天然防重叠(run 内 state=running, 并发 tick 记 skipped)。
+   */
+  async refresh(id: string): Promise<void> {
+    const rt = this.mustGet(id);
+    if (rt.state === "running" || rt.state === "halted") return;
+    await this.run(rt);
+  }
+
+  async refreshAll(): Promise<void> {
+    await Promise.all([...this.instances.keys()].map((id) => this.refresh(id)));
+  }
+
   stop(id: string): void {
     const rt = this.instances.get(id);
     if (!rt) return;

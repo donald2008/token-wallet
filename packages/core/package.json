@@ -11,6 +11,46 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./generic-http": {
+      "types": "./dist/generic-http.d.ts",
+      "import": "./dist/generic-http.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js"
+    },
+    "./channels": {
+      "types": "./dist/channels/index.d.ts",
+      "import": "./dist/channels/index.js"
+    },
+    "./channels/deepseek": {
+      "types": "./dist/channels/deepseek.d.ts",
+      "import": "./dist/channels/deepseek.js"
+    },
+    "./mapping/jsonpath": {
+      "types": "./dist/mapping/jsonpath.d.ts",
+      "import": "./dist/mapping/jsonpath.js"
+    },
+    "./redact": {
+      "types": "./dist/redact.d.ts",
+      "import": "./dist/redact.js"
+    },
+    "./rate": {
+      "types": "./dist/rate.d.ts",
+      "import": "./dist/rate.js"
+    },
+    "./storage/schema-sql": {
+      "types": "./dist/storage/schema-sql.d.ts",
+      "import": "./dist/storage/schema-sql.js"
+    },
+    "./scheduler": {
+      "types": "./dist/scheduler.d.ts",
+      "import": "./dist/scheduler.js"
+    },
+    "./credentials": {
+      "types": "./dist/credentials.d.ts",
+      "import": "./dist/credentials.js"
     }
   },
   "files": [

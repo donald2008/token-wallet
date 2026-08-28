@@ -4,6 +4,8 @@
  * 数据从哪来。本卡立接口与骨架:
  * - ProviderAdapter: 统一契约(输入实例配置+已解析凭据, 输出 ProviderSnapshot)
  * - GenericHttpAdapter: 声明式 URL/headers/JSONPath 映射(零代码接标准接口)
+ *   ⚠️ P0-5 起拆到 ./generic-http.ts(browser-safe, 供 app 经 subpath export 接入);
+ *     本文件 re-export 保持 core 内 import 兼容。
  * - ScriptedAdapter: TS 类抽象基类(签名/多步/CLI 包装等复杂逻辑)
  *
  * 框架边界(D-015): 不做热加载, 加平台 = 加适配器发新版。
@@ -12,32 +14,18 @@ import type { ChannelDescriptor } from "./channels/descriptor.js";
 import type { CredentialSourceRegistry } from "./credentials.js";
 import type { ProviderSnapshot } from "./schema.js";
 import type { FetchContext } from "./scheduler.js";
-import {
-  applyPipe,
-  evalAssertion,
-  evalJsonPathFirst,
-  type PipeFilter,
-} from "./mapping/jsonpath.js";
-
-/** 实例配置(§5.0.1 instances.yaml 单条的运行时形态) */
-export interface InstanceConfig {
-  id: string;
-  /** 通道全路径 "platform/product" */
-  channel: string;
-  /** 用户命名(D-026, 全局唯一由宿主校验) */
-  name: string;
-  /** 轮询覆盖(毫秒); 缺省走全局默认 */
-  poll_interval_ms?: number;
-  /** 参数: key → 原始值(text/number/boolean)或已解析的凭据占位 */
-  params: Record<string, unknown>;
-}
-
-export interface AdapterContext extends FetchContext {
-  /** 按 CredentialRef 解析凭据; 返回值只活在请求构造瞬间(D-029) */
-  resolveCredential: CredentialSourceRegistry["resolve"];
-  /** 本次采集时间(unix 秒), 适配器填 fetched_at 用 */
-  fetchedAt: number;
-}
+import type { AdapterContext, GenericHttpMapping, InstanceConfig } from "./generic-http.js";
+import { GenericHttpAdapter } from "./generic-http.js";
+export { GenericHttpAdapter } from "./generic-http.js";
+export type {
+  AdapterContext,
+  FieldMapping,
+  GenericHttpMapping,
+  HttpFetchError,
+  InstanceConfig,
+  MetricMapping,
+  ResolveCredential,
+} from "./generic-http.js";
 
 /** 统一适配器契约(四个注册点之一) */
 export interface ProviderAdapter {
@@ -55,149 +43,6 @@ export interface ProviderAdapter {
     instance: InstanceConfig,
     ctx: AdapterContext,
   ): Promise<{ ok: boolean; setupHint?: string }>;
-}
-
-// ---- GenericHttpAdapter 声明式映射(骨架, §5.1) ----
-
-/** 单字段映射: JSONPath + 可选过滤器管道 */
-export interface FieldMapping {
-  path: string;
-  pipes?: PipeFilter[];
-}
-
-/** 单指标映射 */
-export interface MetricMapping {
-  key: string;
-  kind: "balance" | "window" | "usage";
-  unit: "requests" | "credits" | "cny" | "tokens";
-  used: FieldMapping;
-  limit?: FieldMapping;
-  /** 窗口重置时间: JSONPath 取时间戳, 或 duration 秒数(加 fetched_at 推算) */
-  reset_at?: FieldMapping & { relative?: boolean };
-}
-
-/** GenericHttpAdapter 的通道声明(内置在通道目录, 用户不可见) */
-export interface GenericHttpMapping {
-  url: string;
-  method?: "GET" | "POST";
-  /** 请求头模板; {{api_key}} 占位在请求构造瞬间替换(D-029) */
-  headers?: Record<string, string>;
-  /** 非 2xx 时判定 auth_expired 的状态码(默认 [401, 403]) */
-  auth_expired_status?: number[];
-  /** 可选状态断言(受限表达式); 全部通过才视为 ok */
-  ok_assertions?: string[];
-  metrics: MetricMapping[];
-}
-
-export class HttpFetchError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "HttpFetchError";
-  }
-}
-
-/**
- * 声明式 HTTP 适配器骨架。只做"一次请求 + 静态映射"(§5.1 能力边界);
- * 需要签名/多步/派生计算的通道走 ScriptedAdapter。
- *
- * 安全: JSONPath 经 mapping/jsonpath.ts 受限求值, 无 eval。
- */
-export class GenericHttpAdapter implements ProviderAdapter {
-  readonly kind = "http" as const;
-
-  constructor(
-    private readonly mapping: GenericHttpMapping,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
-
-  async fetchSnapshot(
-    descriptor: ChannelDescriptor,
-    instance: InstanceConfig,
-    ctx: AdapterContext,
-  ): Promise<ProviderSnapshot> {
-    const base = {
-      provider_id: instance.id,
-      display_name: instance.name,
-      plan_type: descriptor.plan_type,
-      fetched_at: ctx.fetchedAt,
-      alerts: [] as ProviderSnapshot["alerts"],
-    };
-
-    // 凭据只活在请求构造瞬间(D-029): 替换完 header 即弃
-    const headers: Record<string, string> = {};
-    for (const [k, v] of Object.entries(this.mapping.headers ?? {})) {
-      let value = v;
-      for (const m of v.matchAll(/\{\{(\w+)\}\}/g)) {
-        const ref = instance.params[m[1]];
-        const secret = await ctx.resolveCredential(ref);
-        value = value.replace(m[0], secret);
-      }
-      headers[k] = value;
-    }
-
-    let resp;
-    try {
-      resp = await this.fetchImpl(this.mapping.url, {
-        method: this.mapping.method ?? "GET",
-        headers,
-        signal: ctx.signal,
-      });
-    } catch (err) {
-      return {
-        ...base,
-        status: "error",
-        metrics: [],
-        error_message: err instanceof Error ? err.message : String(err),
-      };
-    }
-
-    const authCodes = this.mapping.auth_expired_status ?? [401, 403];
-    if (authCodes.includes(resp.status)) {
-      return { ...base, status: "auth_expired", metrics: [] };
-    }
-    if (!resp.ok) {
-      return {
-        ...base,
-        status: "error",
-        metrics: [],
-        error_message: `http ${resp.status}`,
-      };
-    }
-
-    const json: unknown = await resp.json();
-    if (
-      this.mapping.ok_assertions?.some((a) => !evalAssertion(json, a))
-    ) {
-      return {
-        ...base,
-        status: "error",
-        metrics: [],
-        error_message: "状态断言未通过",
-      };
-    }
-
-    const metrics = this.mapping.metrics.map((mm) => {
-      const usedRaw = evalJsonPathFirst(json, mm.used.path);
-      const used = Number(applyPipe(usedRaw, mm.used.pipes ?? ["number"]));
-      const limitRaw = mm.limit ? evalJsonPathFirst(json, mm.limit.path) : undefined;
-      const limit =
-        limitRaw !== undefined
-          ? Number(applyPipe(limitRaw, mm.limit!.pipes ?? ["number"]))
-          : undefined;
-      let reset_at: number | undefined;
-      if (mm.reset_at) {
-        const raw = evalJsonPathFirst(json, mm.reset_at.path);
-        const n = Number(applyPipe(raw, mm.reset_at.pipes ?? ["number"]));
-        reset_at = mm.reset_at.relative ? ctx.fetchedAt + n : n;
-      }
-      return { key: mm.key, kind: mm.kind, unit: mm.unit, used, limit, reset_at };
-    });
-
-    return { ...base, status: "ok", metrics };
-  }
 }
 
 /**
@@ -277,3 +122,11 @@ export class ProviderAdapterRegistry {
     return [...this.adapters.keys()];
   }
 }
+
+/** 便捷: 按通道声明构造 GenericHttpAdapter(供注册表注册) */
+export function genericHttpFromMapping(mapping: GenericHttpMapping): GenericHttpAdapter {
+  return new GenericHttpAdapter(mapping);
+}
+
+// 显式 re-export 类型, 便于只 import adapters.js 的旧代码继续可用
+export type { CredentialSourceRegistry };

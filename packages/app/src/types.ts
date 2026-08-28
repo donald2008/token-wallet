@@ -1,47 +1,22 @@
 /**
- * 统一快照类型 — 与 docs/DESIGN.md §2.1 对齐。
- * ⚠️ P0-1(core schema)未落定前, 本文件是 app 侧 mock 对接契约, P0-5 接真实数据链路时
- * 应切换为从 @token-wallet/core 导入。
+ * 统一快照类型 — 与 core schema 同源(P0-5 接真实链路起切 core import)
+ *
+ * ⚠️ P0-4 及之前 app 用自有 mock 契约; P0-5 真实链路后统一以
+ * @token-wallet/core/schema 为唯一权威, 本文件只 re-export + app 专属类型。
  */
-
-export type PlanType = "balance" | "window" | "local";
-
-/** status 一等公民(D-005): 异常状态整卡文字替代图表, 不显示假数据 */
-export type ProviderStatus = "ok" | "stale" | "auth_expired" | "unsupported" | "error";
+export type {
+  Alert,
+  AlertLevel,
+  Metric,
+  MetricKind,
+  MetricUnit,
+  PlanArchetype as PlanType,
+  ProviderSnapshot,
+  SnapshotStatus as ProviderStatus,
+} from "@token-wallet/core/schema";
 
 /** UI 健康度四色(D-003/§9): 绿(健康) / 黄(auth_expired 待处理或低于黄线) / 红(低于红线、error 或耗尽) / 灰(stale/unsupported) */
 export type HealthLevel = "ok" | "warn" | "bad" | "unknown";
-
-export type MetricKind = "window" | "balance" | "counter";
-export type MetricUnit = "requests" | "credits" | "cny" | "tokens";
-
-export interface Metric {
-  key: string;
-  kind: MetricKind;
-  unit: MetricUnit;
-  used: number;
-  limit?: number;
-  /** epoch seconds */
-  reset_at?: number;
-  /** 近 7 天平均日消耗(余额制速率, ticker 模板算预计可用天数; P0-5 接历史快照计算) */
-  daily_rate?: number;
-}
-
-export interface ProviderSnapshot {
-  provider_id: string;
-  display_name: string;
-  plan_type: PlanType;
-  /** epoch seconds */
-  fetched_at: number;
-  status: ProviderStatus;
-  metrics: Metric[];
-  alerts: string[];
-  /**
-   * auth_expired 时的"如何恢复"指引(§5.0 command 类健康检查), 如
-   * "请运行 `bl auth login --console`"。异常卡黄灯展示; 非 auth_expired 忽略。
-   */
-  setup_hint?: string;
-}
 
 /** 全局设置(P0-2 壳只落 theme, 阈值/通知为占位, 见 D-022/D-009) */
 export interface AppSettings {

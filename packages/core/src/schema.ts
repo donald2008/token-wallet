@@ -40,6 +40,22 @@ export const MetricSchema = z.object({
   limit: z.number().finite().positive().optional(),
   /** 窗口重置时间(unix 秒); 仅 window 类有意义 */
   reset_at: z.number().int().positive().optional(),
+  /**
+   * 余额制(balance)扩展 — DESIGN.md §2 原型表: remaining/currency, granted/topped_up 拆分。
+   * DeepSeek /user/balance 返回 total_balance(当前余额)+granted/topped_up 拆分, 映射为:
+   * - remaining: 当前剩余余额(直接值, 优先于 limit-used 推导)
+   * - currency: 币种码(如 "CNY")
+   * - granted / topped_up: 赠送/充值拆分(可选)
+   */
+  remaining: z.number().finite().nonnegative().optional(),
+  currency: z.string().optional(),
+  granted: z.number().finite().nonnegative().optional(),
+  topped_up: z.number().finite().nonnegative().optional(),
+  /**
+   * 近 7 天平均日消耗(余额制速率, ticker 模板预计可用天数用)。
+   * 由宿主从历史快照计算附着(D-030 rate.ts); 非适配器直接产出。
+   */
+  daily_rate: z.number().finite().nonnegative().optional(),
 });
 export type Metric = z.infer<typeof MetricSchema>;
 

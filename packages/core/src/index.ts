@@ -29,6 +29,10 @@ export * from "./adapters.js";
 // 安全 JSONPath 映射 (§5.1)
 export * from "./mapping/jsonpath.js";
 
+// 日志脱敏(D-029) + 余额速率计算(§2 ticker)
+export * from "./redact.js";
+export * from "./rate.js";
+
 // 模板注册点 (§4, D-004)
 export * from "./templates.js";
 

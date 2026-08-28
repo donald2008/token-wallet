@@ -8,6 +8,7 @@
  */
 import { DatabaseSync } from "node:sqlite";
 import { parseSnapshot, type ProviderSnapshot } from "../schema.js";
+import { SCHEMA_SQL } from "./schema-sql.js";
 import {
   UsageRecordSchema,
   type SnapshotHistoryQuery,
@@ -15,34 +16,6 @@ import {
   type UsageQuery,
   type UsageRecord,
 } from "./backend.js";
-
-/**
- * 同一 schema 的权威 SQL 文本 — app(tauri-plugin-sql) 与 mcp-server(node:sqlite) 共用。
- */
-export const SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS snapshots (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  provider_id TEXT NOT NULL,
-  fetched_at INTEGER NOT NULL,
-  status TEXT NOT NULL,
-  raw_json TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_snapshots_provider_time
-  ON snapshots(provider_id, fetched_at);
-
-CREATE TABLE IF NOT EXISTS usage_records (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  provider_id TEXT NOT NULL,
-  model TEXT,
-  window_start INTEGER NOT NULL,
-  window_end INTEGER NOT NULL,
-  tokens REAL,
-  credits REAL,
-  cost_cny REAL
-);
-CREATE INDEX IF NOT EXISTS idx_usage_provider_time
-  ON usage_records(provider_id, window_start);
-`;
 
 interface SnapshotRow {
   raw_json: string;
