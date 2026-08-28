@@ -1,0 +1,341 @@
+/* 布局与手写组件样式(不引组件库, D-002) */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family:
+    "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: var(--font-size);
+  user-select: none;
+  overflow: hidden;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+/* ---- 标题栏(§6.5: 全局状态点 / 手动刷新 / 设置) ---- */
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  flex: 0 0 auto;
+}
+
+.app-title {
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.titlebar .spacer {
+  flex: 1;
+}
+
+.status-dot {
+  display: inline-block;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.status-dot[data-health="ok"] { background: var(--ok); }
+.status-dot[data-health="warn"] { background: var(--warn); }
+.status-dot[data-health="bad"] { background: var(--bad); }
+.status-dot[data-health="unknown"] { background: var(--unknown); }
+
+/* ---- 按钮(手写) ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--font-size);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--accent);
+  filter: brightness(1.1);
+}
+
+.btn-icon {
+  padding: 4px 6px;
+}
+
+.btn.spinning .icon-refresh {
+  animation: tw-spin 0.8s linear infinite;
+}
+
+@keyframes tw-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- 卡片区 ---- */
+.card-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  margin-bottom: 6px;
+}
+
+.brand-block {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+.card-name {
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-status-text {
+  font-size: 12px;
+}
+
+/* 状态文字色走 --X-fg 双 token(D-016) */
+.text-ok { color: var(--ok-fg); }
+.text-warn { color: var(--warn-fg); }
+.text-bad { color: var(--bad-fg); }
+.text-unknown { color: var(--unknown-fg); }
+
+.card-error-note {
+  font-size: 12px;
+  color: var(--fg-dim);
+  margin-top: 4px;
+}
+
+/* ---- 进度条(手写 bars 模板微部件, D-002) ---- */
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  margin-top: 6px;
+}
+
+.bar-label {
+  width: 72px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  background: var(--bg-hover);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 7px 0 0 7px;
+  transition: width 0.25s ease;
+}
+
+.progress-fill[data-health="ok"] { background: var(--ok); }
+.progress-fill[data-health="warn"] { background: var(--warn); }
+.progress-fill[data-health="bad"] { background: var(--bad); }
+.progress-fill[data-health="unknown"] { background: var(--unknown); }
+
+/* 压字(bars 模板): 百分比叠在进度条上, 浅色主题下 warn 压字用 --warn-fg 的反向深色 */
+.progress-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+.bar-reset {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+
+/* balance 大数字(ticker 模板) */
+.ticker-number {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 2px 0;
+}
+
+.ticker-sub {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+/* ---- 空态 / 加载态 / 首开 ---- */
+.placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  color: var(--fg-dim);
+}
+
+.placeholder h2 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 16px;
+}
+
+.placeholder p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.skeleton-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  height: 64px;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--bg-hover), transparent);
+  animation: tw-shimmer 1.4s infinite;
+}
+
+@keyframes tw-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* ---- dev 场景切换器(仅 import.meta.env.DEV) ---- */
+.scenario-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 12px;
+  border-top: 1px dashed var(--border);
+  background: var(--bg-elev);
+}
+
+.scenario-bar .btn {
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.scenario-bar .btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---- 设置抽屉占位 ---- */
+.settings-view {
+  flex: 1;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.settings-section {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.settings-section h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.settings-section .hint {
+  font-size: 12px;
+  color: var(--fg-dim);
+  line-height: 1.6;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.seg .btn {
+  border: none;
+  border-radius: 0;
+}
+
+.seg .btn.active {
+  background: var(--accent);
+  color: #fff;
+}

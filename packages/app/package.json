@@ -1,0 +1,30 @@
+{
+  "name": "@token-wallet/app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "token-wallet 桌面部件壳 — Tauri 2 + React 19 (托盘 + 弹出面板 + 主题)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "tauri": "tauri",
+    "test:e2e": "playwright test --project=browser-only",
+    "test:e2e:tauri": "playwright test --project=tauri"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.0",
+    "@srsholmes/tauri-playwright": "^0.4.1",
+    "@tauri-apps/cli": "^2.8.0",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.6.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

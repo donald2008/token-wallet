@@ -1,0 +1,59 @@
+/**
+ * 主题系统(D-010 + D-016):
+ * - dark/light 双套 CSS 变量, 默认追随系统(prefers-color-scheme), 可配置覆盖
+ * - 语义色拆双 token(D-016): --warn(填充/图形) vs --warn-fg(文字)。
+ *   浅色主题下亮黄填充上的文字必须深色, 共用单一色值会把黄色压成棕色 —— 同一语义,
+ *   填充与文字角色不同色值。ok/bad/unknown 同理。
+ */
+
+:root {
+  --radius: 8px;
+  --gap: 8px;
+  --font-size: 13px;
+}
+
+:root[data-theme="dark"] {
+  --bg: #14171c;
+  --bg-elev: #1c2129;
+  --bg-hover: #232a35;
+  --fg: #e5e9f0;
+  --fg-dim: #9aa4b2;
+  --border: #2c3542;
+  --accent: #4f8cff;
+
+  /* 状态四色: 填充/图形用 */
+  --ok: #22c55e;
+  --warn: #facc15;
+  --bad: #ef4444;
+  --unknown: #6b7280;
+  /* 同语义文字色(D-016 双 token): 深底上用亮色 */
+  --ok-fg: #4ade80;
+  --warn-fg: #fde047;
+  --bad-fg: #f87171;
+  --unknown-fg: #9ca3af;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f6f7f9;
+  --bg-elev: #ffffff;
+  --bg-hover: #eef1f5;
+  --fg: #1c2330;
+  --fg-dim: #5d6778;
+  --border: #dde3ea;
+  --accent: #2f6fe4;
+
+  /* 填充色与 dark 保持一致(图形语义不变) */
+  --ok: #22c55e;
+  --warn: #facc15;
+  --bad: #ef4444;
+  --unknown: #9ca3af;
+  /* 文字色: 浅底上必须加深, 尤其 warn 亮黄压成深棕黄保证可读(D-016) */
+  --ok-fg: #15803d;
+  --warn-fg: #92600a;
+  --bad-fg: #b91c1c;
+  --unknown-fg: #6b7280;
+
+  color-scheme: light;
+}

@@ -1,0 +1,88 @@
+import type { ProviderSnapshot } from "../types";
+import { HEALTH_LABEL, providerHealth } from "../health";
+import { ProgressBar } from "./ProgressBar";
+
+/** 品牌色块(§6.1 第 4 条): 16px 平台识别色, 正式版替换为内置单色 SVG 品牌图标 */
+const BRAND_COLORS: Record<string, string> = {
+  deepseek: "#4d6bfe",
+  "kimi-code": "#7c3aed",
+  aliyun: "#ff6a00",
+  ark: "#1668dc",
+  "opencode-go": "#0ea5e9",
+};
+
+const STATUS_TEXT: Record<string, string> = {
+  stale: "数据过期(超 2 个轮询周期未更新)",
+  auth_expired: "登录态过期, 请重新授权",
+  unsupported: "暂不支持, 欢迎 PR",
+  error: "采集失败",
+};
+
+function agoText(fetchedAt: number): string {
+  const s = Math.floor(Date.now() / 1000) - fetchedAt;
+  if (s < 60) return "刚刚";
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
+  return `${Math.floor(s / 3600)} 小时前`;
+}
+
+/** 异常状态整卡文字替代图表, 不显示假数据(§2.1) */
+function AbnormalBody({ p }: { p: ProviderSnapshot }) {
+  return (
+    <div>
+      <div className={`card-status-text text-${providerHealth(p)}`}>
+        {STATUS_TEXT[p.status] ?? p.status}
+      </div>
+      <div className="card-error-note">
+        上次更新: {agoText(p.fetched_at)}
+        {p.alerts.length > 0 ? ` — ${p.alerts.join("; ")}` : ""}
+      </div>
+    </div>
+  );
+}
+
+function OkBody({ p }: { p: ProviderSnapshot }) {
+  if (p.plan_type === "balance") {
+    const m = p.metrics[0];
+    const remaining = m?.limit !== undefined ? m.limit - m.used : undefined;
+    return (
+      <div>
+        <div className="ticker-number">
+          {remaining !== undefined ? `¥${remaining.toFixed(2)}` : "—"}
+        </div>
+        <div className="ticker-sub">余额 · 预计可用天数待消耗速率接入(P1)</div>
+      </div>
+    );
+  }
+  if (p.plan_type === "window") {
+    return (
+      <div>
+        {p.metrics.map((m) => (
+          <ProgressBar key={m.key} metric={m} />
+        ))}
+      </div>
+    );
+  }
+  // local: P3 预留, 壳先简单罗列
+  return (
+    <div className="ticker-sub">本地 Agent 用量(P3)</div>
+  );
+}
+
+export function ProviderCard({ p }: { p: ProviderSnapshot }) {
+  const health = providerHealth(p);
+  return (
+    <section className="card" data-testid="provider-card" data-provider={p.provider_id} data-health={health}>
+      <div className="card-head">
+        <span
+          className="brand-block"
+          style={{ background: BRAND_COLORS[p.provider_id] ?? "var(--unknown)" }}
+        />
+        <span className="card-name" title={p.provider_id}>
+          {p.display_name}
+        </span>
+        <span className={`card-status-text text-${health}`}>{HEALTH_LABEL[health]}</span>
+      </div>
+      {p.status === "ok" ? <OkBody p={p} /> : <AbnormalBody p={p} />}
+    </section>
+  );
+}

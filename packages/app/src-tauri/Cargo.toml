@@ -1,0 +1,26 @@
+[package]
+name = "token-wallet"
+version = "0.1.0"
+description = "token-wallet 桌面部件 — AI 套餐/额度仪表盘"
+edition = "2021"
+rust-version = "1.77.2"
+license = "Apache-2.0"
+
+[lib]
+name = "token_wallet_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# D-030 / TESTING.md L2 技术前提: 可选 feature, 生产构建不受影响
+tauri-plugin-playwright = { version = "0.4", optional = true }
+
+[features]
+default = []
+e2e-testing = ["dep:tauri-plugin-playwright"]
