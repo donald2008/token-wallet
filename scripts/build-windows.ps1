@@ -115,6 +115,14 @@ try {
     corepack pnpm install --frozen-lockfile
     if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败" }
 
+    # Tauri 工具链(NSIS/WiX/WebView2)下载镜像: Tauri 从 GitHub 拉工具时替换为
+    # 国内可达镜像。首次下载成功后缓存进 %LOCALAPPDATA%\tauri, 后续零下载。
+    # 外部已设置该变量时(如 CI/内网镜像)不覆盖。
+    if (-not $env:TAURI_BUNDLER_TOOLS_GITHUB_MIRROR) {
+        $env:TAURI_BUNDLER_TOOLS_GITHUB_MIRROR = "https://ghfast.top/"
+        Write-Host "[提示] 已设置 TAURI_BUNDLER_TOOLS_GITHUB_MIRROR=https://ghfast.top/ (工具链走国内镜像)" -ForegroundColor Yellow
+    }
+
     Write-Step "tauri build (Windows 安装包)"
     corepack pnpm -C packages/app tauri build
     if ($LASTEXITCODE -ne 0) { throw "tauri build 失败(最常见原因: MSVC 链接器缺失/磁盘空间不足, 见 docs/windows-build.md)" }
