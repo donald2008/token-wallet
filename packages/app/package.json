@@ -10,11 +10,13 @@
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "test:e2e": "playwright test --project=browser-only",
-    "test:e2e:tauri": "playwright test --project=tauri"
+    "test:e2e:tauri": "playwright test --project=tauri",
+    "test": "vitest run"
   },
   "dependencies": {
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.0",
@@ -25,6 +27,7 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.6.0",
     "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^3.2.4"
   }
 }

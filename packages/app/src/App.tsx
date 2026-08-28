@@ -20,6 +20,7 @@ export default function App() {
   const [scenario, setScenario] = useState<ScenarioId>("mixed");
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<"panel" | "settings">("panel");
+  const [settingsStep, setSettingsStep] = useState<"overview" | "add-channel" | "fill-form">("overview");
 
   // 首开判定(§10 占位): Rust 侧 get_bootstrap; 纯浏览器 fallback 用 localStorage
   useEffect(() => {
@@ -65,6 +66,17 @@ export default function App() {
     setScenario("empty"); // 初始零 provider 配置(§10)
   }, []);
 
+  // D-021 首开引导: 空态"添加 Provider" → 进入设置页添加流程(引导首个 provider)
+  const openAddProvider = useCallback(() => {
+    setSettingsStep("add-channel");
+    setView("settings");
+  }, []);
+
+  const openSettings = useCallback(() => {
+    setSettingsStep("overview");
+    setView("settings");
+  }, []);
+
   if (!bootstrap) {
     return (
       <div className="panel">
@@ -87,6 +99,7 @@ export default function App() {
         <SettingsView
           themeMode={themeMode}
           onThemeMode={setThemeMode}
+          initialStep={settingsStep}
           onBack={() => setView("panel")}
         />
       </div>
@@ -102,12 +115,12 @@ export default function App() {
         refreshing={refreshing}
         onCycleTheme={onCycleTheme}
         onRefresh={onRefresh}
-        onOpenSettings={() => setView("settings")}
+        onOpenSettings={openSettings}
       />
       {providers === null ? (
         <LoadingState />
       ) : providers.length === 0 ? (
-        <EmptyState onAdd={() => setScenario("mixed")} />
+        <EmptyState onAdd={openAddProvider} />
       ) : (
         <main className="card-list" data-testid="card-list">
           {sortByHealth(providers).map((p) => (

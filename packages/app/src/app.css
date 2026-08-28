@@ -429,3 +429,255 @@ body {
   background: var(--accent);
   color: #fff;
 }
+
+/* ---- 设置页: 头部 / 实例列表 / 树形通道选择器 / 动态表单 / 存储路径 / 自启 ---- */
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.settings-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.settings-section h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.count-badge {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 16px;
+}
+.settings-section .btn {
+  margin-top: 8px;
+}
+
+/* 树形通道选择器(D-025) */
+.channel-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tree-platform-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-size: var(--font-size);
+  cursor: pointer;
+  text-align: left;
+}
+.tree-platform-btn:hover {
+  background: var(--bg-hover);
+}
+.tree-caret {
+  width: 12px;
+  font-size: 10px;
+  color: var(--fg-dim);
+  transition: transform 0.15s;
+}
+.tree-caret.collapsed {
+  transform: rotate(-90deg);
+}
+.tree-platform-logo-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--bg-hover);
+  flex: 0 0 auto;
+}
+.tree-platform-name {
+  font-weight: 600;
+}
+.tree-products {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 24px;
+}
+.tree-product-leaf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-size: var(--font-size);
+  cursor: pointer;
+  text-align: left;
+}
+.tree-product-leaf:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.tree-product-type {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+
+/* 动态表单(D-017) */
+.dynamic-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.form-channel-title {
+  margin: 0;
+  font-size: 14px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.field-label {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.req {
+  color: var(--bad);
+}
+.input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: var(--font-size);
+  width: 100%;
+}
+.field-help {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.field-error {
+  font-size: 12px;
+  color: var(--bad);
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.form-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.test-result {
+  padding: 8px;
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+.test-result.ok {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--ok-fg);
+}
+.test-result.err {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  color: var(--bad-fg);
+}
+.test-result-title {
+  font-weight: 600;
+}
+.test-metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+.test-metric-value {
+  font-weight: 600;
+}
+.test-metric-unit {
+  color: var(--fg-dim);
+}
+.saved {
+  font-size: 12px;
+  color: var(--ok-fg);
+}
+
+/* 实例列表(D-026/D-029) */
+.instance-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.instance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.instance-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.instance-name {
+  font-weight: 600;
+}
+.instance-channel {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.btn-danger {
+  border-color: var(--bad);
+  color: var(--bad-fg);
+}
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+.btn-sm {
+  font-size: 12px;
+  padding: 2px 6px;
+}
+.confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.confirm-text {
+  font-size: 12px;
+  color: var(--bad-fg);
+}
+
+/* 存储路径(D-019) */
+.paths {
+  margin: 0;
+}
+.path-row {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+}
+.path-row dt {
+  flex: 0 0 40px;
+  color: var(--fg-dim);
+}
+.path-row dd {
+  margin: 0;
+  word-break: break-all;
+}

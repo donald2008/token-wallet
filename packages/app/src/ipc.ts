@@ -60,3 +60,45 @@ export function persistConsent(): void {
     /* webview 隐私模式下忽略 */
   }
 }
+
+/** 运行时解析的存储路径(D-019): 配置与数据分家, 零硬编码字面量 */
+export interface StoragePaths {
+  configDir: string;
+  dataDir: string;
+}
+
+async function detectPlatformBase(): Promise<StoragePaths> {
+  // 浏览器降级: 按 D-019 约定 banner(config=Roaming, 数据=Local)。
+  // 真实 Tauri 下走 Rust path API(app_config_dir / app_data_dir); 此分支仅为独立 dev 预览。
+  const home = "/root";
+  return { configDir: `${home}/.config/token-wallet`, dataDir: `${home}/.local/share/token-wallet` };
+}
+
+export async function getStoragePaths(): Promise<StoragePaths> {
+  const viaTauri = await tauriInvoke<StoragePaths>("get_storage_paths");
+  if (viaTauri) return viaTauri;
+  return detectPlatformBase();
+}
+
+/** 开机自启(D-024): 默认关。browser 降级用 localStorage 记录偏好(真 Tauri 走 autostart plugin) */
+const AUTOSTART_KEY = "token-wallet.autostart.v1";
+
+export async function getLaunchAtLogin(): Promise<boolean> {
+  const viaTauri = await tauriInvoke<boolean>("get_launch_at_login");
+  if (viaTauri !== null) return viaTauri;
+  return localStorage.getItem(AUTOSTART_KEY) === "1";
+}
+
+export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
+  const viaTauri = await tauriInvoke<void>("set_launch_at_login", { enabled });
+  if (viaTauri) {
+    void viaTauri;
+    return;
+  }
+  try {
+    if (enabled) localStorage.setItem(AUTOSTART_KEY, "1");
+    else localStorage.removeItem(AUTOSTART_KEY);
+  } catch {
+    /* ignore */
+  }
+}

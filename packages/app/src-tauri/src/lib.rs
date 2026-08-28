@@ -39,6 +39,37 @@ struct Bootstrap {
     version: String,
 }
 
+/// 运行时解析的存储路径(D-019): 配置(Roaming)与数据(Local)分家, 零硬编码字面量
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct StoragePaths {
+    config_dir: String,
+    data_dir: String,
+}
+
+#[tauri::command]
+fn get_storage_paths(app: AppHandle) -> Result<StoragePaths, String> {
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| e.to_string())?;
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(StoragePaths {
+        config_dir: config_dir.to_string_lossy().into_owned(),
+        data_dir: data_dir.to_string_lossy().into_owned(),
+    })
+}
+
+/// 开机自启(D-024): 默认关。接入 autostart plugin 前返回 false 占位
+#[tauri::command]
+fn get_launch_at_login() -> bool {
+    false
+}
+
+/// 开机自启设置(D-024): plugin 接入前为 no-op 占位
+#[tauri::command]
+fn set_launch_at_login(_enabled: bool) {} 
+
 #[tauri::command]
 fn get_bootstrap() -> Bootstrap {
     Bootstrap {
@@ -86,7 +117,13 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
-        .invoke_handler(tauri::generate_handler![get_bootstrap, update_tray_status])
+        .invoke_handler(tauri::generate_handler![
+            get_bootstrap,
+            update_tray_status,
+            get_storage_paths,
+            get_launch_at_login,
+            set_launch_at_login
+        ])
         .setup(|app| {
             let show_item = MenuItem::with_id(app, "show", "打开面板", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
