@@ -7,35 +7,33 @@
  * - 单实例: app.requestSingleInstanceLock, 二次启动聚焦已有窗口
  * - 持久化(D-019/D-032 语义不变): instances.yaml(YAML 解析/生成在主进程, 前端零 YAML 依赖)
  *   + settings.json consent RMW, 均走 persist.ts 原子写
- * - 显式降级: keyring/sqlite/http 通道本卡不移植(E2/E3 的事), 返回显式错误,
+ * - E2 keyring(D-029): keyring_get/set|delete 接真 — safeStorage OS 级加密,
+ *   secret 落 `<dataDir>/secrets/*.blob`(0700/0600, 见 keyring.ts); 不可用显式报错
+ * - 显式降级: sqlite/http 通道本卡不移植(E2 后续/E3 的事), 返回显式错误,
  *   面板出错误卡是预期行为, 不许静默空返回
  */
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, Tray } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import YAML from "yaml";
-import { atomicWrite, consentSettingsJson, readSettingsFile } from "./persist";
+import { atomicWrite, consentSettingsJson, readSettingsFile, recordAutostart } from "./persist";
+import { SafeStorageLike, deleteSecret, getSecret, setSecret } from "./keyring";
+import { deriveStoragePaths, type StoragePaths } from "./paths";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
-/** D-019: 配置(Roaming)与数据(Local)分家, 零硬编码盘符; 运行时按平台解析 */
-function storagePaths(): { configDir: string; dataDir: string } {
-  if (process.platform === "win32") {
-    const roaming = app.getPath("appData");
-    return {
-      configDir: path.join(roaming, "token-wallet"),
-      dataDir: path.join(roaming, "..", "Local", "token-wallet"),
-    };
-  }
-  if (process.platform === "darwin") {
-    const base = path.join(app.getPath("appData"), "token-wallet");
-    return { configDir: base, dataDir: base };
-  }
-  const home = app.getPath("home");
-  return {
-    configDir: path.join(home, ".config", "token-wallet"),
-    dataDir: path.join(home, ".local", "share", "token-wallet"),
-  };
+/**
+ * 应用名固定(D-033 换壳后继续生效): package.json name 是 @token-wallet/app(scope
+ * 斜杠), 直接当 userData 会解析成 ~/.config/@token-wallet/app 双层目录;
+ * 显式 setName 保证 userData=~/.config/token-wallet(Windows=%APPDATA%\token-wallet,
+ * macOS=~/Library/Application Support/token-wallet), 与 E1 既有数据位置一致。
+ * 必须在 ready 前调用。
+ */
+app.setName("token-wallet");
+
+/** D-019: 配置(Roaming)与数据(Local)分家, 零硬编码盘符; 运行时按平台解析(userData 派生) */
+function storagePaths(): StoragePaths {
+  return deriveStoragePaths(process.platform, (name) => app.getPath(name));
 }
 
 function instancesFilePath(): string {
@@ -44,6 +42,31 @@ function instancesFilePath(): string {
 
 function settingsFilePath(): string {
   return path.join(storagePaths().configDir, "settings.json");
+}
+
+/**
+ * 开机自启状态校正(D-024): settings.json 记录的是用户期望, OS login item 是
+ * 实际状态; 用户在系统层(任务管理器/登录项)关掉自启时以实际为准 —
+ * 查询/启动时读取 OS 实际, 与 settings 记录比对, 有偏差则把 settings 校正为
+ * OS 实际(recordAutostart RMW, 复用 consent 模式), 返回 OS 实际值。
+ * 平台不支持(部分 Linux)→ false(默认关 D-024), 不写盘(无偏差语义)。
+ */
+function syncAutostartSettings(): boolean {
+  let osActual: boolean;
+  try {
+    osActual = app.getLoginItemSettings().openAtLogin;
+  } catch {
+    return false; // 平台不支持 → 默认关(D-024)
+  }
+  const recorded = readSettingsFile(settingsFilePath()).autostart;
+  if (recorded !== osActual) {
+    try {
+      recordAutostart(settingsFilePath(), osActual);
+    } catch {
+      /* 写盘失败不阻断查询(下次启动再校正) */
+    }
+  }
+  return osActual;
 }
 
 // ---------------- 托盘四态状态点(D-003), 嵌入产物零运行时外部依赖 ----------------
@@ -80,10 +103,11 @@ function createTray(): void {
       {
         label: "开机自启",
         type: "checkbox",
-        checked: app.getLoginItemSettings().openAtLogin,
+        checked: syncAutostartSettings(),
         click: (item) => {
           try {
             app.setLoginItemSettings({ openAtLogin: item.checked });
+            recordAutostart(settingsFilePath(), item.checked);
           } catch {
             /* 平台不支持时静默(设置页另有显式入口) */
           }
@@ -199,22 +223,20 @@ function registerIpc(): void {
 
   ipcMain.handle("get_storage_paths", () => {
     const { configDir, dataDir } = storagePaths();
+    // D-019: dataDir 不存在时 mkdir(配置侧由原子写自动建目录; 数据侧 db/secrets 依赖显式存在)
+    fs.mkdirSync(dataDir, { recursive: true });
     return { configDir, dataDir };
   });
 
-  ipcMain.handle("get_launch_at_login", () => {
-    try {
-      return app.getLoginItemSettings().openAtLogin;
-    } catch {
-      return false; // 平台不支持(部分 Linux)→ 默认关(D-024)
-    }
-  });
+  ipcMain.handle("get_launch_at_login", () => syncAutostartSettings());
 
   ipcMain.handle("set_launch_at_login", (_event, payload: { enabled?: boolean }) => {
+    const enabled = Boolean(payload?.enabled);
     try {
-      app.setLoginItemSettings({ openAtLogin: Boolean(payload?.enabled) });
+      app.setLoginItemSettings({ openAtLogin: enabled });
+      recordAutostart(settingsFilePath(), enabled);
     } catch {
-      /* 平台不支持时静默 */
+      /* 平台不支持时静默(设置页另有显式入口, 托盘已静默) */
     }
   });
 
@@ -232,10 +254,44 @@ function registerIpc(): void {
     mainWindow?.hide(); // 关闭 = 隐藏到托盘(D-003)
   });
 
+  // ---- E2: keyring 三通道接真(safeStorage OS 级加密, D-029) ----
+  // secret 落 `<dataDir>/secrets/<ref>.blob`, 目录 0700 / 文件 0600;
+  // safeStorage 不可用 → 结构化显式错误(IPC reject → 面板错误条), 绝不明文降级。
+  // 注意: safeStorage 的可用性判定依赖 app ready, registerIpc 在 whenReady 之后调用。
+  const safeStorageAdapter: SafeStorageLike = {
+    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    encryptString: (plain) => safeStorage.encryptString(plain),
+    decryptString: (enc) => safeStorage.decryptString(enc),
+    getSelectedBackendName: () => {
+      try {
+        return safeStorage.getSelectedStorageBackend() ?? "unknown";
+      } catch {
+        return "unknown";
+      }
+    },
+  };
+  ipcMain.handle("keyring_get", (_event, payload: { service?: string; key?: string }) => {
+    const { dataDir } = storagePaths();
+    return getSecret(safeStorageAdapter, dataDir, String(payload?.service), String(payload?.key));
+  });
+  ipcMain.handle(
+    "keyring_set",
+    (_event, payload: { service?: string; key?: string; value?: string }) => {
+      const { dataDir } = storagePaths();
+      setSecret(
+        safeStorageAdapter,
+        dataDir,
+        String(payload?.service),
+        String(payload?.key),
+        String(payload?.value),
+      );
+    },
+  );
+  ipcMain.handle("keyring_delete", (_event, payload: { service?: string; key?: string }) => {
+    const { dataDir } = storagePaths();
+    deleteSecret(safeStorageAdapter, dataDir, String(payload?.service), String(payload?.key));
+  });
   // ---- 显式降级: E2/E3 才接真的通道, 本卡返回显式错误 ----
-  ipcMain.handle("keyring_get", () => notConnected("keyring_get"));
-  ipcMain.handle("keyring_set", () => notConnected("keyring_set"));
-  ipcMain.handle("keyring_delete", () => notConnected("keyring_delete"));
   ipcMain.handle("http_get_json", () => notConnected("http_get_json"));
   ipcMain.handle("sqlite_batch", () => notConnected("sqlite_batch"));
   ipcMain.handle("sqlite_exec", () => notConnected("sqlite_exec"));
