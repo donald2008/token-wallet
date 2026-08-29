@@ -13,7 +13,7 @@ const loadMock = vi.fn<() => Promise<unknown | null>>();
 const saveMock = vi.fn<(file: unknown) => Promise<void>>();
 
 vi.mock("../ipc", () => ({
-  isTauriRuntime: () => false,
+  isDesktopHost: () => false,
   keyringGet: async () => null,
   keyringSet: async () => undefined,
   keyringDelete: async () => undefined,

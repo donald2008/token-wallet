@@ -2,7 +2,7 @@ import { expect as pwExpect } from "@playwright/test";
 import { test } from "./fixtures";
 
 /**
- * L2 持久化(P0-7, §5.0.1/§10): mock Tauri IPC 状态走 localStorage(跨 reload 存活),
+ * L2 持久化(P0-7, §5.0.1/§10): mock 桌面桥 IPC 状态走 localStorage(跨 reload 存活),
  * page.reload() 模拟应用重启。
  *
  * 覆盖验收:
@@ -11,8 +11,8 @@ import { test } from "./fixtures";
  * - 损坏 instances.yaml: fail-fast 配置错误页, 不静默丢配置
  */
 
-test("consent 持久化: 同意后重启不再弹隐私声明(§10)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("consent 持久化: 同意后重启不再弹隐私声明(§10)", async ({ hostPage, page }) => {
+  void hostPage;
   await pwExpect(page.getByTestId("consent-page")).toBeVisible();
   await page.getByTestId("consent-agree").click();
   await pwExpect(page.getByTestId("empty-state")).toBeVisible();
@@ -26,10 +26,10 @@ test("consent 持久化: 同意后重启不再弹隐私声明(§10)", async ({ t
 });
 
 test("实例持久化: 添加 provider → 重启 → 实例仍在且面板直接出数(§5.0.1)", async ({
-  tauriPage,
+  hostPage,
   page,
 }) => {
-  void tauriPage;
+  void hostPage;
   await page.getByTestId("consent-agree").click();
   await page.getByTestId("add-provider").click();
   await page.getByTestId("tree-product-deepseek-balance").click();
@@ -49,10 +49,10 @@ test("实例持久化: 添加 provider → 重启 → 实例仍在且面板直�
 });
 
 test("损坏 instances.yaml: fail-fast 配置错误页, 不静默丢配置(§5.0.1)", async ({
-  tauriPage,
+  hostPage,
   page,
 }) => {
-  void tauriPage;
+  void hostPage;
   // 预置损坏配置(重复实例名, D-026 双重校验第 2 道应拒绝) + 已同意 consent
   await page.addInitScript(() => {
     try {

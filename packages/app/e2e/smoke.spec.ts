@@ -1,16 +1,14 @@
 import { expect as pwExpect } from "@playwright/test";
-import { getCapturedInvokes } from "@srsholmes/tauri-playwright";
-import { test } from "./fixtures";
+import { test, getCapturedInvokes } from "./fixtures";
 
 /**
- * browser 模式冒烟(L2): mock IPC 注入 + 自动导航由 tauriPage fixture 完成;
+ * browser 模式冒烟(L2): mock 桌面桥 IPC 注入 + 自动导航由 hostPage fixture 完成;
  * 断言走原生 page(fixture 底层就是同一个 Playwright Page), 用标准 expect。
- * tauri/cdp 模式复用本用例时再切 tauriPage API(后置)。
  */
 
 /** L2 冒烟: 窗口标题 + 首开隐私声明(D-021) */
-test("首开: 隐私声明必须同意才能进面板", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("首开: 隐私声明必须同意才能进面板", async ({ hostPage, page }) => {
+  void hostPage;
   await pwExpect(page).toHaveTitle(/token-wallet/);
   await pwExpect(page.getByTestId("consent-page")).toBeVisible();
   await pwExpect(page.getByTestId("card-list")).toHaveCount(0);
@@ -20,8 +18,8 @@ test("首开: 隐私声明必须同意才能进面板", async ({ tauriPage, page
 });
 
 /** L2 冒烟: 主题切换 + D-016 双 token 语义 */
-test("主题切换: system→light/dark 生效且双 token 语义正确", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("主题切换: system→light/dark 生效且双 token 语义正确", async ({ hostPage, page }) => {
+  void hostPage;
   // 固定系统主题为 dark, 让 system 模式的解析结果确定
   await page.emulateMedia({ colorScheme: "dark" });
   await page.getByTestId("consent-agree").click();
@@ -59,8 +57,8 @@ test("主题切换: system→light/dark 生效且双 token 语义正确", async 
 });
 
 /** L2 冒烟: 四色场景切换 → 标题栏全局状态点 + update_tray_status IPC(D-003) */
-test("托盘四色联动: 场景切换驱动标题栏状态点与托盘 IPC", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("托盘四色联动: 场景切换驱动标题栏状态点与托盘 IPC", async ({ hostPage, page }) => {
+  void hostPage;
   await page.getByTestId("consent-agree").click();
   const dot = page.getByTestId("status-dot").first();
 
@@ -101,8 +99,8 @@ test("托盘四色联动: 场景切换驱动标题栏状态点与托盘 IPC", as
 });
 
 /** L2 冒烟: mock 面板渲染 — 健康度排序 + 异常卡整卡文字, 不显示假数据(§2.1/§6.1) */
-test("混合场景: auth_expired 黄灯+setup_hint 置顶, 异常卡不显示假数据", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("混合场景: auth_expired 黄灯+setup_hint 置顶, 异常卡不显示假数据", async ({ hostPage, page }) => {
+  void hostPage;
   await page.getByTestId("consent-agree").click();
   await page.getByTestId("scenario-mixed").click();
 
@@ -124,8 +122,8 @@ test("混合场景: auth_expired 黄灯+setup_hint 置顶, 异常卡不显示假
 });
 
 /** L2 冒烟: bars + ticker 两模板在 mock 数据下正确渲染(§6.3 / D-004) */
-test("bars+ticker 模板: 进度条/倒计时/最紧标红 + 余额预计可用天数", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("bars+ticker 模板: 进度条/倒计时/最紧标红 + 余额预计可用天数", async ({ hostPage, page }) => {
+  void hostPage;
   await page.getByTestId("consent-agree").click();
   await page.getByTestId("scenario-mixed").click();
 

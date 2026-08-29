@@ -45,6 +45,12 @@ body {
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
   flex: 0 0 auto;
+  /* 无边框窗(D-033): 整栏可拖拽, 交互控件经 .no-drag/.btn 排除 */
+  -webkit-app-region: drag;
+}
+.titlebar .btn,
+.titlebar .no-drag {
+  -webkit-app-region: no-drag;
 }
 
 .app-title {

@@ -18,7 +18,7 @@ export type TestConnectionResult =
   | { ok: true; snapshot: ProviderSnapshot }
   | { ok: false; error: string };
 
-/** Tauri 运行时经 Rust reqwest; 纯浏览器 dev 直接 fetch */
+/** 桌面宿主经主进程 http; 纯浏览器 dev 直接 fetch */
 async function testFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const headers: Record<string, string> = {};

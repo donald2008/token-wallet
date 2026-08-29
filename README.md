@@ -28,7 +28,7 @@ monorepo 三包, 同一采集核心三种宿主:
 ```
 packages/
 ├── core/         采集核心: 适配器注册表 / 轮询调度 / 缓存 / 统一 schema (纯 TS 库)
-├── app/          Tauri 2 桌面部件: 系统托盘 + 弹出面板 + 可选悬浮窄条 (React 19)
+├── app/          Electron 桌面部件: 系统托盘 + 弹出面板 + 可选悬浮窄条 (React 19)
 └── mcp-server/   常驻数据面 daemon: 内嵌 core, 以 MCP 协议向 Agent 暴露查询能力
 ```
 
@@ -40,11 +40,11 @@ packages/
 
 ```bash
 pnpm install
-pnpm dev        # 桌面部件 (packages/app, Tauri)
+pnpm dev        # 桌面部件 (packages/app, Electron 壳)
 pnpm mcp        # MCP 数据面 daemon (packages/mcp-server)
 ```
 
-要求: Node >= 22, pnpm 9, Rust(Tauri 构建需要)。
+要求: Node >= 22, pnpm 9。
 
 ## License
 

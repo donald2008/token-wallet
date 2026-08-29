@@ -152,7 +152,7 @@ export class CommandCredentialSource implements CredentialSource {
 
 /**
  * OS 钥匙串后端 — 由宿主注入:
- * - app(Tauri): Rust keyring crate 经 IPC 桥接
+ * - app(Electron, D-033): 主进程钥匙串经 IPC 桥接(E2 接真)
  * - mcp-server/测试: 内存 mock 或 Secret Service 封装
  */
 export interface KeychainBackend {

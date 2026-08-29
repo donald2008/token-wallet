@@ -2,7 +2,7 @@
  * Notifier 注册点 — DESIGN.md §4, D-009
  *
  * 异常往哪报。P3 前空实现, 接口先行(配置 notifications.enabled=false 占位)。
- * 实现方示例: Windows 原生通知(Tauri notification) / MM 作战室通道(§9)。
+ * 实现方示例: Windows 原生通知(桌面壳 notification) / MM 作战室通道(§9)。
  */
 import type { AlertLevel } from "./schema.js";
 

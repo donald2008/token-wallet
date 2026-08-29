@@ -1,6 +1,6 @@
 # @token-wallet/app
 
-Tauri 2 桌面部件(React 19 + Vite), 内嵌 `@token-wallet/core`。
+Electron 桌面部件(React 19 + Vite, D-033), 内嵌 `@token-wallet/core`。
 
 ## 形态
 
@@ -18,7 +18,7 @@ Tauri 2 桌面部件(React 19 + Vite), 内嵌 `@token-wallet/core`。
 
 - React 19 + Vite, 不引组件库(卡片/进度条/按钮全部手写)
 - 趋势图规划中(未引入; 定案 D-002 是 Chart.js v4, 待数据序列需求接入); 进度条/仪表盘/电池格等状态微部件手绘 SVG
-- 主题: 深/浅双套 CSS 变量, 默认追随系统(`prefers-color-scheme` + Tauri 原生 API)
+- 主题: 深/浅双套 CSS 变量, 默认追随系统(`prefers-color-scheme` + 桌面壳原生 API)
 - 模板体系(P0-3): Template(视觉形态)与 Theme(配色)分离, 模板注册进 TemplateRegistry(D-004);
   MVP 实现 `bars`(window 窗口制) + `ticker`(balance 余额制) + `local`(占位), 后续 gauge / battery / ring-stack / ledger
 
@@ -27,21 +27,25 @@ Tauri 2 桌面部件(React 19 + Vite), 内嵌 `@token-wallet/core`。
 ## 开发 / 验证命令
 
 ```bash
-pnpm install                # workspace 根
-pnpm -C packages/app dev    # vite dev(:1420), 浏览器可直接预览(IPC 走 fallback)
-pnpm -C packages/app tauri dev   # 桌面壳(Tauri window + 托盘), 需本机 Rust 环境
-pnpm -C packages/app typecheck   # tsc --noEmit
-pnpm -C packages/app build       # vite build → dist/
-pnpm -C packages/app test:e2e    # Playwright browser 模式(headless Chromium, mock IPC)
+pnpm install                   # workspace 根
+pnpm -C packages/app dev       # Electron 真壳(esbuild 主进程 + vite dev :1420 + 起窗)
+pnpm -C packages/app dev:web   # 仅 vite dev(:1420), 浏览器可直接预览(IPC 走 fallback)
+pnpm -C packages/app typecheck # tsc --noEmit
+pnpm -C packages/app build     # 主进程/Preload 打包(dist-electron/) + vite build → dist/
+pnpm -C packages/app test      # vitest: src L1 + electron/ 主进程单测(原子写/consent RMW)
+pnpm -C packages/app test:e2e  # Playwright browser 模式(headless Chromium, mock 桌面桥 IPC)
 ```
 
-## 壳已实现(P0-2)
+## 壳已实现(P0-2 / E1)
 
 - 托盘 4 色状态点(绿/黄/红/灰 = 全局最差状态) + tooltip 摘要, IPC `update_tray_status`
 - 点击托盘弹出/收起面板(宽 360px); 关闭按钮 = 最小化到托盘, 真实退出走托盘菜单
-- 单实例锁(tauri-plugin-single-instance): 二次启动聚焦已有实例
+- 单实例锁(app.requestSingleInstanceLock): 二次启动聚焦已有实例
+- 无边框透明窗(frame:false + transparent:true), HTML TitleBar 拖拽走
+  CSS `-webkit-app-region`, min/close 走 `win_minimize` / `win_close` IPC(E1)
 - 主题 dark/light 双套 CSS 变量, 默认追随系统, 设置页可覆盖; 语义色双 token(D-016)
-- 首开隐私声明页占位(D-021) + 零 provider 空态 + 加载骨架屏
+- 首开隐私声明页(D-021) + 零 provider 空态 + 加载骨架屏; consent 首开判定走真实
+  configDir/settings.json(P0-7/E1 主进程原子写 + RMW)
 - dev 场景切换器(仅 DEV): 全绿/黄/红/灰/混合 mock 场景, 驱动托盘联动
 
 ## 面板模板已实现(P0-3)
@@ -54,9 +58,8 @@ pnpm -C packages/app test:e2e    # Playwright browser 模式(headless Chromium, 
   auth_expired 亮黄灯 + setup_hint 恢复指引(注: auth_expired 定黄, 见 DESIGN §2.1 与 P0-3 验收)
 - 本地 Agent 区(§6.5): 默认折叠占位, P3 接真实数据
 
-## E2E 说明(D-030)
+## E2E 说明(D-030 / D-033)
 
-- browser 模式(本仓库默认): 不需要 Rust, `withGlobalTauri: true` + ipcMocks 即可
-- tauri 模式(后置): 需 `cargo tauri dev --features e2e-testing`(Cargo feature `e2e-testing`
-  引入 `tauri-plugin-playwright`, 生产构建不受影响); 届时 capabilities 需补
-  `playwright:default` 权限(仅测试构建, 勿进生产配置)
+- browser 模式(本仓库默认): `e2e/fixtures.ts` 自家 harness 注入 `window.tokenWallet`
+  mock 桥(与 Electron preload 同形态), 前端逻辑全部真跑, Linux/CI 可跑
+- 真壳 E2E(Electron 窗口): 记 P2

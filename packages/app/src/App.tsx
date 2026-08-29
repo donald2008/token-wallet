@@ -134,7 +134,7 @@ export default function App() {
   }, [themeMode, setThemeMode]);
 
   const onAgree = useCallback(() => {
-    void persistConsent(); // P0-7: 落盘 settings.json(Tauri) / localStorage(浏览器)
+    void persistConsent(); // P0-7: 落盘 settings.json(桌面壳) / localStorage(浏览器)
     setConsented(true);
     setScenario("empty"); // 初始零 provider 配置(§10)
   }, []);

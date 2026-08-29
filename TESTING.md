@@ -7,9 +7,9 @@
 | 层 | 测什么 | 工具 | 位置 | 自动化 |
 |----|--------|------|------|--------|
 | L1 单元 | core: schema/registry/credential/store/调度器 | vitest | 任何机 | ✅ 全自动 |
-| L2 前端 E2E | app 交互全流程(mock Tauri IPC) | Playwright browser 模式 | Linux/CI | ✅ 全自动 |
+| L2 前端 E2E | app 交互全流程(mock 桌面桥 IPC) | Playwright browser 模式 | Linux/CI | ✅ 全自动 |
 | L3 真通道 | 真 API + 真余额 | 手动 + golden sample | 我们的机器 | ⚠️ 半自动 |
-| L4 Windows 冒烟 | 安装/托盘/WebView2/首开 | 手动 | Windows 本机 | ❌ 人肉 |
+| L4 Windows 冒烟 | 安装/托盘/首开 | 手动 | Windows 本机 | ❌ 人肉 |
 
 ## L1 单元测试(packages/core)
 
@@ -28,16 +28,12 @@ pnpm --filter core test
 
 ## L2 前端 E2E(packages/app,Playwright browser 模式)
 
-工具链: `@playwright/test` + `@srsholmes/tauri-playwright`(tauri-plugin-playwright)。
-
-技术前提(app 侧):
-- `tauri.conf.json` 开 `withGlobalTauri: true`
-- `src-tauri/Cargo.toml` 加可选 feature `e2e-testing = ["tauri-plugin-playwright"]`
-- 生产构建不受影响(feature 默认关闭)
+工具链(D-033 起): `@playwright/test` + 自家轻量 harness(`e2e/fixtures.ts`
+注入 `window.tokenWallet` mock 桥, 与 Electron preload 同形态), 零额外测试依赖。
+真壳 E2E(Electron)记 P2。
 
 ```bash
 pnpm --filter app test:e2e          # browser-only project(headless Chromium)
-pnpm --filter app test:e2e:tauri    # tauri project(真 webview,需真机,后置)
 ```
 
 覆盖:

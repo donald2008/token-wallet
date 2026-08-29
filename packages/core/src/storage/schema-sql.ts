@@ -1,7 +1,7 @@
 /**
  * SQLite schema 权威 SQL 文本 — DESIGN.md §7 (D-020)
  *
- * 双宿主共享同一 schema: app(tauri-plugin-sql / Rust 侧执行) 与
+ * 双宿主共享同一 schema: app(主进程 sqlite IPC, D-033) 与
  * mcp-server(node:sqlite) 都从这里取 SCHEMA_SQL, 保证两侧建表一致。
  * 本模块零 Node 依赖(browser-safe), app 可经 subpath export 安全 import。
  */

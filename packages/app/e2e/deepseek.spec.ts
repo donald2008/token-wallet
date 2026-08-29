@@ -1,9 +1,8 @@
 import { expect as pwExpect } from "@playwright/test";
-import { getCapturedInvokes } from "@srsholmes/tauri-playwright";
-import { test } from "./fixtures";
+import { test, getCapturedInvokes } from "./fixtures";
 
 /**
- * L2 真实链路(D-030): mock Tauri IPC(keyring/http/sqlite), 前端逻辑全部真跑。
+ * L2 真实链路(D-030): mock 桌面桥 IPC(keyring/http/sqlite), 前端逻辑全部真跑。
  * P0-5 端到端: 设置页填 deepseek api_key → 钥匙串 → RuntimeEngine(GenericHttpAdapter
  * + Scheduler) → SqliteStore → 面板 ticker 显示真实余额 + 近7天速率预计可用天数。
  *
@@ -30,10 +29,10 @@ async function addDeepseekInstance(page: import("@playwright/test").Page, apiKey
 }
 
 test("真实链路: deepseek key → 钥匙串 → 引擎拉取 → 面板显示真实余额+拆分+预计天数", async ({
-  tauriPage,
+  hostPage,
   page,
 }) => {
-  void tauriPage;
+  void hostPage;
   await agree(page);
   await addDeepseekInstance(page, "sk-test-real-123456");
 
@@ -64,10 +63,10 @@ test("真实链路: deepseek key → 钥匙串 → 引擎拉取 → 面板显示
 });
 
 test("真实链路: http_get_json 带 Authorization Bearer(凭据只活请求构造瞬间)", async ({
-  tauriPage,
+  hostPage,
   page,
 }) => {
-  void tauriPage;
+  void hostPage;
   await agree(page);
   await addDeepseekInstance(page, "sk-bearer-check-9999");
 

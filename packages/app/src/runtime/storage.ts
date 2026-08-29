@@ -1,14 +1,14 @@
 /**
- * 快照存储 — app 侧(D-020 双宿主: app 走 Rust sqlite, mcp-server 走 node:sqlite)
+ * 快照存储 — app 侧(D-020 双宿主: app 走主进程 sqlite, mcp-server 走 node:sqlite)
  *
  * SQL 文本单一来源 = core `SCHEMA_SQL`(本文件 import, 不在 app 重复定义)。
  * 两种后端:
- * - TauriSqliteStore: Rust 侧 rusqlite 经 IPC(sqlite_batch/exec/query)执行 — 生产
- * - MemorySqliteStore: 纯浏览器 dev / Playwright browser 模式(mock IPC 不可用)兜底
+ * - HostSqliteStore: 主进程经 IPC(sqlite_batch/exec/query)执行 — 生产(E2 卡接真)
+ * - MemorySqliteStore: 纯浏览器 dev(无桌面桥)兜底
  */
 import type { ProviderSnapshot } from "../types";
 import { SCHEMA_SQL } from "@token-wallet/core/storage/schema-sql";
-import { isTauriRuntime, sqliteBatch, sqliteExec, sqliteQuery } from "../ipc";
+import { isDesktopHost, sqliteBatch, sqliteExec, sqliteQuery } from "../ipc";
 
 /** app 侧快照存储契约(D-020 StorageBackend 的 webview 形态, 只读查询按面板需要最小化) */
 export interface SnapshotStorage {
@@ -33,8 +33,8 @@ function parseRow(raw: unknown): ProviderSnapshot | null {
   }
 }
 
-/** 生产: Rust 侧 rusqlite 执行(SCHEMA_SQL 单一来源) */
-export class TauriSqliteStore implements SnapshotStorage {
+/** 生产: 主进程执行(SCHEMA_SQL 单一来源) */
+export class HostSqliteStore implements SnapshotStorage {
   private ready: Promise<void> | null = null;
 
   init(): Promise<void> {
@@ -106,9 +106,9 @@ let sharedStore: SnapshotStorage | null = null;
 /** 全局共享存储(启动时按运行时能力选择后端) */
 export function getSharedStorage(): SnapshotStorage {
   if (!sharedStore) {
-    // Tauri 运行时(含 Playwright browser mock 经 ipcMocks 拦截)→ Rust sqlite;
+    // 桌面宿主(含 Playwright browser mock 桥)→ 主进程 sqlite;
     // 纯浏览器 dev → 内存兜底
-    sharedStore = isTauriRuntime() ? new TauriSqliteStore() : new MemorySqliteStore();
+    sharedStore = isDesktopHost() ? new HostSqliteStore() : new MemorySqliteStore();
   }
   return sharedStore;
 }

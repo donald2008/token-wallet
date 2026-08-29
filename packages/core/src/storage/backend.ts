@@ -1,7 +1,7 @@
 /**
  * StorageBackend 接口 — DESIGN.md §7, D-020
  *
- * 双宿主约束: app 走 tauri-plugin-sql(Rust 侧执行), mcp-server 走 node:sqlite。
+ * 双宿主约束: app 走主进程 sqlite IPC(D-033 换壳 Electron, E2 接真), mcp-server 走 node:sqlite。
  * 同一 schema(见 sqlite.ts SCHEMA_SQL)。core 只定义接口 + node:sqlite 实现。
  */
 import { z } from "zod";

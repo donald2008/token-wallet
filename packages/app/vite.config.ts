@@ -1,25 +1,20 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// https://v2.tauri.app/start/frontend/vite/
+// 渲染层 dev server(D-033: Electron 壳经 ELECTRON_RENDERER_URL 加载本 server;
+// 浏览器独立预览走 `pnpm dev:web`)
 export default defineConfig({
   plugins: [react()],
-  // 防止 vite 遮挡 tauri CLI 输出
   clearScreen: false,
   server: {
-    // Tauri 期望的固定端口
+    // 固定端口: dev runner 与 playwright webServer 都按 1420 等待
     port: 1420,
     strictPort: true,
     host: "127.0.0.1",
-    watch: {
-      // src-tauri 的改动不触发 vite reload
-      ignored: ["**/src-tauri/**"],
-    },
   },
-  envPrefix: ["VITE_", "TAURI_"],
+  envPrefix: ["VITE_"],
   build: {
     target: "es2021",
-    minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
-    sourcemap: !!process.env.TAURI_DEBUG,
+    minify: "esbuild",
   },
 });

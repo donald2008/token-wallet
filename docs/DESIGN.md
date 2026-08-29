@@ -54,7 +54,7 @@ stale(超 2 个轮询周期未更新)、unsupported(暂无适配器, UI 显示
 token-wallet/
 ├── packages/
 │   ├── core/         采集核心(纯 TS 库): 适配器注册表 / 调度器 / 缓存 / schema
-│   ├── app/          Tauri 2 桌面部件(React 19): 托盘 + 弹出面板 + 可选悬浮窄条
+│   ├── app/          Electron 桌面部件(React 19, D-033): 托盘 + 弹出面板 + 可选悬浮窄条
 │   └── mcp-server/   常驻数据面 daemon: 内嵌 core, MCP 暴露查询
 ├── docs/
 ├── sketches/         UI 视觉 mockup(评审用, 可丢弃)
@@ -296,7 +296,7 @@ StorageBackend 接口 P0 定义, 双宿主约束: mcp-server 是 Node 进程, ap
 
 | 实现 | 阶段 | 说明 |
 |------|------|------|
-| SqliteStore | **P0 主力(D-020)** | 每时段×每模型×每 provider 消耗记录 + 聚合查询。app 走 tauri-plugin-sql(Rust 侧执行); mcp-server 走 node:sqlite(Node 22+ 内置)。同一 schema |
+| SqliteStore | **P0 主力(D-020)** | 每时段×每模型×每 provider 消耗记录 + 聚合查询。app 走主进程 sqlite IPC(D-033 换壳 Electron, E2 接真); mcp-server 走 node:sqlite(Node 22+ 内置)。同一 schema |
 | JsonlStore | 调试/导出 | 快照导出为人可读 JSONL, 非主存储 |
 
 SQLite schema 核心表:
@@ -307,9 +307,9 @@ SQLite schema 核心表:
 
 | 数据类型 | Windows | macOS | Linux | API |
 |---------|---------|-------|-------|-----|
-| 配置(instances.yaml/settings) | %APPDATA%\token-wallet\ | ~/Library/Application Support/ | ~/.config/token-wallet/ | Tauri app_config_dir |
-| 快照数据(SQLite) | %LOCALAPPDATA%\token-wallet\ | 同上 | ~/.local/share/token-wallet/ | Tauri app_data_dir(大文件不进 Roaming) |
-| 凭据(store 源) | Windows 凭据管理器 | Keychain | Secret Service | keyring crate; headless 降级链 env → command → 600 权限文件(D-029) |
+| 配置(instances.yaml/settings) | %APPDATA%\token-wallet\ | ~/Library/Application Support/ | ~/.config/token-wallet/ | 桌面壳主进程按平台解析 |
+| 快照数据(SQLite) | %LOCALAPPDATA%\token-wallet\ | 同上 | ~/.local/share/token-wallet/ | 桌面壳主进程按平台解析(大文件不进 Roaming) |
+| 凭据(store 源) | Windows 凭据管理器 | Keychain | Secret Service | 主进程钥匙串 IPC(E2 接真); headless 降级链 env → command → 600 权限文件(D-029) |
 
 - 代码零路径字面量; mcp-server(Node 侧)用 env-paths 保持同一约定
 - 配置与数据分家: 清缓存不丢配置
@@ -345,12 +345,12 @@ Agent 对接唯一通道 = MCP, 不维护第二套 HTTP API。
 - **阈值全局可配置(D-022)**: 黄线默认 30%, 红线默认 10%(剩余百分比); 设置页可调
 - error / 额度耗尽(100%) 恒为红, 不走阈值; auth_expired 亮黄灯(待处理告警), 不走阈值
 - 通知 P3 实现, Notifier 接口 P0 先行(空实现), 配置 `notifications.enabled=false` 占位
-- 阈值触发 Windows 原生通知(Tauri notification → 操作中心), 同一告警冷却期防轰炸
+- 阈值触发 Windows 原生通知(桌面壳 notification → 操作中心), 同一告警冷却期防轰炸
 - 我们自己的部署可另接 MM 作战室通道
 
 ## 10. 分发与首开(D-021)
 
-- Windows 标准安装包(Tauri NSIS),  installs per-user
+- Windows 标准安装包(NSIS, 壳换 Electron 后打包链 E3 重建),  installs per-user
 - 首开向导: **隐私声明页(零遥测/零上报/数据不出本机, 须点同意)** → 引导添加第一个 provider(通道选择器)
 - 初始状态零 provider 配置
 - 托盘/应用图标: 自设计 token-wallet logo
@@ -364,8 +364,8 @@ Agent 对接唯一通道 = MCP, 不维护第二套 HTTP API。
 | 决策点 | 定案 | 备注 |
 |--------|------|------|
 | 代码签名 | **暂缓**(P4 前无签名) | README 显著写: 首次安装点「更多信息 → 仍要运行」; SmartScreen 未认证提示是预期行为 |
-| 构建渠道 | **Windows 本机 `pnpm tauri build`** 唯一渠道 | Linux/WSL2 无可靠 cross; 不出 Windows 包, 不为低频发版维护 Windows gateway |
-| WebView2 | downloadBootstrapper(Tauri 默认) | Win11 预装, Win10 联网静默安装引导 |
+| 构建渠道 | **Windows 本机构建**唯一渠道(壳换 Electron 后打包链 E3 重建) | Linux/WSL2 无可靠 cross; 不出 Windows 包, 不为低频发版维护 Windows gateway |
+| 渲染运行时 | Electron 内置 Chromium, 零外部 WebView 依赖(D-033) | 告别 WebView2 运行时依赖 |
 | 自动更新 | **后置 P4** | P0~P2 更新 = 下载新版重装; updater 需签名 key + 清单 JSON + 静态托管, P4 统一解决 |
 | 分发 | gitee release 挂 NSIS 安装包 + SHA256 | 见 RELEASE.md |
 
@@ -379,11 +379,11 @@ Windows 人肉只留"桌面外壳本身"(安装/托盘/WebView2)。
 | 层 | 测什么 | 工具 | 位置 | 自动化 |
 |----|--------|------|------|--------|
 | L1 单元 | core: schema/registry/credential/store/调度器(D-027 语义) | vitest | 任何机 | ✅ 全自动 |
-| L2 前端 E2E | app 交互全流程: 首开向导/设置表单/测试连接/面板模板/排序 | **Playwright browser 模式**(mock Tauri IPC) | Linux/CI | ✅ 全自动 |
+| L2 前端 E2E | app 交互全流程: 首开向导/设置表单/测试连接/面板模板/排序 | **Playwright browser 模式**(mock 桌面桥 IPC) | Linux/CI | ✅ 全自动 |
 | L3 真通道 | 真 API + 真余额(敏感 key 不落库) | 手动触发 + golden sample 防接口变动 | 我们的机器 | ⚠️ 半自动 |
 | L4 Windows 冒烟 | 安装包/托盘/WebView2/首开真实打开 | 手动 | Windows 本机 | ❌ 人肉 |
 
-- **L2 技术前提**(tauri-plugin-playwright browser 模式): app 开 `withGlobalTauri: true` + 可选 Rust feature `e2e-testing`, 生产构建不受影响
+- **L2 技术前提**(D-033 起): e2e/fixtures.ts 自家轻量 harness 注入 `window.tokenWallet` mock 桥(与 Electron preload 同形态), 零额外测试依赖
 - 每条 P0 卡内嵌 L1/L2 测试, 证据链 = 测试跑绿 + commit hash, 无测试 review 打回
 - CI: P0~P2 worker 内测; P4 上 gitee Actions/自建 runner 全自动
 - 测试矩阵详见根目录 `TESTING.md`

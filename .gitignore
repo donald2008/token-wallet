@@ -8,11 +8,8 @@ build/
 out/
 *.tsbuildinfo
 
-# Tauri / Rust
-src-tauri/target/
-src-tauri/gen/
-**/src-tauri/target/
-**/src-tauri/gen/
+# Electron 主进程构建产物
+dist-electron/
 
 # env & credentials (never commit)
 .env

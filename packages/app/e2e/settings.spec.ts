@@ -32,8 +32,8 @@ async function pickDeepseekBalance(page: import("@playwright/test").Page) {
   await pwExpect(page.getByTestId("dynamic-form")).toBeVisible();
 }
 
-test("首开向导: 隐私声明须同意 → 空态 → 引导添加第一个 provider", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("首开向导: 隐私声明须同意 → 空态 → 引导添加第一个 provider", async ({ hostPage, page }) => {
+  void hostPage;
   await pwExpect(page.getByTestId("consent-page")).toBeVisible();
   await agree(page);
   await openAddFlow(page);
@@ -42,8 +42,8 @@ test("首开向导: 隐私声明须同意 → 空态 → 引导添加第一个 p
   await pwExpect(page.getByTestId("tree-product-deepseek-balance")).toBeVisible();
 });
 
-test("树形通道选择器: 平台可折叠 + 产品叶子一点直达表单(D-025)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("树形通道选择器: 平台可折叠 + 产品叶子一点直达表单(D-025)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openAddFlow(page);
   const platformBtn = page.getByTestId("tree-platform-deepseek");
@@ -59,8 +59,8 @@ test("树形通道选择器: 平台可折叠 + 产品叶子一点直达表单(D-
   await pickDeepseekBalance(page);
 });
 
-test("动态表单: secret 字段为密码框且不回显(D-017)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("动态表单: secret 字段为密码框且不回显(D-017)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openAddFlow(page);
   await pickDeepseekBalance(page);
@@ -73,8 +73,8 @@ test("动态表单: secret 字段为密码框且不回显(D-017)", async ({ taur
   pwExpect(shown).toBe("sk-test-secret"); // 值在 DOM value, 但 UI 密码框遮罩显示
 });
 
-test("测试连接: 成功显示余额快照(D-017)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("测试连接: 成功显示余额快照(D-017)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openAddFlow(page);
   await pickDeepseekBalance(page);
@@ -84,8 +84,8 @@ test("测试连接: 成功显示余额快照(D-017)", async ({ tauriPage, page }
   await pwExpect(page.getByTestId("test-ok")).toContainText("余额");
 });
 
-test("测试连接: 失败显示具体错误(D-017)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("测试连接: 失败显示具体错误(D-017)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openAddFlow(page);
   await pickDeepseekBalance(page);
@@ -98,8 +98,8 @@ test("测试连接: 失败显示具体错误(D-017)", async ({ tauriPage, page }
   await pwExpect(page.getByTestId("test-err")).toContainText("401");
 });
 
-test("实例: 添加 → 列表 → 删除(D-029 同步清钥匙串)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("实例: 添加 → 列表 → 删除(D-029 同步清钥匙串)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openAddFlow(page);
   await pickDeepseekBalance(page);
@@ -118,8 +118,8 @@ test("实例: 添加 → 列表 → 删除(D-029 同步清钥匙串)", async ({ 
   await pwExpect(page.getByTestId("no-instances")).toBeVisible();
 });
 
-test("双重 zod 校验: 表单拒绝重复实例名(D-026)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("双重 zod 校验: 表单拒绝重复实例名(D-026)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   // 先加一个实例
   await openAddFlow(page);
@@ -136,16 +136,16 @@ test("双重 zod 校验: 表单拒绝重复实例名(D-026)", async ({ tauriPage
   await pwExpect(page.getByTestId("name-error")).toContainText("实例名已存在");
 });
 
-test("存储路径显示运行时解析路径(D-019)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("存储路径显示运行时解析路径(D-019)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openSettings(page);
   await pwExpect(page.getByTestId("config-dir")).toContainText("/home/test/.config/token-wallet");
   await pwExpect(page.getByTestId("data-dir")).toContainText("/home/test/.local/share/token-wallet");
 });
 
-test("开机自启默认关 + 可切换(D-024)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("开机自启默认关 + 可切换(D-024)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openSettings(page);
   const toggle = page.getByTestId("autostart-toggle");
@@ -171,8 +171,8 @@ async function openSettingsModal(page: import("@playwright/test").Page) {
   await pwExpect(page.getByTestId("settings-view")).toBeVisible();
 }
 
-test("设置弹窗: 打开后叠在面板上方, × 关闭回面板(P0-6)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("设置弹窗: 打开后叠在面板上方, × 关闭回面板(P0-6)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await page.getByTestId("scenario-mixed").click();
   await openSettingsModal(page);
@@ -188,8 +188,8 @@ test("设置弹窗: 打开后叠在面板上方, × 关闭回面板(P0-6)", asyn
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
 });
 
-test("设置弹窗: 点遮罩关闭(P0-6)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("设置弹窗: 点遮罩关闭(P0-6)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openSettingsModal(page);
   // 点遮罩(弹层外角落)关闭
@@ -197,16 +197,16 @@ test("设置弹窗: 点遮罩关闭(P0-6)", async ({ tauriPage, page }) => {
   await pwExpect(page.getByTestId("settings-overlay")).toHaveCount(0);
 });
 
-test("设置弹窗: ESC 键关闭(P0-6)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("设置弹窗: ESC 键关闭(P0-6)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openSettingsModal(page);
   await page.keyboard.press("Escape");
   await pwExpect(page.getByTestId("settings-overlay")).toHaveCount(0);
 });
 
-test("设置弹窗: 内容完整(实例管理/存储路径/开机自启/主题)(P0-6)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("设置弹窗: 内容完整(实例管理/存储路径/开机自启/主题)(P0-6)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openSettingsModal(page);
   const modal = page.getByTestId("settings-overlay");
@@ -217,8 +217,8 @@ test("设置弹窗: 内容完整(实例管理/存储路径/开机自启/主题)(
   await pwExpect(modal.getByTestId("theme-seg")).toBeVisible();
 });
 
-test("首开向导回归: 空态添加 Provider 仍走页内导航, 不弹模态(D-021)", async ({ tauriPage, page }) => {
-  void tauriPage;
+test("首开向导回归: 空态添加 Provider 仍走页内导航, 不弹模态(D-021)", async ({ hostPage, page }) => {
+  void hostPage;
   await agree(page);
   await openAddFlow(page);
   // 页内导航: 设置视图直接替换面板, 无遮罩弹层

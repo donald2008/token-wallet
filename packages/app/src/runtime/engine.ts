@@ -40,9 +40,9 @@ export function parsePollIntervalMs(text?: string): number {
 }
 
 /**
- * Tauri 运行时 fetch 桥: 经 Rust reqwest 执行(Rust 侧 http_get_json),
- * 规避 webview CORS/CSP; 响应体已由 Rust 脱敏(D-029)。
- * 纯浏览器 dev(无 invoke)→ 直接 fetch(本地预览; 生产不会走到)。
+ * 桌面宿主 fetch 桥: 主进程 http_get_json 执行,
+ * 规避 webview CORS/CSP; 响应体已由主进程脱敏(D-029, E2 卡接真)。
+ * 纯浏览器 dev(无桌面桥)→ 直接 fetch(本地预览; 生产不会走到)。
  */
 async function runtimeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;

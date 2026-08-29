@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { InstanceConfig, CredentialRef } from "./schema";
 import { InstancesFileSchema, makeCredentialRef, parseInstances } from "./schema";
-import { instancesLoad, instancesSave, isTauriRuntime, keyringDelete, keyringGet, keyringSet } from "../ipc";
+import { instancesLoad, instancesSave, isDesktopHost, keyringDelete, keyringGet, keyringSet } from "../ipc";
 
 /** 钥匙串后端抽象(D-029: Windows 凭据管理器 / Keychain / Secret Service) */
 export interface KeyringBackend {
@@ -22,7 +22,7 @@ export interface KeyringBackend {
 
 export const KEYRING_SERVICE = "token-wallet";
 
-/** 内存钥匙串 mock —— 纯浏览器 dev/localStorage 无 Tauri 时兜底; local-only, 不落盘 */
+/** 内存钥匙串 mock —— 纯浏览器 dev/localStorage 无桌面桥时兜底; local-only, 不落盘 */
 export class MemoryKeyring implements KeyringBackend {
   private readonly store = new Map<string, string>();
 
@@ -38,10 +38,10 @@ export class MemoryKeyring implements KeyringBackend {
 }
 
 /**
- * OS 钥匙串真实现(D-029): Rust keyring crate 经 IPC 桥接。
+ * OS 钥匙串真实现(D-029): 主进程经 IPC 桥接(E2 卡接真)。
  * Windows 凭据管理器 / macOS Keychain / Linux Secret Service。
  */
-export class TauriKeyring implements KeyringBackend {
+export class HostKeyring implements KeyringBackend {
   async get(service: string, key: string): Promise<string | null> {
     return keyringGet(service, key);
   }
@@ -188,17 +188,17 @@ export async function loadPersistedInstances(): Promise<string | null> {
 
 /** 钥匙串 mock 单例共享(纯浏览器 dev 用) */
 let sharedMemoryKeyring: MemoryKeyring | null = null;
-/** Tauri 运行时钥匙串单例(真 OS 钥匙串 D-029) */
-let sharedTauriKeyring: TauriKeyring | null = null;
+/** 桌面宿主钥匙串单例(真 OS 钥匙串 D-029, E2 卡接真) */
+let sharedHostKeyring: HostKeyring | null = null;
 
 /**
- * 共享钥匙串后端: Tauri 运行时 → OS 钥匙串(keyring crate);
- * 纯浏览器 dev/Playwright browser 模式(无 Tauri invoke)→ 内存 mock。
+ * 共享钥匙串后端: 桌面宿主 → OS 钥匙串(主进程 IPC);
+ * 纯浏览器 dev(无桌面桥)→ 内存 mock。
  */
 export function getSharedKeyring(): KeyringBackend {
-  if (isTauriRuntime()) {
-    if (!sharedTauriKeyring) sharedTauriKeyring = new TauriKeyring();
-    return sharedTauriKeyring;
+  if (isDesktopHost()) {
+    if (!sharedHostKeyring) sharedHostKeyring = new HostKeyring();
+    return sharedHostKeyring;
   }
   if (!sharedMemoryKeyring) sharedMemoryKeyring = new MemoryKeyring();
   return sharedMemoryKeyring;

@@ -1,7 +1,7 @@
 /**
  * SqliteStore — DESIGN.md §7, D-020
  *
- * node:sqlite(Node 22.5+ 内置)实现。mcp-server 直接用; app 侧由 tauri-plugin-sql
+ * node:sqlite(Node 22.5+ 内置)实现。mcp-server 直接用; app 侧由主进程 sqlite IPC
  * 在 Rust 侧执行同一 schema(SQL 文本共享, 见 SCHEMA_SQL 导出)。
  *
  * 写库原子(§3.2): 每次 save 包事务。读回一律 zod 校验, 坏行不污染 UI。
