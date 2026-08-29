@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "pnpm -C packages/app dev",
     "build": "pnpm -r build",
+    "build:win": "pnpm -r build && pnpm -C packages/app dist:win",
     "typecheck": "pnpm -r typecheck",
     "mcp": "pnpm -C packages/mcp-server start"
   },

@@ -11,6 +11,9 @@ out/
 # Electron 主进程构建产物
 dist-electron/
 
+# electron-builder 打包产物 (E3/D-035: 安装包走 gitee release 挂包, 不入库)
+packages/app/release/
+
 # env & credentials (never commit)
 .env
 .env.*

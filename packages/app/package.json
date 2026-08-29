@@ -11,7 +11,8 @@
     "build": "node electron/scripts/build.mjs && vite build",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test --project=browser-only",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dist:win": "electron-builder --win nsis"
   },
   "dependencies": {
     "@token-wallet/core": "workspace:*",
@@ -27,10 +28,47 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.6.0",
     "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
     "esbuild": "^0.25.0",
     "jsdom": "^30.0.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "com.tokenwallet.app",
+    "productName": "token-wallet",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "electron/icons/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build-resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "token-wallet",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "token-wallet_${version}_setup.${ext}"
+    }
   }
 }
