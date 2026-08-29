@@ -11,9 +11,9 @@ import {
   makeCredentialRef,
 } from "./schema";
 import { MemoryKeyring, MemoryInstanceStore, KEYRING_SERVICE } from "./store";
-import { findChannel } from "../channels/mockChannels";
+import { getPresetChannel } from "@token-wallet/core/channels";
 
-const ds = () => findChannel("deepseek/balance")!;
+const ds = () => getPresetChannel("deepseek/balance")!;
 
 describe("instances schema (D-026 双重唯一)", () => {
   const validInstance = {

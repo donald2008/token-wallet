@@ -1,17 +1,16 @@
 /**
  * 测试连接 — DESIGN.md §5.0 (D-017): 立即跑一次采集。
  *
- * P0-5 起: http 类通道走真实 GenericHttpAdapter(声明式映射, 零代码),
+ * http 通道走真实 GenericHttpAdapter(声明式映射, 零代码), 映射查 CHANNEL_MAPPINGS
+ * (与 PRESET_CHANNELS 配套, D-036): 设置页能选到的通道必然有真实映射。
  * 用表单刚输入的值(未落钥匙串)直接构造请求 → 真实 API 校验。
- * - deepseek/balance: GET https://api.deepseek.com/user/balance + Bearer key
- * - 非 http 通道(尚未接真实适配器)→ 保留 mock 兜底
  *
  * ⚠️ 内存纪律(D-029): 表单里的 key 只活本次请求构造, 不进 UI 状态/日志。
  */
 import type { ProviderSnapshot } from "../types";
-import type { MockChannelDescriptor } from "../channels/mockChannels";
+import type { ChannelDescriptor } from "@token-wallet/core/channels";
+import { CHANNEL_MAPPINGS, getPresetChannel } from "@token-wallet/core/channels";
 import { GenericHttpAdapter } from "@token-wallet/core/generic-http";
-import { DEEPSEEK_BALANCE, DEEPSEEK_BALANCE_MAPPING } from "@token-wallet/core/channels/deepseek";
 import { httpGetJson } from "../ipc";
 
 export type TestConnectionResult =
@@ -29,8 +28,8 @@ async function testFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 
 const NOW = Math.floor(Date.now() / 1000);
 
-/** mock 余额快照(balance 通道, 未接真实适配器时兜底) */
-function balanceSnapshot(channel: MockChannelDescriptor): ProviderSnapshot {
+/** mock 余额快照(command 通道未接真实时兜底; 预置目录当前无 command 通道, 保留防御) */
+function balanceSnapshot(channel: ChannelDescriptor): ProviderSnapshot {
   return {
     provider_id: channel.channel,
     display_name: channel.display_name,
@@ -44,8 +43,8 @@ function balanceSnapshot(channel: MockChannelDescriptor): ProviderSnapshot {
   };
 }
 
-/** mock 窗口快照(window 通道, 未接真实适配器时兜底) */
-function windowSnapshot(channel: MockChannelDescriptor): ProviderSnapshot {
+/** mock 窗口快照(command 通道未接真实时兜底) */
+function windowSnapshot(channel: ChannelDescriptor): ProviderSnapshot {
   return {
     provider_id: channel.channel,
     display_name: channel.display_name,
@@ -56,7 +55,7 @@ function windowSnapshot(channel: MockChannelDescriptor): ProviderSnapshot {
       {
         key: "rolling_5h",
         kind: "window",
-        unit: "requests",
+        unit: "percent",
         used: 84,
         limit: 100,
         reset_at: NOW + 14000,
@@ -68,39 +67,37 @@ function windowSnapshot(channel: MockChannelDescriptor): ProviderSnapshot {
 
 /** 真实 http 通道测试连接: 声明式映射 + 表单 key 立即采集 */
 async function realHttpTest(
-  channel: MockChannelDescriptor,
+  channel: ChannelDescriptor,
   params: Record<string, string | number | boolean>,
 ): Promise<TestConnectionResult> {
-  // deepseek/balance: 唯一已接真实链路的 http 通道
-  if (channel.channel === "deepseek/balance") {
-    const adapter = new GenericHttpAdapter(DEEPSEEK_BALANCE_MAPPING, testFetch);
-    const instance = {
-      id: "test-conn",
-      channel: channel.channel,
-      name: "测试连接",
-      params: { api_key: String(params.api_key ?? "") },
-    };
-    const ctx = {
-      signal: new AbortController().signal,
-      timeoutMs: 10_000,
-      // 表单里的值直接当凭据用(未落钥匙串); key 只活请求构造瞬间
-      resolveCredential: (ref: unknown) =>
-        Promise.resolve(typeof ref === "string" ? ref : String((ref as { key?: string }).key ?? "")),
-      fetchedAt: NOW,
-    };
-    const snap = await adapter.fetchSnapshot(DEEPSEEK_BALANCE, instance, ctx);
-    if (snap.status === "ok") return { ok: true, snapshot: snap };
-    const msg =
-      snap.status === "auth_expired"
-        ? "认证失败: API Key 无效 (401 Unauthorized)"
-        : snap.error_message ?? `采集失败(${snap.status})`;
-    return { ok: false, error: msg };
+  // 目录内 http 通道必有映射(D-036 不变量); 缺失 = 配置 bug, 显式报错不兜底
+  const mapping = CHANNEL_MAPPINGS[channel.channel];
+  const descriptor = getPresetChannel(channel.channel);
+  if (!mapping || !descriptor) {
+    return { ok: false, error: `通道 ${channel.channel} 未接入真实采集(目录不变量破坏)` };
   }
-  // 其他 http 通道未接真实适配器 → mock 兜底(后续卡接真实链路后移除)
-  if (channel.plan_type === "balance") {
-    return { ok: true, snapshot: balanceSnapshot(channel) };
-  }
-  return { ok: true, snapshot: windowSnapshot(channel) };
+  const adapter = new GenericHttpAdapter(mapping, testFetch);
+  const instance = {
+    id: "test-conn",
+    channel: channel.channel,
+    name: "测试连接",
+    params: { api_key: String(params.api_key ?? "") },
+  };
+  const ctx = {
+    signal: new AbortController().signal,
+    timeoutMs: 10_000,
+    // 表单里的值直接当凭据用(未落钥匙串); key 只活请求构造瞬间
+    resolveCredential: (ref: unknown) =>
+      Promise.resolve(typeof ref === "string" ? ref : String((ref as { key?: string }).key ?? "")),
+    fetchedAt: NOW,
+  };
+  const snap = await adapter.fetchSnapshot(descriptor, instance, ctx);
+  if (snap.status === "ok") return { ok: true, snapshot: snap };
+  const msg =
+    snap.status === "auth_expired"
+      ? "认证失败: API Key 无效 (401 Unauthorized)"
+      : snap.error_message ?? `采集失败(${snap.status})`;
+  return { ok: false, error: msg };
 }
 
 /**
@@ -108,7 +105,7 @@ async function realHttpTest(
  * secret 字段的值即用户输入(未落钥匙串前)。
  */
 export async function testConnection(
-  channel: MockChannelDescriptor,
+  channel: ChannelDescriptor,
   params: Record<string, string | number | boolean>,
 ): Promise<TestConnectionResult> {
   await new Promise((r) => setTimeout(r, 120));
@@ -132,7 +129,7 @@ export async function testConnection(
     }
   }
 
-  // http 通道 → 真实采集; command 通道暂回退 mock(后续卡接)
+  // http 通道 → 真实采集; command 通道暂回退 mock(预置目录当前无 command 通道, 防御保留)
   if (channel.adapter === "http") {
     return realHttpTest(channel, params);
   }

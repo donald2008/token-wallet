@@ -3,7 +3,7 @@ import type { ThemeMode } from "../theme";
 import { getStoragePaths, getLaunchAtLogin, setLaunchAtLogin, type StoragePaths } from "../ipc";
 import type { InstanceConfig } from "../instances/schema";
 import { getSharedKeyring, getSharedStore, useInstances } from "../instances/store";
-import type { MockChannelDescriptor } from "../channels/mockChannels";
+import type { ChannelDescriptor } from "@token-wallet/core/channels";
 import { ChannelTree } from "./ChannelTree";
 import { DynamicForm } from "./DynamicForm";
 
@@ -34,7 +34,7 @@ interface Props {
 export function SettingsView({ themeMode, onThemeMode, onBack, variant = "page", initialStep = "overview" }: Props) {
   const instances = useInstances();
   const [step, setStep] = useState<"overview" | "add-channel" | "fill-form">(initialStep);
-  const [selectedChannel, setSelectedChannel] = useState<MockChannelDescriptor | null>(null);
+  const [selectedChannel, setSelectedChannel] = useState<ChannelDescriptor | null>(null);
   const [storagePaths, setStoragePaths] = useState<StoragePaths | null>(null);
   const [autoStart, setAutoStart] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -52,7 +52,7 @@ export function SettingsView({ themeMode, onThemeMode, onBack, variant = "page",
     setStep("add-channel");
   };
 
-  const onPickChannel = (d: MockChannelDescriptor) => {
+  const onPickChannel = (d: ChannelDescriptor) => {
     setSelectedChannel(d);
     setStep("fill-form");
   };

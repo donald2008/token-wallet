@@ -2,7 +2,7 @@
  * 实例配置 schema + 双重唯一性校验 — DESIGN.md §5.0.1 (D-017/D-025/D-026)
  *
  * 三层分离:
- * - 内置通道目录(ChannelDescriptor, 见 ./mockChannels): 实现类型 + params_schema
+ * - 内置通道目录(ChannelDescriptor, 见 core PRESET_CHANNELS): 实现类型 + params_schema
  * - 实例配置 instances.yaml(用户数据): 启用哪些通道实例 + 参数 + 轮询覆盖
  * - 全局设置 settings(用户数据)
  *
@@ -15,7 +15,7 @@
  * 本卡(P0-4)用内存 mock 撑住 store 接口, OS 钥匙串真实现 P0-5/P1。
  */
 import { z } from "zod";
-import type { MockChannelDescriptor } from "../channels/mockChannels";
+import type { ChannelDescriptor } from "@token-wallet/core/channels";
 
 /** 凭据引用来源(§5.0.1 / D-029) */
 export const CREDENTIAL_SOURCES = ["store", "env", "file", "command"] as const;
@@ -109,7 +109,7 @@ export function makeCredentialRef(instanceId: string, paramKey: string): Credent
 
 /** 生成默认实例名 "<平台>-<产品> #N"(D-026 自动编号, 平台名前缀保证面板可辨识) */
 export function defaultInstanceName(
-  channel: MockChannelDescriptor,
+  channel: ChannelDescriptor,
   existingNames: Iterable<string>,
 ): string {
   const used = new Set(existingNames);
@@ -125,7 +125,7 @@ export function defaultInstanceName(
  */
 export function validateChannelConfig(
   channelId: string,
-  { params_schema }: Pick<MockChannelDescriptor, "params_schema">,
+  { params_schema }: Pick<ChannelDescriptor, "params_schema">,
 ): string | null {
   if (!channelId.includes("/")) return `通道路径非法: ${channelId}`;
   if (!params_schema) return `通道不存在或无参数 schema: ${channelId}`;

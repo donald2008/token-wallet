@@ -18,32 +18,34 @@ const fakeStorage: SnapshotStorage = {
   history: async () => [],
 };
 
-const kimiInstance: InstanceConfig = {
-  id: "inst-kimi-1",
-  channel: "kimi/kimi-code",
-  name: "Kimi Code #1",
-  params: { api_key: { source: "store", key: "inst-kimi-1:api_key" } },
+// 真正未接入的通道(不在 PRESET_CHANNELS/CHANNEL_MAPPINGS): 本卡后 kimi/opencode 已接入,
+// 不能再拿它们当"未支持"样例(语义被 t_44497e20 推翻)
+const unsupportedInstance: InstanceConfig = {
+  id: "inst-aliyun-1",
+  channel: "aliyun/bailian",
+  name: "百炼 Token Plan #1",
+  params: { api_key: { source: "store", key: "inst-aliyun-1:api_key" } },
 };
 
 describe("P0-8 未支持通道显式化(不静默跳过)", () => {
   it("unsupportedSnapshot 产出 status=unsupported 合法快照", () => {
-    const snap = unsupportedSnapshot(kimiInstance);
+    const snap = unsupportedSnapshot(unsupportedInstance);
     expect(snap.status).toBe("unsupported");
-    expect(snap.provider_id).toBe("inst-kimi-1");
-    expect(snap.display_name).toBe("Kimi Code #1");
-    expect(snap.plan_type).toBe("window"); // 通道目录查得(kimi/kimi-code 是窗口制)
+    expect(snap.provider_id).toBe("inst-aliyun-1");
+    expect(snap.display_name).toBe("百炼 Token Plan #1");
+    expect(snap.plan_type).toBe("window"); // 目录查不到 → 兜底 window
     expect(snap.metrics).toEqual([]);
     expect(snap.alerts[0]?.message).toContain("暂未接入");
   });
 
   it("目录外未知通道也显式化, plan_type 兜底 window", () => {
-    const snap = unsupportedSnapshot({ ...kimiInstance, id: "x", channel: "foo/bar" });
+    const snap = unsupportedSnapshot({ ...unsupportedInstance, id: "x", channel: "foo/bar" });
     expect(snap.status).toBe("unsupported");
     expect(snap.plan_type).toBe("window");
   });
 
   it("引擎启动后面板立即收到 unsupported 卡, 且不进调度器", async () => {
-    const engine = new RuntimeEngine([kimiInstance], fakeStorage);
+    const engine = new RuntimeEngine([unsupportedInstance], fakeStorage);
     const outs: EngineOutput[] = [];
     engine.subscribe((o) => outs.push(o));
     engine.start();
@@ -51,12 +53,31 @@ describe("P0-8 未支持通道显式化(不静默跳过)", () => {
     const last = outs[outs.length - 1];
     expect(last?.snapshots).toHaveLength(1);
     expect(last?.snapshots[0]?.status).toBe("unsupported");
-    expect(last?.snapshots[0]?.provider_id).toBe("inst-kimi-1");
+    expect(last?.snapshots[0]?.provider_id).toBe("inst-aliyun-1");
     // 不进调度器(无适配器可轮询)
-    expect(engine.stats["inst-kimi-1"]).toBeUndefined();
+    expect(engine.stats["inst-aliyun-1"]).toBeUndefined();
     // hydrate 完成后仍是同一张卡(无存储历史, 不被覆盖)
     await new Promise((r) => setTimeout(r, 0));
     expect(engine.snapshots.map((s) => s.status)).toEqual(["unsupported"]);
+    engine.stop();
+  });
+
+  it("已接入通道(deepseek/opencode/kimi)进调度器, 不产 unsupported", () => {
+    const engine = new RuntimeEngine(
+      [
+        { ...unsupportedInstance, id: "a", channel: "deepseek/balance" },
+        { ...unsupportedInstance, id: "b", channel: "opencode/go" },
+        { ...unsupportedInstance, id: "c", channel: "kimi/coding" },
+      ],
+      fakeStorage,
+    );
+    engine.subscribe(() => {});
+    engine.start();
+    // 三个通道都在 CHANNEL_MAPPINGS → 全部进调度器(不产 unsupported 卡)
+    expect(engine.snapshots).toHaveLength(0);
+    expect(engine.stats["a"]?.state).toBeTruthy();
+    expect(engine.stats["b"]?.state).toBeTruthy();
+    expect(engine.stats["c"]?.state).toBeTruthy();
     engine.stop();
   });
 });

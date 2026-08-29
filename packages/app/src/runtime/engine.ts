@@ -9,15 +9,14 @@
  * 关键纪律:
  * - 凭据 key 只活请求构造瞬间(D-029): resolveCredential 从 OS 钥匙串读取,
  *   返回后立即被 adapter 拼进 header, 不进 UI 状态/日志。
- * - 通道映射零代码(§5.1): GenericHttpAdapter + DEEPSEEK_BALANCE_MAPPING。
+ * - 通道映射零代码(§5.1): GenericHttpAdapter + CHANNEL_MAPPINGS(与 PRESET_CHANNELS 配套)。
  */
 import { GenericHttpAdapter, type AdapterContext } from "@token-wallet/core/generic-http";
-import { DEEPSEEK_BALANCE, DEEPSEEK_BALANCE_MAPPING } from "@token-wallet/core/channels/deepseek";
+import { CHANNEL_MAPPINGS, getPresetChannel } from "@token-wallet/core/channels";
 import { Scheduler } from "@token-wallet/core/scheduler";
 import { dailyRateFromHistory } from "@token-wallet/core/rate";
 import type { ProviderSnapshot } from "../types";
 import type { InstanceConfig, CredentialRef } from "../instances/schema";
-import { findChannel } from "../channels/mockChannels";
 import { KEYRING_SERVICE, getSharedKeyring } from "../instances/store";
 import { getSharedStorage, type SnapshotStorage } from "./storage";
 import { httpGetJson } from "../ipc";
@@ -81,7 +80,7 @@ async function resolveCredential(ref: unknown): Promise<string> {
  * 长期方案按注册表收敛(P2 多通道适配器), 本卡只保证"不静默"。
  */
 export function unsupportedSnapshot(inst: InstanceConfig): ProviderSnapshot {
-  const ch = findChannel(inst.channel);
+  const ch = getPresetChannel(inst.channel);
   return {
     provider_id: inst.id,
     display_name: inst.name,
@@ -119,19 +118,17 @@ export class RuntimeEngine {
   /** 注册实例到调度器; 未接入的通道产出显式 unsupported 快照(P0-8, 不静默) */
   private buildInstances(): void {
     for (const inst of this.instances) {
-      // 通道 → 声明式映射(零代码 §5.1); 其他通道本卡不接(等待各自适配器)
-      let adapter: GenericHttpAdapter | null = null;
-      let descriptor = DEEPSEEK_BALANCE;
-      if (inst.channel === "deepseek/balance") {
-        adapter = new GenericHttpAdapter(DEEPSEEK_BALANCE_MAPPING, runtimeFetch);
-      } else {
+      // 通道 → 声明式映射(零代码 §5.1, CHANNEL_MAPPINGS 与 PRESET_CHANNELS 配套, D-036)
+      const mapping = CHANNEL_MAPPINGS[inst.channel];
+      const descriptor = getPresetChannel(inst.channel);
+      if (!mapping || !descriptor) {
         // P0-8: 显式"暂未接入"卡, 不进调度器(无适配器可轮询)
         // eslint-disable-next-line no-console
         console.warn(`[engine] 通道 ${inst.channel} 暂无真实适配器, 显式 unsupported 卡`);
         this.latest.set(inst.id, unsupportedSnapshot(inst));
         continue;
       }
-      if (!adapter) continue;
+      const adapter = new GenericHttpAdapter(mapping, runtimeFetch);
 
       const coreInstance = {
         id: inst.id,

@@ -6,7 +6,7 @@
  * - 表单校验与实例校验复用同一 zod schema(§5.0): 名称即时唯一校验
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { MockChannelDescriptor } from "../channels/mockChannels";
+import type { ChannelDescriptor } from "@token-wallet/core/channels";
 import { defaultInstanceName } from "../instances/schema";
 import { existingNames, getSharedKeyring, saveInstance } from "../instances/store";
 import { testConnection } from "../connection/testConnection";
@@ -14,7 +14,7 @@ import type { TestConnectionResult } from "../connection/testConnection";
 import type { ProviderSnapshot } from "../types";
 
 interface Props {
-  channel: MockChannelDescriptor;
+  channel: ChannelDescriptor;
   /* 保存已完成(实例已入 store + 钥匙串) */
   onSaved?: () => void;
   onBack?: () => void;
