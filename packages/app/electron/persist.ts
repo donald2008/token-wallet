@@ -23,12 +23,14 @@ export interface SettingsFile {
   consentAgreed: boolean;
   /** 同意时间(unix 秒) */
   consentAt: number | null;
+  /** 开机自启开关(D-024, 默认关); 记录用户期望, 查询时以 OS 实际为准校正 */
+  autostart?: boolean;
   /** 前瞻字段(theme/轮询等)透传位 */
   [extra: string]: unknown;
 }
 
 export function defaultSettings(): SettingsFile {
-  return { version: 1, consentAgreed: false, consentAt: null };
+  return { version: 1, consentAgreed: false, consentAt: null, autostart: false };
 }
 
 /**
@@ -97,4 +99,37 @@ export function recordConsent(filePath: string, now: number): void {
     existing = null; // 不存在/读失败 → 首开态
   }
   atomicWrite(filePath, consentSettingsJson(existing, now));
+}
+
+/**
+ * autostart 落盘的 read-modify-write 核心(纯函数, 可单测):
+ * 与 consent 同模式 — 只改 autostart 字段, 既有/前瞻字段(consent/theme/轮询等)
+ * JSON 合并透传(OCP), 杜绝"开一次自启把 consent 清回默认"。
+ * 损坏时保守回退仅含 autostart 的合法对象重写(不抛)。
+ */
+export function autostartSettingsJson(existing: string | null, enabled: boolean): string {
+  let base: Record<string, unknown> = {};
+  if (existing) {
+    try {
+      const parsed: unknown = JSON.parse(existing);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        base = parsed as Record<string, unknown>;
+      }
+    } catch {
+      base = {}; // 损坏 → 仅保留本次字段
+    }
+  }
+  const merged = { ...base, version: 1, autostart: enabled };
+  return JSON.stringify(merged, null, 2);
+}
+
+/** set_launch_at_login 全链路: RMW + 原子写 */
+export function recordAutostart(filePath: string, enabled: boolean): void {
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(filePath, "utf8");
+  } catch {
+    existing = null; // 不存在/读失败 → 首开态
+  }
+  atomicWrite(filePath, autostartSettingsJson(existing, enabled));
 }
