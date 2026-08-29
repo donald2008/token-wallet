@@ -311,7 +311,6 @@ function registerIpc(): void {
     const { dataDir } = storagePaths();
     deleteSecret(safeStorageAdapter, dataDir, String(payload?.service), String(payload?.key));
   });
-<<<<<<< HEAD
   // ---- E2 http(D-029): GET + headers + timeout, 返回 {status, body 已脱敏};
   // 非 2xx 不抛(引擎层分类, 换壳前后语义一致), 网络错/超时抛(消息脱敏) ----
   ipcMain.handle("http_get_json", (_event, payload: Record<string, unknown> | undefined) =>
