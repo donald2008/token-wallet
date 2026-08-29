@@ -9,7 +9,7 @@
  *   + settings.json consent RMW, 均走 persist.ts 原子写
  * - E2 keyring(D-029): keyring_get/set|delete 接真 — safeStorage OS 级加密,
  *   secret 落 `<dataDir>/secrets/*.blob`(0700/0600, 见 keyring.ts); 不可用显式报错
- * - E2 sqlite(D-020): sqlite_batch/exec/query 接真 — better-sqlite3(同步 API),
+ * - E2 sqlite(D-020): sqlite_batch/exec/query 接真 — node:sqlite 同步 API(D-034),
  *   SCHEMA_SQL 单源 = core `storage/schema-sql`(禁第二份 DDL), db 落 dataDir,
  *   连接按 dataDir 缓存单例, will-quit 统一 close(见 sqlite.ts)
  * - 显式降级: E2 并行卡/E3 才接真的通道, 返回显式错误,
@@ -256,9 +256,9 @@ function registerIpc(): void {
     mainWindow?.hide(); // 关闭 = 隐藏到托盘(D-003)
   });
 
-  // ---- E2: sqlite 三通道接真(D-020; better-sqlite3 同步 API) ----
+  // ---- E2: sqlite 三通道接真(D-020; node:sqlite 同步 API, D-034) ----
   // SCHEMA_SQL 单源 = core(storage.ts renderer 侧同源 import, 主进程建表同文);
-  // db 落 dataDir(D-019 数据侧), 目录不存在自动建; better-sqlite3 抛错原样上抛,
+  // db 落 dataDir(D-019 数据侧), 目录不存在自动建; node:sqlite 抛错原样上抛,
   // ipcMain.handle 转 IPC reject → 面板错误卡(E1 显式错误约定)。
   ipcMain.handle("sqlite_batch", (_event, payload: { sql?: string }) => {
     batch(storagePaths().dataDir, String(payload?.sql ?? ""));

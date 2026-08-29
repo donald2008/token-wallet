@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@token-wallet/core": "workspace:*",
-    "better-sqlite3": "^12",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "yaml": "^2.8.0",
@@ -23,7 +22,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.54.0",
-    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
