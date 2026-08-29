@@ -1,5 +1,5 @@
 /**
- * E2 SQLite 服务(主进程侧, D-020/D-033) — better-sqlite3 同步 API 接真:
+ * E2 SQLite 服务(主进程侧, D-020/D-033) — node:sqlite 同步 API 接真(D-034):
  *
  * - SCHEMA_SQL 单一来源 = @token-wallet/core 的 `storage/schema-sql`(D-020 等价):
  *   本文件 import core 导出的 SCHEMA_SQL 执行建表, 严禁复制第二份 DDL。
@@ -15,10 +15,10 @@
  *   - sqlite_batch(sql): 多语句 exec(建表), 无返回
  *   - sqlite_exec(sql, params): INSERT/UPDATE/DELETE → run().changes
  *   - sqlite_query(sql, params): SELECT → all(), 行=数组(列序), 值原样
- * - 错误结构化: better-sqlite3 抛错原样上抛, ipcMain.handle 转结构化
- *   reject(沿 E1 约定: 面板出错误卡, 不静默空返回)。
+ * - 错误结构化: node:sqlite 抛错原样上抛(Error, code=ERR_SQLITE_ERROR),
+ *   ipcMain.handle 转结构化 reject(沿 E1 约定: 面板出错误卡, 不静默空返回)。
  */
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -28,7 +28,7 @@ export interface SqliteRows {
   rows: unknown[][];
 }
 
-const openDbs = new Map<string, Database.Database>();
+const openDbs = new Map<string, DatabaseSync>();
 
 /** db 文件路径派生(零硬编码盘符, 由调用方传 storagePaths().dataDir) */
 export function dbFilePath(dataDir: string): string {
@@ -36,14 +36,14 @@ export function dbFilePath(dataDir: string): string {
 }
 
 /** 打开(或复用)dataDir 下的连接: 建目录 → 开库 → WAL → SCHEMA_SQL 建表(幂等) */
-export function openDb(dataDir: string): Database.Database {
+export function openDb(dataDir: string): DatabaseSync {
   const existing = openDbs.get(dataDir);
   if (existing) return existing;
 
   fs.mkdirSync(dataDir, { recursive: true });
-  const db = new Database(dbFilePath(dataDir));
-  db.pragma("journal_mode = WAL");
-  db.pragma("synchronous = NORMAL");
+  const db = new DatabaseSync(dbFilePath(dataDir));
+  db.exec("PRAGMA journal_mode = WAL;");
+  db.exec("PRAGMA synchronous = NORMAL;");
   // SCHEMA_SQL 单源执行(D-020): CREATE TABLE/INDEX IF NOT EXISTS, 幂等可重入
   db.exec(SCHEMA_SQL);
 
@@ -58,16 +58,17 @@ export function batch(dataDir: string, sql: string): void {
 
 /** sqlite_exec: INSERT/UPDATE/DELETE → 影响行数 */
 export function exec(dataDir: string, sql: string, params: unknown[]): number {
-  return openDb(dataDir).prepare(sql).run(...(params as unknown[])).changes;
+  // node:sqlite run() 返回 {changes: number|bigint, lastInsertRowid}, IPC 侧统一 number
+  return Number(openDb(dataDir).prepare(sql).run(...(params as never[])).changes);
 }
 
 /** sqlite_query: SELECT → 行数组(每行按列序的数组, 与 ipc.ts 契约一致) */
 export function query(dataDir: string, sql: string, params: unknown[]): unknown[][] {
   const stmt = openDb(dataDir).prepare(sql);
-  // better-sqlite3 raw() 返回按列序的数组行(而非对象行), 对齐 renderer 解析
-  return (stmt.raw().all(...(params as unknown[])) as unknown[][]).map((row) =>
-    row.map((v) => (v instanceof Buffer ? new Uint8Array(v) : v)),
-  );
+  // node:sqlite setReturnArrays(true) 返回按列序的数组行(而非对象行), 对齐 renderer 解析;
+  // 重复列名不丢列(Object.values 方案会丢, 已否决)。BLOB 本就返回 Uint8Array, 无需转换。
+  stmt.setReturnArrays(true);
+  return stmt.all(...(params as never[])) as unknown as unknown[][];
 }
 
 /** app 退出时关闭全部连接(will-quit); 防御式: 失败不阻断退出流程 */

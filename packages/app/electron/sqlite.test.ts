@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 
 import { SCHEMA_SQL } from "@token-wallet/core/storage/schema-sql";
 import { _resetForTests, batch, closeAll, dbFilePath, exec, openDb, query } from "./sqlite";
@@ -29,8 +29,8 @@ afterEach(() => {
 });
 
 /** 拿 core SCHEMA_SQL 建的"权威内存库", 作为单源比对的基准 */
-function referenceDb(): Database.Database {
-  const db = new Database(":memory:");
+function referenceDb(): DatabaseSync {
+  const db = new DatabaseSync(":memory:");
   db.exec(SCHEMA_SQL);
   return db;
 }
@@ -38,10 +38,10 @@ function referenceDb(): Database.Database {
 describe("SCHEMA_SQL 单源(D-020)", () => {
   it("应用库表结构与 core 导出 SCHEMA_SQL 建出的基准完全一致", () => {
     openDb(dataDir); // 用 SCHEMA_SQL 建表
-    const dbFile = new Database(dbFilePath(dataDir)); // 只读比对, 不再执行任何 DDL
+    const dbFile = new DatabaseSync(dbFilePath(dataDir)); // 只读比对, 不再执行任何 DDL
 
     const ref = referenceDb();
-    const introspect = (d: Database.Database) => {
+    const introspect = (d: DatabaseSync) => {
       const tables = d
         .prepare(
           "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
@@ -69,7 +69,7 @@ describe("SCHEMA_SQL 单源(D-020)", () => {
   });
 
   it("SCHEMA_SQL 文本可直接建表且重复执行幂等", () => {
-    const db = new Database(":memory:");
+    const db = new DatabaseSync(":memory:");
     db.exec(SCHEMA_SQL);
     expect(() => db.exec(SCHEMA_SQL)).not.toThrow(); // IF NOT EXISTS 幂等
     db.close();
@@ -150,7 +150,7 @@ describe("生命周期", () => {
     );
     closeAll();
     // 重开(模拟 app 二次启动): 数据仍在
-    const db = new Database(dbFilePath(dataDir), { readonly: true });
+    const db = new DatabaseSync(dbFilePath(dataDir), { readOnly: true });
     const row = db.prepare("SELECT raw_json FROM snapshots WHERE fetched_at = 42").get();
     expect(row).toEqual({ raw_json: '{"v":1}' });
     db.close();
