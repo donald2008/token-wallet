@@ -335,6 +335,41 @@ body {
 }
 
 /* ---- 空态 / 加载态 / 首开 ---- */
+/* 持久化写盘失败错误条(W3): 顶部常驻可关闭, warn 双 token(D-016 语义不变) */
+.persist-error-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 8px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--warn-fg);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.persist-error-text {
+  flex: 1;
+  word-break: break-all;
+}
+
+.persist-error-close {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 0 4px;
+}
+
+.persist-error-close:hover {
+  color: var(--fg);
+}
+
 .placeholder {
   flex: 1;
   display: flex;

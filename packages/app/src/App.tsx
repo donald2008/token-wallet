@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Bootstrap } from "./types";
 import { globalHealth, sortByHealth, tooltipSummary } from "./health";
-import { getBootstrap, persistConsent, updateTrayStatus } from "./ipc";
+import { getBootstrap, getStoragePaths, persistConsent, updateTrayStatus } from "./ipc";
 import { scenarioProviders, type ScenarioId } from "./mockData";
 import { useTheme, type ThemeMode } from "./theme";
 import { TitleBar } from "./components/TitleBar";
 import { ProviderCard } from "./components/ProviderCard";
-import { ConsentPage, ConfigErrorState, EmptyState, LoadingState } from "./components/States";
+import { ConsentPage, ConfigErrorState, EmptyState, LoadingState, PersistErrorBar } from "./components/States";
 import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { LocalAgentSection } from "./components/LocalAgentSection";
-import { loadPersistedInstances, useInstances } from "./instances/store";
+import { loadPersistedInstances, useInstances, usePersistError } from "./instances/store";
 import { RuntimeEngine, type EngineOutput } from "./runtime/engine";
 
 const THEME_CYCLE: ThemeMode[] = ["system", "light", "dark"];
@@ -53,6 +53,11 @@ export default function App() {
   const [consented, setConsented] = useState(false);
   // instances.yaml 损坏/校验失败 → fail-fast 错误页(§5.0.1, 不静默丢配置)
   const [configError, setConfigError] = useState<string | null>(null);
+  // O1: 配置错误页显示 instances.yaml 完整路径(get_storage_paths 运行时解析, 不硬编码)
+  const [instancesPath, setInstancesPath] = useState<string | null>(null);
+  // W3: 持久化写盘失败 → 顶部错误条(可关闭; 新错误出现时重新弹出)
+  const persistError = usePersistError();
+  const [dismissedPersistError, setDismissedPersistError] = useState<string | null>(null);
   const [scenario, setScenario] = useState<ScenarioId>("mixed");
   const [refreshing, setRefreshing] = useState(false);
   // 页内导航仅留给首开向导(D-021 一次性引导); 设置入口 = 模态弹窗(P0-6)
@@ -69,8 +74,16 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [b, instErr] = await Promise.all([getBootstrap(), loadPersistedInstances()]);
+      const [b, instErr, paths] = await Promise.all([
+        getBootstrap(),
+        loadPersistedInstances(),
+        getStoragePaths(),
+      ]);
       if (!alive) return;
+      // O1: configDir + 平台分隔符拼 instances.yaml 完整路径, 供配置错误页展示
+      setInstancesPath(
+        `${paths.configDir}${paths.configDir.includes("\\") ? "\\" : "/"}instances.yaml`,
+      );
       if (instErr) {
         // fail-fast: 配置损坏时停在错误页, 不用空配置覆盖/继续
         setConfigError(instErr);
@@ -161,7 +174,7 @@ export default function App() {
   if (configError) {
     return (
       <div className="panel">
-        <ConfigErrorState error={configError} />
+        <ConfigErrorState error={configError} instancesPath={instancesPath ?? undefined} />
       </div>
     );
   }
@@ -191,6 +204,10 @@ export default function App() {
 
   return (
     <div className="panel">
+      {persistError && persistError !== dismissedPersistError && (
+        // W3: 写盘失败顶部错误条(内存态仍可用, 可关闭; 出现新错误时重新弹出)
+        <PersistErrorBar error={persistError} onDismiss={() => setDismissedPersistError(persistError)} />
+      )}
       <TitleBar
         health={health}
         tooltip={tooltip}

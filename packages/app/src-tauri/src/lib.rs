@@ -280,19 +280,35 @@ fn instances_load(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
         .map_err(|e| e.to_string())
 }
 
-/// 写 instances.yaml(入参已由前端 zod 校验): 原子写(tmp+rename), 防半写损坏。
+/// 原子写(tmp + sync_all + rename 覆盖替换), instances.yaml / settings.json 共用。
+///
+/// rename 覆盖语义有 Rust 官方文档背书:
+/// <https://doc.rust-lang.org/std/fs/fn.rename.html> — "replacing the original file
+/// if `to` already exists"(Windows 对应 MoveFileExW, Win10 1607+ 行为与 Unix 一致)。
+/// ⚠️ 禁止改回"先 remove_file 再 rename": remove 成功、rename 前崩溃/断电 →
+/// 配置文件彻底消失 → 载入走"文件不存在"分支被当首开零配置**静默吞掉**,
+/// 比它想防的半写损坏(YAML 解析失败 fail-fast)后果严重得多。
+fn atomic_write(path: &std::path::Path, contents: &[u8]) -> Result<(), String> {
+    use std::io::Write as _;
+    let mut tmp_os = path.as_os_str().to_os_string();
+    tmp_os.push(".tmp");
+    let tmp = std::path::PathBuf::from(tmp_os);
+    let write_err = |e: std::io::Error| format!("写入 {} 失败: {e}", path.display());
+    let mut f = std::fs::File::create(&tmp).map_err(write_err)?;
+    f.write_all(contents).map_err(write_err)?;
+    // 写完先 flush 到盘再 rename, 保证断电时 tmp 内容完整(真原子替换)
+    f.sync_all().map_err(write_err)?;
+    drop(f);
+    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+}
+
+/// 写 instances.yaml(入参已由前端 zod 校验): 原子写(tmp+sync+rename 覆盖), 防半写损坏。
 /// 落盘的只有 CredentialRef 引用, secret 值只进 OS 钥匙串(D-029 不变)。
 #[tauri::command]
 fn instances_save(app: AppHandle, file: serde_json::Value) -> Result<(), String> {
     let path = instances_file_path(&app)?;
     let yaml = serde_yaml::to_string(&file).map_err(|e| e.to_string())?;
-    let tmp = path.with_extension("yaml.tmp");
-    std::fs::write(&tmp, yaml).map_err(|e| format!("写入 instances.yaml 失败: {e}"))?;
-    // Windows rename 不覆盖既有文件: 先删再改名
-    if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-    }
-    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
+    atomic_write(&path, yaml.as_bytes())
 }
 
 // ---- 首开判定(§10/D-021): consent 落 configDir/settings.json(配置侧 D-019) ----
@@ -305,6 +321,9 @@ struct SettingsFile {
     consent_agreed: bool,
     /// 同意时间(unix 秒)
     consent_at: Option<u64>,
+    /// 前瞻字段直通透传(OCP): 主题/轮询等并入后, 旧版本 read-modify-write 也不丢它们
+    #[serde(flatten)]
+    extra: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 fn settings_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -324,7 +343,21 @@ fn read_settings(app: &AppHandle) -> SettingsFile {
     serde_json::from_str(&text).unwrap_or_default()
 }
 
-/// 用户同意隐私声明 → 落盘(§10): 之后 get_bootstrap 返回 first_run=false
+/// consent 落盘的 read-modify-write 核心(纯函数, 可单测):
+/// 只改 consent 两字段, 既有/前瞻字段(theme/轮询等)原样保留(OCP),
+/// 杜绝"同意一次把其他设置清回默认"。损坏时保守回退首开态(重弹 consent, 不崩应用)。
+fn consent_settings_json(existing: Option<&str>, now: u64) -> Result<String, String> {
+    let mut settings: SettingsFile = existing
+        .and_then(|t| serde_json::from_str(t).ok())
+        .unwrap_or_default();
+    settings.version = 1;
+    settings.consent_agreed = true;
+    settings.consent_at = Some(now);
+    serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())
+}
+
+/// 用户同意隐私声明 → 落盘(§10): 之后 get_bootstrap 返回 first_run=false。
+/// read-modify-write(OCP): 保留 settings.json 其余字段, 走 tmp+sync+rename 原子写。
 #[tauri::command]
 fn record_consent(app: AppHandle) -> Result<(), String> {
     let path = settings_file_path(&app)?;
@@ -332,13 +365,9 @@ fn record_consent(app: AppHandle) -> Result<(), String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let settings = SettingsFile {
-        version: 1,
-        consent_agreed: true,
-        consent_at: Some(now),
-    };
-    let text = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
-    std::fs::write(&path, text).map_err(|e| format!("写入 settings.json 失败: {e}"))
+    let existing = std::fs::read_to_string(&path).ok(); // 不存在/读失败 → 首开态
+    let text = consent_settings_json(existing.as_deref(), now)?;
+    atomic_write(&path, text.as_bytes())
 }
 
 #[tauri::command]
@@ -456,4 +485,51 @@ pub fn run() {
     builder
         .run(tauri::generate_context!())
         .expect("error while running token-wallet");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// W2: record_consent 是 read-modify-write —— settings.json 里既有/前瞻字段
+    /// (theme/轮询等后续并入)在同意操作后必须原样保留, 不被清回默认。
+    #[test]
+    fn consent_read_modify_write_preserves_other_fields() {
+        let existing = r#"{"version":1,"consentAgreed":false,"theme":"dark","pollInterval":"5m"}"#;
+        let out = consent_settings_json(Some(existing), 1_700_000_000).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["consentAgreed"], true);
+        assert_eq!(v["consentAt"], 1_700_000_000u64);
+        // 前瞻字段不丢(serde flatten 直通透传)
+        assert_eq!(v["theme"], "dark");
+        assert_eq!(v["pollInterval"], "5m");
+        // 往返再写一次仍不丢(幂等)
+        let out2 = consent_settings_json(Some(&out), 1_700_000_100).unwrap();
+        let v2: serde_json::Value = serde_json::from_str(&out2).unwrap();
+        assert_eq!(v2["theme"], "dark");
+        assert_eq!(v2["consentAt"], 1_700_000_100u64);
+    }
+
+    /// settings 损坏 → 保守回退首开态重写, 不崩应用
+    #[test]
+    fn consent_corrupt_settings_falls_back_to_fresh() {
+        let out = consent_settings_json(Some("{ not json"), 42).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["consentAgreed"], true);
+        assert_eq!(v["consentAt"], 42u64);
+    }
+
+    /// W1: atomic_write 真原子替换 —— 直接 rename 覆盖既有文件(无 remove_file),
+    /// 覆盖后内容完整, tmp 不残留。
+    #[test]
+    fn atomic_write_overwrites_existing_and_cleans_tmp() {
+        let dir = std::env::temp_dir().join(format!("tw-atomic-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("instances.yaml");
+        atomic_write(&path, b"v1").unwrap();
+        atomic_write(&path, b"v2-longer-content").unwrap(); // 覆盖既有文件
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "v2-longer-content");
+        assert!(!dir.join("instances.yaml.tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

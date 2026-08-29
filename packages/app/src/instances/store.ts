@@ -56,6 +56,28 @@ export class TauriKeyring implements KeyringBackend {
 /** 增/删后的持久化钩子(P0-7): 由 getSharedStore 默认挂 instances.yaml 写回 */
 export type InstancesPersister = (instances: InstanceConfig[]) => void;
 
+// ---- W3: 写盘失败用户可见(不静默, 与 P0-8 同原则) ----
+// 内存态不回滚是有意设计(仍可用), 但持久化错误必须暴露给 UI 渲染错误条。
+let lastPersistError: string | null = null;
+const persistErrorListeners = new Set<() => void>();
+
+/** 最近一次持久化(写盘)错误; null = 无错误/已恢复 */
+export function getLastPersistError(): string | null {
+  return lastPersistError;
+}
+
+/** 订阅持久化错误变化(置起/清除都会通知) */
+export function subscribePersistError(fn: () => void): () => void {
+  persistErrorListeners.add(fn);
+  return () => persistErrorListeners.delete(fn);
+}
+
+function setPersistError(message: string | null): void {
+  if (lastPersistError === message) return;
+  lastPersistError = message;
+  for (const fn of persistErrorListeners) fn();
+}
+
 /** 订阅型实例存储(内存为主, P0-7 起经 persister 写回 instances.yaml)。增删 → notify → 组件重渲染。 */
 export class MemoryInstanceStore {
   private items: InstanceConfig[] = [];
@@ -126,12 +148,17 @@ export function getSharedStore(): MemoryInstanceStore {
   if (!sharedStoreInstance) {
     sharedStoreInstance = new MemoryInstanceStore();
     // 默认持久化: 增/删 → zod 校验 → Rust 转 YAML 原子落盘(configDir, D-019/D-032)。
-    // 写盘失败不阻塞 UI(内存态仍在), 记 console 由日志出口脱敏(不含凭据)。
+    // 写盘失败不阻塞 UI(内存态仍在, 不回滚是有意设计), 但错误状态置起让 App 顶部
+    // 错误条可见(W3: 不静默); 后续写盘成功自动清除。console 记录由日志出口脱敏(不含凭据)。
     sharedStoreInstance.attachPersister((instances) => {
-      void (async () => instancesSave(buildInstancesFile(instances)))().catch((err: unknown) => {
-        // eslint-disable-next-line no-console
-        console.error("[instances] 写回 instances.yaml 失败:", err instanceof Error ? err.message : err);
-      });
+      void (async () => instancesSave(buildInstancesFile(instances)))()
+        .then(() => setPersistError(null))
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          // eslint-disable-next-line no-console
+          console.error("[instances] 写回 instances.yaml 失败:", msg);
+          setPersistError(msg);
+        });
     });
   }
   return sharedStoreInstance;
@@ -189,6 +216,13 @@ export function useInstances(): InstanceConfig[] {
     });
   }, [store]);
   return store.list();
+}
+
+/** React 绑定: 最近一次持久化错误(W3 错误条); 写盘恢复后回到 null */
+export function usePersistError(): string | null {
+  const [, setTick] = useState(0);
+  useEffect(() => subscribePersistError(() => setTick((t: number) => t + 1)), []);
+  return getLastPersistError();
 }
 
 /** 当前实例名集合(供表单即时唯一校验 D-026) */

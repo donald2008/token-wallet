@@ -28,6 +28,8 @@ import {
   buildInstancesFile,
   loadPersistedInstances,
   getSharedStore,
+  getLastPersistError,
+  subscribePersistError,
 } from "./store";
 import { parseInstances, type InstanceConfig } from "./schema";
 
@@ -135,5 +137,26 @@ describe("instances.yaml 持久化(P0-7)", () => {
     expect(await keyring.get(KEYRING_SERVICE, "ds-1:api_key")).toBeNull();
     expect(seen).toHaveLength(1);
     expect(seen[0]).toEqual([]);
+  });
+
+  it("写盘失败: 错误状态置起并可被订阅读到(W3); 恢复后自动清除", async () => {
+    const seen: Array<string | null> = [];
+    const unsub = subscribePersistError(() => seen.push(getLastPersistError()));
+    try {
+      getSharedStore().hydrate([]);
+      // zod 校验失败(重复名) → 写盘被拒 → 错误状态置起, 内存态不回滚
+      saveMock.mockRejectedValueOnce(new Error("磁盘已满"));
+      getSharedStore().add(inst("w3-1", "写盘失败"));
+      await vi.waitFor(() => expect(getLastPersistError()).toMatch(/磁盘已满/));
+      expect(seen.length).toBeGreaterThan(0);
+      expect(getSharedStore().list().map((i) => i.id)).toContain("w3-1"); // 内存态保留
+      // 后续写盘成功 → 错误清除, 订阅者收到 null
+      getSharedStore().add(inst("w3-2", "写盘恢复"));
+      await vi.waitFor(() => expect(getLastPersistError()).toBeNull());
+      expect(seen[seen.length - 1]).toBeNull();
+    } finally {
+      unsub();
+      getSharedStore().hydrate([]); // 不污染其他用例
+    }
   });
 });
