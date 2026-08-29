@@ -316,24 +316,6 @@ function registerIpc(): void {
   ipcMain.handle("http_get_json", (_event, payload: Record<string, unknown> | undefined) =>
     hostHttpGetJson(payload ?? {}),
   );
-
-  // ---- E2: sqlite 三通道接真(D-020; better-sqlite3 同步 API) ----
-  // SCHEMA_SQL 单源 = core(storage.ts renderer 侧同源 import, 主进程建表同文);
-  // db 落 dataDir(D-019 数据侧), 目录不存在自动建; better-sqlite3 抛错原样上抛,
-  // ipcMain.handle 转 IPC reject → 面板错误卡(E1 显式错误约定)。
-  ipcMain.handle("sqlite_batch", (_event, payload: { sql?: string }) => {
-    batch(storagePaths().dataDir, String(payload?.sql ?? ""));
-  });
-  ipcMain.handle(
-    "sqlite_exec",
-    (_event, payload: { sql?: string; params?: unknown[] }) =>
-      exec(storagePaths().dataDir, String(payload?.sql ?? ""), payload?.params ?? []),
-  );
-  ipcMain.handle(
-    "sqlite_query",
-    (_event, payload: { sql?: string; params?: unknown[] }) =>
-      query(storagePaths().dataDir, String(payload?.sql ?? ""), payload?.params ?? []),
-  );
 }
 
 // ---------------- 生命周期 ----------------
