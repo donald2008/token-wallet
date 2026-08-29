@@ -39,6 +39,19 @@ export function LoadingState() {
   );
 }
 
+/**
+ * 采集进行中(P0-8): 已配置实例但首个快照未到(引擎启动中/采集中)时显示。
+ * 与 EmptyState 严格区分 —— 用户已添加过 Provider, 再显示"添加 Provider"是误导。
+ */
+export function CollectingState() {
+  return (
+    <div className="placeholder" data-testid="collecting-state" aria-busy="true">
+      <h2>数据采集中</h2>
+      <p>已配置的 Provider 正在采集额度数据, 首个快照到达后即显示。</p>
+    </div>
+  );
+}
+
 /** 配置损坏 fail-fast(§5.0.1/P0-7): instances.yaml 解析/校验失败时停在此页, 不静默丢配置 */
 export function ConfigErrorState({
   error,

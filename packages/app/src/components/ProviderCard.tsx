@@ -14,7 +14,7 @@ const BRAND_COLORS: Record<string, string> = {
 const STATUS_TEXT: Record<string, string> = {
   stale: "数据过期(超 2 个轮询周期未更新)",
   auth_expired: "登录态过期, 请重新授权",
-  unsupported: "暂不支持, 欢迎 PR",
+  unsupported: "该通道暂未接入",
   error: "采集失败",
 };
 

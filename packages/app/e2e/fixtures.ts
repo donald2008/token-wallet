@@ -104,15 +104,22 @@ const ipcMocks: Record<string, IpcHandler> = {
     return null;
   },
   http_get_json: (args) => {
+    // P0-8: 可注入延迟(localStorage token-wallet.mock.httpdelayms) → 测"采集进行中"空态语义
+    let delayMs = 0;
+    try {
+      delayMs = Number(localStorage.getItem("token-wallet.mock.httpdelayms") ?? 0) || 0;
+    } catch {
+      /* ignore */
+    }
+    let result: { status: number; body: string };
     // 401 路径(测试连接失败场景: "fail" 哨兵在 testConnection 已拦截, 这里兜底)
     const headers = (args?.headers ?? {}) as Record<string, string>;
     const auth = headers.Authorization ?? "";
     if (auth.includes("fail")) {
-      return { status: 401, body: "{}" };
-    }
-    if (String(args?.url ?? "").includes("api.deepseek.com/user/balance")) {
+      result = { status: 401, body: "{}" };
+    } else if (String(args?.url ?? "").includes("api.deepseek.com/user/balance")) {
       // ⚠️ golden 必须内联(handler.toString() 序列化, 自由变量会丢)
-      return {
+      result = {
         status: 200,
         body: JSON.stringify({
           is_available: true,
@@ -126,8 +133,13 @@ const ipcMocks: Record<string, IpcHandler> = {
           ],
         }),
       };
+    } else {
+      result = { status: 404, body: "{}" };
     }
-    return { status: 404, body: "{}" };
+    if (delayMs > 0) {
+      return new Promise((res) => setTimeout(() => res(result), delayMs));
+    }
+    return result;
   },
   sqlite_batch: () => null,
   sqlite_exec: (args) => {

@@ -17,6 +17,7 @@ import { Scheduler } from "@token-wallet/core/scheduler";
 import { dailyRateFromHistory } from "@token-wallet/core/rate";
 import type { ProviderSnapshot } from "../types";
 import type { InstanceConfig, CredentialRef } from "../instances/schema";
+import { findChannel } from "../channels/mockChannels";
 import { KEYRING_SERVICE, getSharedKeyring } from "../instances/store";
 import { getSharedStorage, type SnapshotStorage } from "./storage";
 import { httpGetJson } from "../ipc";
@@ -74,6 +75,24 @@ async function resolveCredential(ref: unknown): Promise<string> {
   throw new Error(`凭据源暂不支持: ${r.source}`);
 }
 
+/**
+ * P0-8: 未接入通道的显式快照 — 不允许静默跳过(无快照=面板永远空态的实锤 bug)。
+ * 面板据此渲染"该通道暂未接入"灰卡(status=unsupported, §2.1 整卡文字不显示假数据)。
+ * 长期方案按注册表收敛(P2 多通道适配器), 本卡只保证"不静默"。
+ */
+export function unsupportedSnapshot(inst: InstanceConfig): ProviderSnapshot {
+  const ch = findChannel(inst.channel);
+  return {
+    provider_id: inst.id,
+    display_name: inst.name,
+    plan_type: ch?.plan_type ?? "window",
+    fetched_at: Math.floor(Date.now() / 1000),
+    status: "unsupported",
+    metrics: [],
+    alerts: [{ level: "info", message: `通道 ${inst.channel} 暂未接入, 等待适配器(P2 多通道)` }],
+  };
+}
+
 /** 引擎输出: 面板订阅的最新快照 + 调度统计 */
 export interface EngineOutput {
   snapshots: ProviderSnapshot[];
@@ -97,7 +116,7 @@ export class RuntimeEngine {
     this.storage = storage;
   }
 
-  /** 注册实例到调度器; 未认领的通道(仅 deepseek/balance 本卡)跳过并告警 */
+  /** 注册实例到调度器; 未接入的通道产出显式 unsupported 快照(P0-8, 不静默) */
   private buildInstances(): void {
     for (const inst of this.instances) {
       // 通道 → 声明式映射(零代码 §5.1); 其他通道本卡不接(等待各自适配器)
@@ -106,8 +125,10 @@ export class RuntimeEngine {
       if (inst.channel === "deepseek/balance") {
         adapter = new GenericHttpAdapter(DEEPSEEK_BALANCE_MAPPING, runtimeFetch);
       } else {
+        // P0-8: 显式"暂未接入"卡, 不进调度器(无适配器可轮询)
         // eslint-disable-next-line no-console
-        console.warn(`[engine] 通道 ${inst.channel} 暂无真实适配器, 跳过`);
+        console.warn(`[engine] 通道 ${inst.channel} 暂无真实适配器, 显式 unsupported 卡`);
+        this.latest.set(inst.id, unsupportedSnapshot(inst));
         continue;
       }
       if (!adapter) continue;
@@ -184,6 +205,8 @@ export class RuntimeEngine {
     if (this.started) return;
     this.started = true;
     this.buildInstances();
+    // P0-8: unsupported 卡不进调度器, 立即广播一次(不等 hydrate/首轮采集)
+    this.emit();
     // 先恢复库内最新快照 → 启动即出数; 再启动调度(首次采集带抖动)
     // 附加一次立即同步(§3.1 手动刷新语义): 添加实例后面板马上出数, 不等 0~30s jitter
     void this.hydrate().then(() => {

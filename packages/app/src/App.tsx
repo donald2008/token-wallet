@@ -2,11 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Bootstrap } from "./types";
 import { globalHealth, sortByHealth, tooltipSummary } from "./health";
 import { getBootstrap, getStoragePaths, persistConsent, updateTrayStatus } from "./ipc";
-import { scenarioProviders, type ScenarioId } from "./mockData";
+import { selectPanelProviders } from "./panelProviders";
+import type { ScenarioId } from "./mockData";
 import { useTheme, type ThemeMode } from "./theme";
 import { TitleBar } from "./components/TitleBar";
 import { ProviderCard } from "./components/ProviderCard";
-import { ConsentPage, ConfigErrorState, EmptyState, LoadingState, PersistErrorBar } from "./components/States";
+import {
+  ConsentPage,
+  ConfigErrorState,
+  EmptyState,
+  LoadingState,
+  CollectingState,
+  PersistErrorBar,
+} from "./components/States";
 import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { LocalAgentSection } from "./components/LocalAgentSection";
@@ -102,15 +110,30 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 真实实例存在 → 引擎快照; 否则 dev 场景(仅 dev 渲染)
+  // 数据源裁决(P0-8): 真实实例 → 引擎快照; 零实例 → dev 场景预览(生产构建绝不走 mock,
+  // 直接 EmptyState —— DESIGN "不显示假数据"原则, scenarioProviders 门禁见 panelProviders.ts)
   const providers = useMemo(
-    () => (hasInstances ? output.snapshots : scenarioProviders(scenario)),
+    () =>
+      selectPanelProviders({
+        hasInstances,
+        snapshots: output.snapshots,
+        scenario,
+        isProd: import.meta.env.PROD,
+      }),
     [hasInstances, output.snapshots, scenario],
   );
+  // P0-8 空态语义: 已配置实例但快照未到(引擎启动中/采集中) → "数据采集中",
+  // 不再渲染 EmptyState"添加 Provider"(用户已添加过, 那是误导)
+  const collecting = hasInstances && output.snapshots.length === 0;
   const health = providers === null || providers.length === 0 ? "unknown" : globalHealth(providers);
   const tooltip = useMemo(
-    () => (providers === null ? "token-wallet — 加载中" : tooltipSummary(providers)),
-    [providers],
+    () =>
+      collecting
+        ? "token-wallet — 数据采集中"
+        : providers === null
+          ? "token-wallet — 加载中"
+          : tooltipSummary(providers),
+    [collecting, providers],
   );
 
   // 托盘联动: 全局最差状态 → 托盘色点 + tooltip(D-003)
@@ -221,6 +244,9 @@ export default function App() {
       />
       {providers === null ? (
         <LoadingState />
+      ) : collecting ? (
+        // P0-8: 已配置实例但快照未到 → "数据采集中", 不显示 EmptyState 误导
+        <CollectingState />
       ) : providers.length === 0 ? (
         <EmptyState onAdd={openAddProvider} />
       ) : (
