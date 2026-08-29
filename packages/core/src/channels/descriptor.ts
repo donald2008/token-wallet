@@ -46,6 +46,8 @@ export const ChannelDescriptorSchema = z
     /** 全路径, 必须等于 `${platform}/${product}` */
     channel: z.string().min(1),
     display_name: z.string().min(1),
+    /** 第二层产品展示名(通道树叶子, 默认实例名 "<平台>-<产品> #N" 用) */
+    product_display_name: z.string().min(1),
     platform_display_name: z.string().min(1),
     plan_type: PlanArchetypeSchema,
     adapter: AdapterKindSchema,

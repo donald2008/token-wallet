@@ -9,17 +9,21 @@
  * 能力边界(§5.1): 需要签名/多步请求/派生计算的通道走 ScriptedAdapter(留在 adapters.ts)。
  */
 import type { ChannelDescriptor } from "./channels/descriptor.js";
-import type { ProviderSnapshot } from "./schema.js";
+import type { ProviderSnapshot, MetricUnit } from "./schema.js";
 import {
   applyPipe,
   evalAssertion,
   evalJsonPathFirst,
+  MappingError,
   type PipeFilter,
 } from "./mapping/jsonpath.js";
 
-/** 单字段映射: JSONPath + 可选过滤器管道 */
+/** 单字段映射: JSONPath + 可选过滤器管道; 或常量值(与 path 二选一) */
 export interface FieldMapping {
-  path: string;
+  /** JSONPath, 与 const 二选一 */
+  path?: string;
+  /** 常量值(如 opencode 的 limit=100, JSONPath 取不到字面量), 与 path 二选一 */
+  const?: number;
   pipes?: PipeFilter[];
 }
 
@@ -27,7 +31,7 @@ export interface FieldMapping {
 export interface MetricMapping {
   key: string;
   kind: "balance" | "window" | "usage";
-  unit: "requests" | "credits" | "cny" | "tokens";
+  unit: MetricUnit;
   used: FieldMapping;
   limit?: FieldMapping;
   /** 窗口重置时间: JSONPath 取时间戳, 或 duration 秒数(加 fetched_at 推算) */
@@ -90,6 +94,13 @@ export interface AdapterContext {
   resolveCredential: ResolveCredential;
   /** 本次采集时间(unix 秒), 适配器填 fetched_at 用 */
   fetchedAt: number;
+}
+
+/** 求值一个字段映射: const 优先, 否则 JSONPath; 两者皆无 = 配置错误(不静默兜底) */
+function fieldValue(json: unknown, fm: FieldMapping): unknown {
+  if (fm.const !== undefined) return fm.const;
+  if (!fm.path) throw new MappingError("FieldMapping 必须提供 path 或 const");
+  return evalJsonPathFirst(json, fm.path);
 }
 
 /**
@@ -170,22 +181,22 @@ export class GenericHttpAdapter {
     }
 
     const metrics = this.mapping.metrics.map((mm) => {
-      const usedRaw = evalJsonPathFirst(json, mm.used.path);
+      const usedRaw = fieldValue(json, mm.used);
       const used = Number(applyPipe(usedRaw, mm.used.pipes ?? ["number"]));
-      const limitRaw = mm.limit ? evalJsonPathFirst(json, mm.limit.path) : undefined;
+      const limitRaw = mm.limit ? fieldValue(json, mm.limit) : undefined;
       const limit =
         limitRaw !== undefined
           ? Number(applyPipe(limitRaw, mm.limit!.pipes ?? ["number"]))
           : undefined;
       let reset_at: number | undefined;
       if (mm.reset_at) {
-        const raw = evalJsonPathFirst(json, mm.reset_at.path);
+        const raw = fieldValue(json, mm.reset_at);
         const n = Number(applyPipe(raw, mm.reset_at.pipes ?? ["number"]));
         reset_at = mm.reset_at.relative ? ctx.fetchedAt + n : n;
       }
       const optional = <T>(fm: FieldMapping | undefined): T | undefined => {
         if (!fm) return undefined;
-        const raw = evalJsonPathFirst(json, fm.path);
+        const raw = fieldValue(json, fm);
         if (raw === undefined) return undefined;
         return applyPipe(raw, fm.pipes ?? []) as T;
       };

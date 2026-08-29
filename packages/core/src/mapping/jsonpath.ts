@@ -31,9 +31,13 @@ export function evalJsonPathFirst(json: unknown, path: string): unknown {
   return evalJsonPath(json, path)[0];
 }
 
-// ---- 管道过滤器白名单(§5.1: number/string/round/duration) ----
+// ---- 管道过滤器白名单(§5.1: number/string/round/duration/iso_epoch) ----
 
-export type PipeFilter = "number" | "string" | "round" | "duration";
+export type PipeFilter = "number" | "string" | "round" | "duration" | "iso_epoch";
+
+/** ISO 8601(YYYY-MM-DDTHH:mm:ss[.fff…][Z|±HH[:]MM]) — 容忍任意毫秒小数精度与 Z/偏移时区 */
+const ISO_8601_RE =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}(?::?\d{2})?)?$/;
 
 const FILTERS: Record<PipeFilter, (v: unknown) => unknown> = {
   number: (v) => {
@@ -53,6 +57,23 @@ const FILTERS: Record<PipeFilter, (v: unknown) => unknown> = {
     const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(String(v));
     if (!m) throw new MappingError(`无法解析 duration: ${String(v)}`);
     return (Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0));
+  },
+  /** ISO 8601 字符串 → unix 秒(容忍毫秒小数与 Z/偏移时区); 数字输入直接过 */
+  iso_epoch: (v) => {
+    if (typeof v === "number") return Math.floor(v);
+    const m = ISO_8601_RE.exec(String(v));
+    if (!m) throw new MappingError(`无法解析 ISO 8601: ${String(v)}`);
+    const [, Y, Mo, D, H, Mi, S, frac, tz] = m;
+    const ms = frac ? Math.round(Number(`0.${frac}`) * 1000) : 0;
+    let offsetMin = 0;
+    if (tz && tz !== "Z") {
+      const sign = tz.startsWith("-") ? -1 : 1;
+      const hm = tz.slice(1).replace(":", "");
+      offsetMin = sign * (Number(hm.slice(0, 2)) * 60 + Number(hm.slice(2) || "0"));
+    }
+    return Math.floor(
+      Date.UTC(Number(Y), Number(Mo) - 1, Number(D), Number(H), Number(Mi) - offsetMin, Number(S), ms) / 1000,
+    );
   },
 };
 

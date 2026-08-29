@@ -25,7 +25,7 @@ export const MetricKindSchema = z.enum(["balance", "window", "usage"]);
 export type MetricKind = z.infer<typeof MetricKindSchema>;
 
 /** 计量单位 (§2.1) */
-export const MetricUnitSchema = z.enum(["requests", "credits", "cny", "tokens"]);
+export const MetricUnitSchema = z.enum(["requests", "credits", "cny", "tokens", "percent"]);
 export type MetricUnit = z.infer<typeof MetricUnitSchema>;
 
 /** 单条指标: 每窗口一条(window) / 余额一行(balance) / 时段用量(local) */

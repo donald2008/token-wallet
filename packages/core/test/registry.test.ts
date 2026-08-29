@@ -12,6 +12,7 @@ function makeDescriptor(overrides: Record<string, unknown> = {}) {
     product: "kimi-code",
     channel: "kimi/kimi-code",
     display_name: "Kimi Code",
+    product_display_name: "Coding",
     platform_display_name: "Kimi",
     plan_type: "window",
     adapter: "http",
@@ -94,8 +95,8 @@ describe("ChannelRegistry", () => {
     expect(reg.size).toBe(3);
   });
 
-  it("预置通道含 deepseek/balance 且参数含 secret api_key", () => {
-    expect(PRESET_CHANNELS).toHaveLength(1);
+  it("预置通道含 deepseek/balance + opencode/go + kimi/coding 且参数含 secret api_key", () => {
+    expect(PRESET_CHANNELS).toHaveLength(3);
     const d = DEEPSEEK_BALANCE;
     expect(d.channel).toBe("deepseek/balance");
     expect(d.plan_type).toBe("balance");
@@ -105,5 +106,23 @@ describe("ChannelRegistry", () => {
     expect(key?.required).toBe(true);
     // 预置描述符自身必须通过 schema 校验
     expect(ChannelDescriptorSchema.safeParse(d).success).toBe(true);
+  });
+
+  it("预置通道: opencode/go 与 kimi/coding 是 window 制, 描述符自身通过 schema", () => {
+    const opencode = PRESET_CHANNELS.find((c) => c.channel === "opencode/go")!;
+    const kimi = PRESET_CHANNELS.find((c) => c.channel === "kimi/coding")!;
+    expect(opencode.plan_type).toBe("window");
+    expect(opencode.adapter).toBe("http");
+    expect(opencode.platform_display_name).toBe("opencode");
+    expect(opencode.product_display_name).toBe("Go Coding");
+    expect(kimi.plan_type).toBe("window");
+    expect(kimi.platform_display_name).toBe("Kimi");
+    expect(kimi.product_display_name).toBe("Coding");
+    for (const c of [opencode, kimi]) {
+      expect(ChannelDescriptorSchema.safeParse(c).success).toBe(true);
+      const key = c.params_schema.find((p) => p.key === "api_key");
+      expect(key?.type).toBe("secret");
+      expect(key?.required).toBe(true);
+    }
   });
 });

@@ -6,4 +6,7 @@
 export * from "./descriptor.js";
 export * from "./presets.js";
 export * from "./registry.js";
+export * from "./mappings.js";
 export * from "./deepseek.js";
+export * from "./opencode.js";
+export * from "./kimi.js";
