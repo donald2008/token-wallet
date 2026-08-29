@@ -11,6 +11,7 @@ import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { LocalAgentSection } from "./components/LocalAgentSection";
 import { loadPersistedInstances, useInstances, usePersistError } from "./instances/store";
+import { useDismissibleError } from "./instances/useDismissibleError";
 import { RuntimeEngine, type EngineOutput } from "./runtime/engine";
 
 const THEME_CYCLE: ThemeMode[] = ["system", "light", "dark"];
@@ -55,9 +56,10 @@ export default function App() {
   const [configError, setConfigError] = useState<string | null>(null);
   // O1: 配置错误页显示 instances.yaml 完整路径(get_storage_paths 运行时解析, 不硬编码)
   const [instancesPath, setInstancesPath] = useState<string | null>(null);
-  // W3: 持久化写盘失败 → 顶部错误条(可关闭; 新错误出现时重新弹出)
+  // W3: 持久化写盘失败 → 顶部错误条(可关闭; 错误清除时 dismiss 标记自动复位,
+  // 故恢复后同消息再失败仍会重弹 — 见 useDismissibleError 注释)
   const persistError = usePersistError();
-  const [dismissedPersistError, setDismissedPersistError] = useState<string | null>(null);
+  const { visible: visiblePersistError, dismiss: dismissPersistError } = useDismissibleError(persistError);
   const [scenario, setScenario] = useState<ScenarioId>("mixed");
   const [refreshing, setRefreshing] = useState(false);
   // 页内导航仅留给首开向导(D-021 一次性引导); 设置入口 = 模态弹窗(P0-6)
@@ -204,9 +206,9 @@ export default function App() {
 
   return (
     <div className="panel">
-      {persistError && persistError !== dismissedPersistError && (
-        // W3: 写盘失败顶部错误条(内存态仍可用, 可关闭; 出现新错误时重新弹出)
-        <PersistErrorBar error={persistError} onDismiss={() => setDismissedPersistError(persistError)} />
+      {visiblePersistError && (
+        // W3: 写盘失败顶部错误条(内存态仍可用, 可关闭; 恢复后同消息再失败会重弹)
+        <PersistErrorBar error={visiblePersistError} onDismiss={dismissPersistError} />
       )}
       <TitleBar
         health={health}
