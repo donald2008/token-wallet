@@ -9,14 +9,17 @@
  *   + settings.json consent RMW, 均走 persist.ts 原子写
  * - E2 keyring(D-029): keyring_get/set|delete 接真 — safeStorage OS 级加密,
  *   secret 落 `<dataDir>/secrets/*.blob`(0700/0600, 见 keyring.ts); 不可用显式报错
- * - 显式降级: sqlite/http 通道本卡不移植(E2 后续/E3 的事), 返回显式错误,
+ * - 显式降级: sqlite 通道本卡不移植(E2 sqlite 卡/E3 的事), 返回显式错误,
  *   面板出错误卡是预期行为, 不许静默空返回
+ * - E2 http 通道接真: host-http.ts(undici fetch + AbortController 超时,
+ *   返回 {status, body 脱敏}, 非 2xx 不抛由引擎分类 — 对齐旧 Rust 实现)
  */
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, Tray } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import YAML from "yaml";
 import { atomicWrite, consentSettingsJson, readSettingsFile, recordAutostart } from "./persist";
+import { hostHttpGetJson } from "./host-http";
 import { SafeStorageLike, deleteSecret, getSecret, setSecret } from "./keyring";
 import { deriveStoragePaths, type StoragePaths } from "./paths";
 
@@ -291,8 +294,12 @@ function registerIpc(): void {
     const { dataDir } = storagePaths();
     deleteSecret(safeStorageAdapter, dataDir, String(payload?.service), String(payload?.key));
   });
+  // ---- E2 http(D-029): GET + headers + timeout, 返回 {status, body 已脱敏};
+  // 非 2xx 不抛(引擎层分类, 换壳前后语义一致), 网络错/超时抛(消息脱敏) ----
+  ipcMain.handle("http_get_json", (_event, payload: Record<string, unknown> | undefined) =>
+    hostHttpGetJson(payload ?? {}),
+  );
   // ---- 显式降级: E2/E3 才接真的通道, 本卡返回显式错误 ----
-  ipcMain.handle("http_get_json", () => notConnected("http_get_json"));
   ipcMain.handle("sqlite_batch", () => notConnected("sqlite_batch"));
   ipcMain.handle("sqlite_exec", () => notConnected("sqlite_exec"));
   ipcMain.handle("sqlite_query", () => notConnected("sqlite_query"));
