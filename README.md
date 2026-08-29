@@ -38,13 +38,27 @@ packages/
 
 ## 开发
 
+一键启动（推荐，自动完成环境检查与依赖准备）：
+
+```bash
+node start-dev.mjs           # 检查环境 → 装依赖 → 起 Electron dev 壳
+node start-dev.mjs --check   # 只准备环境，不起壳
+node start-dev.mjs --web     # 浏览器预览（无主进程，仅看 UI）
+```
+
+> Windows 用户可直接双击 `start-dev.cmd`。
+
+或手动分步：
+
 ```bash
 pnpm install
 pnpm dev        # 桌面部件 (packages/app, Electron 壳)
+pnpm dev:web    # 仅浏览器预览（无主进程 → 无钥匙串/SQLite）
 pnpm mcp        # MCP 数据面 daemon (packages/mcp-server)
 ```
 
-要求: Node >= 22, pnpm 9。
+要求: Node >= 22, pnpm 9（`start-dev` 会用 corepack 自动对齐 pnpm 版本）。
+无原生模块，装完即可运行，**不需要任何 rebuild 步骤**（D-034）。
 
 ## License
 
