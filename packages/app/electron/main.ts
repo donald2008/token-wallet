@@ -9,7 +9,10 @@
  *   + settings.json consent RMW, 均走 persist.ts 原子写
  * - E2 keyring(D-029): keyring_get/set|delete 接真 — safeStorage OS 级加密,
  *   secret 落 `<dataDir>/secrets/*.blob`(0700/0600, 见 keyring.ts); 不可用显式报错
- * - 显式降级: sqlite 通道本卡不移植(E2 sqlite 卡/E3 的事), 返回显式错误,
+ * - E2 sqlite(D-020): sqlite_batch/exec/query 接真 — better-sqlite3(同步 API),
+ *   SCHEMA_SQL 单源 = core `storage/schema-sql`(禁第二份 DDL), db 落 dataDir,
+ *   连接按 dataDir 缓存单例, will-quit 统一 close(见 sqlite.ts)
+ * - 显式降级: E2 并行卡/E3 才接真的通道, 返回显式错误,
  *   面板出错误卡是预期行为, 不许静默空返回
  * - E2 http 通道接真: host-http.ts(undici fetch + AbortController 超时,
  *   返回 {status, body 脱敏}, 非 2xx 不抛由引擎分类 — 对齐旧 Rust 实现)
@@ -22,6 +25,7 @@ import { atomicWrite, consentSettingsJson, readSettingsFile, recordAutostart } f
 import { hostHttpGetJson } from "./host-http";
 import { SafeStorageLike, deleteSecret, getSecret, setSecret } from "./keyring";
 import { deriveStoragePaths, type StoragePaths } from "./paths";
+import { batch, closeAll, exec, query } from "./sqlite";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
@@ -172,11 +176,6 @@ function createWindow(): void {
 
 // ---------------- IPC: 通道名与契约保全(与换壳前逐字一致) ----------------
 
-/** 显式降级(E1 不移植的通道): 抛错让面板出错误卡, 不许静默空返回 */
-function notConnected(channel: string): never {
-  throw new Error(`通道 ${channel} 未接入(E2 卡接真): Electron 壳 E1 暂不提供服务`);
-}
-
 function registerIpc(): void {
   ipcMain.handle("get_bootstrap", () => {
     const settings = readSettingsFile(settingsFilePath());
@@ -257,6 +256,24 @@ function registerIpc(): void {
     mainWindow?.hide(); // 关闭 = 隐藏到托盘(D-003)
   });
 
+  // ---- E2: sqlite 三通道接真(D-020; better-sqlite3 同步 API) ----
+  // SCHEMA_SQL 单源 = core(storage.ts renderer 侧同源 import, 主进程建表同文);
+  // db 落 dataDir(D-019 数据侧), 目录不存在自动建; better-sqlite3 抛错原样上抛,
+  // ipcMain.handle 转 IPC reject → 面板错误卡(E1 显式错误约定)。
+  ipcMain.handle("sqlite_batch", (_event, payload: { sql?: string }) => {
+    batch(storagePaths().dataDir, String(payload?.sql ?? ""));
+  });
+  ipcMain.handle(
+    "sqlite_exec",
+    (_event, payload: { sql?: string; params?: unknown[] }) =>
+      exec(storagePaths().dataDir, String(payload?.sql ?? ""), payload?.params ?? []),
+  );
+  ipcMain.handle(
+    "sqlite_query",
+    (_event, payload: { sql?: string; params?: unknown[] }) =>
+      query(storagePaths().dataDir, String(payload?.sql ?? ""), payload?.params ?? []),
+  );
+
   // ---- E2: keyring 三通道接真(safeStorage OS 级加密, D-029) ----
   // secret 落 `<dataDir>/secrets/<ref>.blob`, 目录 0700 / 文件 0600;
   // safeStorage 不可用 → 结构化显式错误(IPC reject → 面板错误条), 绝不明文降级。
@@ -294,15 +311,30 @@ function registerIpc(): void {
     const { dataDir } = storagePaths();
     deleteSecret(safeStorageAdapter, dataDir, String(payload?.service), String(payload?.key));
   });
+<<<<<<< HEAD
   // ---- E2 http(D-029): GET + headers + timeout, 返回 {status, body 已脱敏};
   // 非 2xx 不抛(引擎层分类, 换壳前后语义一致), 网络错/超时抛(消息脱敏) ----
   ipcMain.handle("http_get_json", (_event, payload: Record<string, unknown> | undefined) =>
     hostHttpGetJson(payload ?? {}),
   );
-  // ---- 显式降级: E2/E3 才接真的通道, 本卡返回显式错误 ----
-  ipcMain.handle("sqlite_batch", () => notConnected("sqlite_batch"));
-  ipcMain.handle("sqlite_exec", () => notConnected("sqlite_exec"));
-  ipcMain.handle("sqlite_query", () => notConnected("sqlite_query"));
+
+  // ---- E2: sqlite 三通道接真(D-020; better-sqlite3 同步 API) ----
+  // SCHEMA_SQL 单源 = core(storage.ts renderer 侧同源 import, 主进程建表同文);
+  // db 落 dataDir(D-019 数据侧), 目录不存在自动建; better-sqlite3 抛错原样上抛,
+  // ipcMain.handle 转 IPC reject → 面板错误卡(E1 显式错误约定)。
+  ipcMain.handle("sqlite_batch", (_event, payload: { sql?: string }) => {
+    batch(storagePaths().dataDir, String(payload?.sql ?? ""));
+  });
+  ipcMain.handle(
+    "sqlite_exec",
+    (_event, payload: { sql?: string; params?: unknown[] }) =>
+      exec(storagePaths().dataDir, String(payload?.sql ?? ""), payload?.params ?? []),
+  );
+  ipcMain.handle(
+    "sqlite_query",
+    (_event, payload: { sql?: string; params?: unknown[] }) =>
+      query(storagePaths().dataDir, String(payload?.sql ?? ""), payload?.params ?? []),
+  );
 }
 
 // ---------------- 生命周期 ----------------
@@ -320,5 +352,8 @@ if (!gotLock) {
   });
   app.on("window-all-closed", () => {
     // 托盘常驻: 窗口全关不退出(退出走托盘菜单)
+  });
+  app.on("will-quit", () => {
+    closeAll(); // sqlite 连接统一关闭(见 sqlite.ts), 失败不阻断退出
   });
 }
