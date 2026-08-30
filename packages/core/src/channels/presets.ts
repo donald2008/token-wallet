@@ -73,10 +73,34 @@ export const KIMI_CODING: ChannelDescriptor = {
   ],
 };
 
+/**
+ * 阿里云百炼 Token Plan(个人版): command 类首实例(D-041, 2026-08-30)
+ * bl CLI 包装, 控制台会话由 CLI 自管(~/.bailian/config.json), app 零凭据。
+ * health_check 只判"从未配置", 会话死活由采集失败信号(D-041 源码结论)。
+ */
+export const ALIYUN_BAILIAN_TOKEN_PLAN: ChannelDescriptor = {
+  platform: "aliyun-bailian",
+  product: "token-plan",
+  channel: "aliyun-bailian/token-plan",
+  display_name: "阿里云百炼 / Token Plan",
+  product_display_name: "Token Plan",
+  platform_display_name: "阿里云百炼",
+  plan_type: "window",
+  adapter: "command",
+  logo: "aliyun-bailian",
+  // 零录入(D-041 决策): console 会话由 CLI 自管, app 不碰凭据文件
+  params_schema: [],
+  health_check: {
+    command: "bl auth status --output json",
+    setup_hint: "运行 `bl auth login --console` 重新授权(控制台会话由 CLI 管理)",
+  },
+};
+
 export const PRESET_CHANNELS: readonly ChannelDescriptor[] = [
   DEEPSEEK_BALANCE,
   OPENCODE_GO,
   KIMI_CODING,
+  ALIYUN_BAILIAN_TOKEN_PLAN,
 ];
 
 /** 按全路径 "platform/product" 查预置通道(通道树/引擎/测试连接共用) */

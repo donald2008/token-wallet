@@ -111,8 +111,8 @@ channels/  (两层模型: platform → product, D-025)
 │   ├── kimi-code/        http,  window,  params: { api_key }  (/coding/v1/usages 已实测)
 │   └── kimi-platform/    http,  balance, params: { api_key }  (开放平台 /v1/users/me/balance)
 ├── aliyun-bailian/
-│   ├── token-plan/       command(bl), window, params: { api_key }  (探针; 完整用量走 bl 会话)
-│   ├── coding-plan/      command(bl), window, params: { api_key }
+│   ├── token-plan/       command(bl), window, params: []  (D-041 已实测 2026-08-30, bl 1.18.1; 会话由 CLI 自管, 零录入)
+│   ├── coding-plan/      command(bl), window, params: []  (后置)
 │   └── pay-as-you-go/    http, balance, params: { api_key }  (后置)
 ├── volcengine-ark/
 │   ├── coding-plan/      command(arkcli), window, params: {}  (arkcli usage plan 已实测, SSO --no-browser 设备码登录)
@@ -177,8 +177,7 @@ instances:
   - id: aliyun
     channel: aliyun-bailian/token-plan
     name: "百炼 Token Plan"
-    params:
-      api_key: { source: store }       # sk-sp, 探针模式用; 完整用量依赖 bl 会话
+    params: {}                           # command 类零凭据, 会话由 bl CLI 自管(D-041)
   - id: ark
     channel: volcengine-ark/coding-plan
     name: "方舟-Coding #1"
@@ -241,7 +240,7 @@ generic-http 只接"一次请求+静态映射"。
 | deepseek-api | T1 官方 `GET /user/balance` | 无 |
 | kimi-k3 (Kimi Code) | **已实测通过(2026-08-27)**: `GET https://api.kimi.com/coding/v1/usages`, KIMI_K3_KEY(sk-kimi-xxx)直接可用, 返回主配额(usage)+滚动窗(limits[].window)+会员等级+并行数+加油包(boosterWallet)。注意: 非官方文档接口, 可能变动 | 低: 接口已验证, 用 golden sample 测试防变更 |
 | volcengine 方舟 | **已实测通过(2026-08-27)**: arkcli command 类 — `arkcli auth login --no-browser`(SSO 设备码两段式, 无头可用) + `arkcli usage plan --all` 一条命令覆盖 Coding Plan/Agent Plan × 个人/团队 4 SKU(团队版需 --seat)。Cookie 控制台 XHR(GetCodingPlanUsage)随 D-028 移除, 仅作历史记录 | 低: 官方 CLI 管会话 |
-| aliyun token-plan | **bl CLI 路线**(`bl usage token-plan --output json`, 控制台会话由 CLI 维护), 待 2026-08-29 套餐重置后实测验证(当前额度耗尽 429, 计划用户本机 `bl auth login --console` 后移植 config.json)。已证伪: 子账号 AK/SK 路线(个人版不对子账号开放 Console 网关)。Cookie 重放方案已随 D-028 一并移除 | 中: 待重置后实测定案 |
+| aliyun token-plan | **bl CLI 路线已实测通过(2026-08-30, D-041)**: `bl usage token-plan --output json`(bl 1.18.1), 控制台会话由 CLI 维护(`~/.bailian/config.json`)。健康态 golden 见 `packages/core/src/channels/__fixtures__/bailian-usage-healthy.json`(per1WeekPercentage 0-1 小数→percent, per1WeekResetTime 毫秒→秒; 5h 窗缺席=正常)。会话失效: exit=3 + `No console access token found`/`not logged in or has expired`/`NotLogined` → auth_expired; `bl auth status` exit code 不可信一律解析 body。已证伪: 子账号 AK/SK 路线(个人版不对子账号开放 Console 网关)。Cookie 重放方案已随 D-028 一并移除。探针模式(api_key)已后置(D-041, 不属本卡) | 低: 已实测定案 |
 | meituan LongCat | 待查 | 中 |
 | opencode | **go 已实测(2026-08-27)**: `GET https://opencode.ai/zen/go/v1/usage` 返回 rolling/weekly/monthly 三窗 {status, percent, resetsAt}。**zen 是按量付费(balance)**, 余额端点待 spike(/zen/v1/usage 返回 SPA 非 API)。注: zen/go key 打 go 端点返回一致数据(账户级), 推理被地域封锁但用量 API 可达 | go 低 / zen 中 |
 

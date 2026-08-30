@@ -28,7 +28,7 @@ async function testFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 
 const NOW = Math.floor(Date.now() / 1000);
 
-/** mock 余额快照(command 通道未接真实时兜底; 预置目录当前无 command 通道, 保留防御) */
+/** mock 余额快照(command 通道引擎接线前兜底; D-041 起 aliyun-bailian 已有真实适配器, 引擎接线为后续卡) */
 function balanceSnapshot(channel: ChannelDescriptor): ProviderSnapshot {
   return {
     provider_id: channel.channel,
@@ -43,7 +43,7 @@ function balanceSnapshot(channel: ChannelDescriptor): ProviderSnapshot {
   };
 }
 
-/** mock 窗口快照(command 通道未接真实时兜底) */
+/** mock 窗口快照(command 通道引擎接线前兜底; D-041 起 aliyun-bailian 已有真实适配器, 引擎接线为后续卡) */
 function windowSnapshot(channel: ChannelDescriptor): ProviderSnapshot {
   return {
     provider_id: channel.channel,
@@ -129,7 +129,7 @@ export async function testConnection(
     }
   }
 
-  // http 通道 → 真实采集; command 通道暂回退 mock(预置目录当前无 command 通道, 防御保留)
+  // http 通道 → 真实采集; command 通道走 mock 兜底(引擎接线为后续卡, D-041 首实例已就绪)
   if (channel.adapter === "http") {
     return realHttpTest(channel, params);
   }

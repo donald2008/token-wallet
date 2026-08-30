@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": 3,
+    "message": "No console access token found.",
+    "hint": "Run `bl auth login --console`."
+  }
+}

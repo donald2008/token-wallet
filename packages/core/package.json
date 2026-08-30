@@ -28,6 +28,10 @@
       "types": "./dist/channels/deepseek.d.ts",
       "import": "./dist/channels/deepseek.js"
     },
+    "./channels/aliyun-bailian": {
+      "types": "./dist/channels/aliyun-bailian.d.ts",
+      "import": "./dist/channels/aliyun-bailian.js"
+    },
     "./mapping/jsonpath": {
       "types": "./dist/mapping/jsonpath.d.ts",
       "import": "./dist/mapping/jsonpath.js"

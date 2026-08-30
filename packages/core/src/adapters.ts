@@ -45,6 +45,36 @@ export interface ProviderAdapter {
   ): Promise<{ ok: boolean; setupHint?: string }>;
 }
 
+/** 子进程 spawn 结果: stdout 原文 + exit code(判定依赖 exit code 的通道用) */
+export interface CommandRunResult {
+  stdout: string;
+  /** exit code; null 表示被信号终止 */
+  code: number | null;
+}
+
+/**
+ * spawn 平台适配计划(D-041, 2026-08-30 aliyun bl 首实例实证):
+ * - Node ≥18.20 对 `.cmd`/`.bat` shim 直接 spawn 报 EPERM(CVE-2024-27980)
+ *   → Windows 一律经 `cmd /c <command> <args>`(shell: false 仍防注入),
+ *   `%APPDATA%\npm\*.cmd` 全路径 shim 同理
+ * - windowsHide: true 防命令窗口黑框闪烁
+ * - 非 Windows 直接 spawn 原命令
+ */
+export function buildSpawnPlan(
+  command: string,
+  args: string[],
+  platform: NodeJS.Platform = process.platform,
+): { command: string; args: string[]; windowsHide: boolean } {
+  if (platform === "win32") {
+    return {
+      command: "cmd",
+      args: ["/c", command, ...args],
+      windowsHide: true,
+    };
+  }
+  return { command, args, windowsHide: false };
+}
+
 /**
  * ScriptedAdapter 抽象基类(§5.1)。复杂通道继承实现 fetchSnapshot;
  * 提供 runCommand 受控子进程助手(超时联动 AbortSignal, kill 硬切断)。
@@ -59,15 +89,35 @@ export abstract class ScriptedAdapter implements ProviderAdapter {
 
   /**
    * 跑 CLI 子进程取 stdout; signal abort/超时即 SIGTERM → 5s 后 SIGKILL。
+   * 非零 exit code → reject(带 exit code, 不含 stderr——可能含敏感信息)。
    */
   protected async runCommand(
     command: string,
     args: string[],
     ctx: FetchContext,
   ): Promise<string> {
+    const { stdout, code } = await this.runCommandResult(command, args, ctx);
+    if (code !== 0) throw new Error(`命令失败(exit=${code}): ${command}`);
+    return stdout;
+  }
+
+  /**
+   * 与 runCommand 同款 spawn 平台适配, 但 resolve {stdout, code} 不 reject ——
+   * 供需要解析"失败态 body"(如 bl usage exit=3 的 error JSON)的通道使用。
+   * spawn ENOENT(CLI 未装) → reject SpawnError(err), 由调用方转 setup_hint。
+   */
+  protected async runCommandResult(
+    command: string,
+    args: string[],
+    ctx: FetchContext,
+  ): Promise<CommandRunResult> {
     const { spawn } = await import("node:child_process");
-    return new Promise<string>((resolvePromise, reject) => {
-      const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const plan = buildSpawnPlan(command, args);
+    return new Promise<CommandRunResult>((resolvePromise, reject) => {
+      const child = spawn(plan.command, plan.args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: plan.windowsHide,
+      });
       const chunks: Buffer[] = [];
       const errChunks: Buffer[] = [];
       child.stdout.on("data", (c: Buffer) => chunks.push(c));
@@ -90,16 +140,30 @@ export abstract class ScriptedAdapter implements ProviderAdapter {
 
       child.on("error", (err) => {
         ctx.signal.removeEventListener("abort", onAbort);
-        reject(new Error(`命令启动失败: ${command}: ${err.message}`));
+        reject(new SpawnError(`命令启动失败: ${command}: ${err.message}`, err));
       });
       child.on("close", (code) => {
         ctx.signal.removeEventListener("abort", onAbort);
         if (killTimer !== null) clearTimeout(killTimer);
-        if (code === 0) resolvePromise(Buffer.concat(chunks).toString("utf8"));
-        // stderr 可能含敏感信息, 只带 exit code
-        else reject(new Error(`命令失败(exit=${code}): ${command}`));
+        resolvePromise({
+          stdout: Buffer.concat(chunks).toString("utf8"),
+          code,
+        });
       });
     });
+  }
+}
+
+/** spawn 层面的启动失败(ENOENT=CLI 不在 PATH 等); 保留底层错误码供分类 */
+export class SpawnError extends Error {
+  readonly causeErr: Error;
+  constructor(message: string, cause: Error) {
+    super(message);
+    this.name = "SpawnError";
+    this.causeErr = cause;
+  }
+  get code(): string | undefined {
+    return (this.causeErr as NodeJS.ErrnoException).code;
   }
 }
 

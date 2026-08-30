@@ -95,8 +95,8 @@ describe("ChannelRegistry", () => {
     expect(reg.size).toBe(3);
   });
 
-  it("预置通道含 deepseek/balance + opencode/go + kimi/coding 且参数含 secret api_key", () => {
-    expect(PRESET_CHANNELS).toHaveLength(3);
+  it("预置通道含 deepseek/balance + opencode/go + kimi/coding + aliyun-bailian/token-plan", () => {
+    expect(PRESET_CHANNELS).toHaveLength(4);
     const d = DEEPSEEK_BALANCE;
     expect(d.channel).toBe("deepseek/balance");
     expect(d.plan_type).toBe("balance");
@@ -106,6 +106,19 @@ describe("ChannelRegistry", () => {
     expect(key?.required).toBe(true);
     // 预置描述符自身必须通过 schema 校验
     expect(ChannelDescriptorSchema.safeParse(d).success).toBe(true);
+  });
+
+  it("预置通道: aliyun-bailian/token-plan 是 command 类首实例, 零录入(D-041)", () => {
+    const bailian = PRESET_CHANNELS.find((c) => c.channel === "aliyun-bailian/token-plan")!;
+    expect(bailian).toBeDefined();
+    expect(bailian.adapter).toBe("command");
+    expect(bailian.plan_type).toBe("window");
+    expect(bailian.platform_display_name).toBe("阿里云百炼");
+    expect(bailian.product_display_name).toBe("Token Plan");
+    // D-041 决策: console 会话由 CLI 自管, app 零凭据 → params_schema=[]
+    expect(bailian.params_schema).toEqual([]);
+    expect(bailian.health_check?.command).toContain("bl auth status");
+    expect(ChannelDescriptorSchema.safeParse(bailian).success).toBe(true);
   });
 
   it("预置通道: opencode/go 与 kimi/coding 是 window 制, 描述符自身通过 schema", () => {

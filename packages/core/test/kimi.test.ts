@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import { GenericHttpAdapter } from "../src/generic-http.js";
 import { KIMI_CODING } from "../src/channels/presets.js";
 import { KIMI_CODING_MAPPING } from "../src/channels/kimi.js";
+import { COMMAND_ADAPTERS } from "../src/channels/aliyun-bailian.js";
 import type { AdapterContext, InstanceConfig } from "../src/generic-http.js";
 import { PRESET_CHANNELS } from "../src/channels/presets.js";
 import { CHANNEL_MAPPINGS } from "../src/channels/mappings.js";
@@ -96,12 +97,18 @@ describe("kimi/coding golden sample(§5.2 T3 双窗)", () => {
   });
 
   it("通道目录不变量: PRESET_CHANNELS 每个通道都有真实映射(选得到即采得到, D-036)", () => {
+    // http 通道 → CHANNEL_MAPPINGS; command 通道 → COMMAND_ADAPTERS(D-041 首实例)
     const mappingKeys = Object.keys(CHANNEL_MAPPINGS);
+    const commandKeys = Object.keys(COMMAND_ADAPTERS);
     for (const d of PRESET_CHANNELS) {
-      expect(mappingKeys).toContain(d.channel);
+      if (d.adapter === "command") expect(commandKeys).toContain(d.channel);
+      else expect(mappingKeys).toContain(d.channel);
     }
     // 反向: 映射注册的通道也都在目录里(无幽灵映射)
     for (const k of mappingKeys) {
+      expect(PRESET_CHANNELS.some((d) => d.channel === k)).toBe(true);
+    }
+    for (const k of commandKeys) {
       expect(PRESET_CHANNELS.some((d) => d.channel === k)).toBe(true);
     }
   });

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": 3,
+    "message": "Console access token not logged in or has expired.",
+    "hint": "Run `bl auth login --console`."
+  }
+}
