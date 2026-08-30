@@ -1,5 +1,5 @@
 import { expect as pwExpect } from "@playwright/test";
-import { test } from "./fixtures";
+import { seedSqliteHistory, test } from "./fixtures";
 
 /**
  * L2(t_2ac39613 #2): 删除全部 provider 后重新添加, 已删除的 provider 不得复活。
@@ -118,4 +118,61 @@ test("删除全部 provider 后重添加: 面板仅新实例, reload 后仍仅�
   await pwExpect(cards).toHaveCount(1, { timeout: 10_000 });
   await pwExpect(cards.first().locator(".card-name")).toContainText("DeepSeek-按量 #2");
   await pwExpect(page.getByText("Opencode Go #1")).toHaveCount(0);
+});
+
+/**
+ * L2(B-3 契约追加): 删除 → 立即重添加同名通道 → 无旧数据闪现(历史从零开始)。
+ *
+ * 竞态确定性复现: 注入采集延迟 → 点刷新让 A 的请求"在途" → 在途期间删除 A(purge 跑完)
+ * → 迟到响应确定落在 purge 之后。此时若无 B-3 写库守卫(store.remove 先停源 +
+ * saveSnapshot 入口校验 + engine.onResult 校验), 迟到的采集结果会把 A 的快照行重新
+ * 写回库 → 幽灵复活 / 重添加同通道时闪旧数据。
+ *
+ * 注: mock 的 http_get_json 在调用瞬间读取 delayMs 并 setTimeout, 故第 5 步清掉延迟
+ * 不影响已在途的那次请求(它仍在原定时刻返回) —— 这正是我们需要的"迟到响应"。
+ */
+test("删除→立即重添加同名通道: 迟到采集响应不复活旧数据, 历史从零(B-3)", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  // A(deepseek/balance) + 3 天前余额历史(有历史才能证"重添加后历史从零")
+  await seedInstances(page, [inst("inst-a", "DeepSeek-按量 #1", "deepseek/balance")]);
+  const cards = page.getByTestId("provider-card");
+  await pwExpect(cards).toHaveCount(1, { timeout: 10_000 });
+  await seedSqliteHistory(page, "inst-a", 3, 458.45);
+  await pwExpect.poll(() => mockSqliteProviderIds(page)).toContain("inst-a");
+
+  // 制造在途请求: 注入 4s 采集延迟 → 手动刷新(§3.1 立即同步)
+  await page.evaluate(() => localStorage.setItem("token-wallet.mock.httpdelayms", "4000"));
+  await page.getByTestId("refresh-btn").click();
+
+  // 在途期间删除 A: 停源 → purge → 摘卡(契约五步)
+  await openSettings(page);
+  const list = page.getByTestId("settings-overlay").getByTestId("instance-list");
+  await list.getByTestId("del-inst-a").click();
+  await list.getByTestId("confirm-del-inst-a").click();
+  await pwExpect(page.getByTestId("settings-overlay").getByTestId("no-instances")).toBeVisible();
+  // 删除即清库: A 的快照行(含预置历史)已全清
+  await pwExpect.poll(() => mockSqliteProviderIds(page)).toEqual([]);
+
+  // 立即重添加同一通道(deepseek/balance)的新实例 C; 清掉延迟只影响 C 的新请求
+  await page.evaluate(() => localStorage.removeItem("token-wallet.mock.httpdelayms"));
+  await addDeepseekInstance(page, "DeepSeek-按量 #2", "sk-c");
+  await page.getByTestId("settings-close").click();
+  await pwExpect(cards).toHaveCount(1, { timeout: 10_000 });
+  await pwExpect(cards.first().locator(".card-name")).toContainText("DeepSeek-按量 #2");
+
+  // 等过在途窗口(4s): 旧引擎的 A 采集响应此刻返回并走 onResult → 必须被守卫丢弃
+  await page.waitForTimeout(5_000);
+
+  const ids = await mockSqliteProviderIds(page);
+  // ① 写库守卫: 迟到响应没把 A 写回库(无守卫时 inst-a 会重新出现)
+  pwExpect(ids).not.toContain("inst-a");
+  // ② 历史从零: 库里只剩新实例自己的行, 没有任何一行属于已删的 A
+  pwExpect(ids.length).toBeLessThanOrEqual(1);
+  // ③ 无旧数据闪现: 面板仍只有 C, A 的卡名从未回来
+  await pwExpect(cards).toHaveCount(1);
+  await pwExpect(cards.first().locator(".card-name")).toContainText("DeepSeek-按量 #2");
+  await pwExpect(page.getByText("DeepSeek-按量 #1")).toHaveCount(0);
 });

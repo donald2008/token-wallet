@@ -106,6 +106,12 @@ export class RuntimeEngine {
   private readonly storage: SnapshotStorage;
   private readonly latest = new Map<string, ProviderSnapshot>();
   private readonly listeners = new Set<EngineListener>();
+  /**
+   * B-3: 引擎构造时快照的实例 id 集合 —— 写库/入 latest 的准入依据。
+   * 实例集合变化会重建引擎(App.tsx useRealEngine), 所以本集合恒等于"本引擎负责的实例";
+   * 旧引擎在途采集的迟到响应即使回到旧引擎, 也被 started=false 拦住(见 onResult)。
+   */
+  private readonly liveIds: Set<string>;
   private started = false;
 
   constructor(
@@ -113,6 +119,7 @@ export class RuntimeEngine {
     storage: SnapshotStorage = getSharedStorage(),
   ) {
     this.storage = storage;
+    this.liveIds = new Set(instances.map((i) => i.id));
   }
 
   /** 注册实例到调度器; 未接入的通道产出显式 unsupported 快照(P0-8, 不静默) */
@@ -157,6 +164,12 @@ export class RuntimeEngine {
 
   /** 一次采集结果: 落库 → 速率附着 → 通知面板 */
   private async onResult(providerId: string, snap: ProviderSnapshot): Promise<void> {
+    // B-3 写库守卫(引擎层, 契约「先停源」): 三种情况的迟到响应静默丢弃 ——
+    // ① 引擎已 stop(实例集合变更, 本引擎已被 React 废弃) ② provider 不在构造时的实例集合
+    // ③ 快照 provider_id 与调度 id 不一致(适配器串号)。丢弃 = 不落库/不进 latest/不 emit,
+    // 保证 purge 之后不会有该 id 的新行落库, 面板也不会闪回旧帧。
+    if (!this.started || !this.liveIds.has(providerId) || snap.provider_id !== providerId) return;
+
     // 落库(cache-first 的写侧; 面板永远读内存 latest, 启动时从库恢复)
     try {
       await this.storage.init();
@@ -193,9 +206,8 @@ export class RuntimeEngine {
       const snaps = await this.storage.latestSnapshots();
       // t_2ac39613: 实例集合是唯一真相源 —— 库里可能有已删实例的历史快照,
       // 必须按现有实例 id 过滤, 否则幽灵快照会进 latest map 导致删除的 provider 复活。
-      const liveIds = new Set(this.instances.map((i) => i.id));
       for (const s of snaps) {
-        if (liveIds.has(s.provider_id)) this.latest.set(s.provider_id, s);
+        if (this.liveIds.has(s.provider_id)) this.latest.set(s.provider_id, s);
       }
     } catch {
       /* 无历史数据则从空开始 */

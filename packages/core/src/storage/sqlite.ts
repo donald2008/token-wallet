@@ -33,6 +33,12 @@ interface UsageRow {
 
 export class SqliteStore implements StorageBackend {
   private readonly db: DatabaseSync;
+  /**
+   * B-3 写库守卫(t_2ac39613): 当前有效 provider 集合; null = 不过滤(默认, 向后兼容)。
+   * 非 null 时 saveSnapshot/saveUsageRecords 丢弃集合外的 providerId ——
+   * 防实例删除后在途采集的迟到响应把幽灵行写回库。
+   */
+  private liveProviders: Set<string> | null = null;
 
   /**
    * @param path SQLite 文件路径; ":memory:" 供测试
@@ -44,7 +50,19 @@ export class SqliteStore implements StorageBackend {
     this.db.exec(SCHEMA_SQL);
   }
 
+  /** B-3: 声明当前实例集合(null 关闭过滤) */
+  setLiveProviders(ids: Iterable<string> | null): void {
+    this.liveProviders = ids === null ? null : new Set(ids);
+  }
+
+  /** B-3: 写库准入; 未声明集合时一律放行 */
+  private isLive(providerId: string): boolean {
+    return this.liveProviders === null || this.liveProviders.has(providerId);
+  }
+
   async saveSnapshot(snapshot: ProviderSnapshot): Promise<void> {
+    // B-3 守卫: 已删除 provider 的迟到写入静默丢弃(不抛错, 调用方无需感知)
+    if (!this.isLive(snapshot.provider_id)) return;
     // 入口再校验一次, 防止绕过适配器契约的脏数据落库
     const s = parseSnapshot(snapshot);
     this.db.exec("BEGIN");
@@ -102,7 +120,11 @@ export class SqliteStore implements StorageBackend {
 
   async saveUsageRecords(records: UsageRecord[]): Promise<void> {
     if (records.length === 0) return;
-    const parsed = records.map((r) => UsageRecordSchema.parse(r));
+    // B-3 守卫: 逐条按 provider 准入, 已删除 provider 的记录静默丢弃
+    const parsed = records
+      .map((r) => UsageRecordSchema.parse(r))
+      .filter((r) => this.isLive(r.provider_id));
+    if (parsed.length === 0) return;
     this.db.exec("BEGIN");
     try {
       const stmt = this.db.prepare(

@@ -68,6 +68,15 @@ export interface StorageBackend {
    */
   purgeProvider(providerId: string): Promise<void>;
 
+  /**
+   * B-3 写库守卫(t_2ac39613): 声明"当前有效的 provider 集合"。
+   * 设置后 saveSnapshot/saveUsageRecords 入口会丢弃集合外的 providerId(静默, 不抛错) ——
+   * 防实例删除后在途采集的迟到响应把幽灵行重新写回库。
+   * 传 `null` 关闭过滤(默认态), 供无"实例集合"概念的宿主(mcp-server 等)沿用原语义。
+   * 可选方法: 旧实现不提供时调用方须自行守卫。
+   */
+  setLiveProviders?(ids: Iterable<string> | null): void;
+
   /** 关闭底层连接 */
   close(): Promise<void>;
 }

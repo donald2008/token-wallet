@@ -16,6 +16,11 @@ vi.mock("../ipc", () => ({
 }));
 
 import { HostSqliteStore, MemorySqliteStore } from "./storage";
+import {
+  removeLiveProvider,
+  resetLiveProviders,
+  setLiveProviders,
+} from "./liveProviders";
 import type { ProviderSnapshot } from "../types";
 
 function snap(providerId: string, fetchedAt = 1_700_000_000): ProviderSnapshot {
@@ -33,6 +38,7 @@ function snap(providerId: string, fetchedAt = 1_700_000_000): ProviderSnapshot {
 beforeEach(() => {
   execMock.mockReset();
   execMock.mockResolvedValue(0);
+  resetLiveProviders(); // 每例从"未初始化(不过滤)"起, 避免用例间串味
 });
 
 describe("HostSqliteStore.purgeProvider(t_2ac39613)", () => {
@@ -69,6 +75,56 @@ describe("MemorySqliteStore.purgeProvider(t_2ac39613)", () => {
     const store = new MemorySqliteStore();
     await store.saveSnapshot(snap("inst-a"));
     await store.purgeProvider("ghost");
+    expect(await store.latestSnapshots()).toHaveLength(1);
+  });
+});
+
+/**
+ * B-3(契约追加): 写库守卫 —— 删除实例后, 旧引擎在途采集的**迟到响应**若仍走到
+ * saveSnapshot, 必须被静默丢弃, 否则 purge 之后幽灵行重新落库 → 面板复活。
+ * 真相源 = liveProviders 注册表(store.remove 第 1 步「先停源」即剔除该 id)。
+ */
+describe("B-3 写库守卫: 已删除 provider 的迟到写入被静默丢弃", () => {
+  it("HostSqliteStore: 删除后迟到 saveSnapshot 不发 INSERT(purge 后不重生幽灵行)", async () => {
+    setLiveProviders(["inst-a", "inst-b"]);
+    const store = new HostSqliteStore();
+
+    // 删除 inst-a: 停源(第 1 步) → purge(两条 DELETE)
+    removeLiveProvider("inst-a");
+    await store.purgeProvider("inst-a");
+    expect(execMock).toHaveBeenCalledTimes(2);
+    execMock.mockClear();
+
+    // 旧引擎在途采集的迟到响应回来了 → 必须被丢弃, 一条 SQL 都不发
+    await store.saveSnapshot(snap("inst-a"));
+    expect(execMock).not.toHaveBeenCalled();
+
+    // 对照: 仍在实例集合内的 provider 正常落库
+    await store.saveSnapshot(snap("inst-b"));
+    expect(execMock).toHaveBeenCalledTimes(1);
+    expect(execMock.mock.calls[0]?.[0]).toContain("INSERT INTO snapshots");
+    expect((execMock.mock.calls[0]?.[1] as unknown[])[0]).toBe("inst-b");
+  });
+
+  it("MemorySqliteStore: 迟到写入不进内存行, 面板读不到幽灵", async () => {
+    setLiveProviders(["inst-a"]);
+    const store = new MemorySqliteStore();
+    await store.saveSnapshot(snap("inst-a", 100));
+    expect(await store.latestSnapshots()).toHaveLength(1);
+
+    removeLiveProvider("inst-a");
+    await store.purgeProvider("inst-a");
+    // 迟到响应(fetched_at 更新)——无守卫则会重新写入并被 latestSnapshots 读到
+    await store.saveSnapshot(snap("inst-a", 200));
+
+    expect(await store.latestSnapshots()).toEqual([]);
+    expect(await store.history("inst-a")).toHaveLength(0);
+  });
+
+  it("未初始化(无实例集合概念的宿主/单测)时不过滤, 保持原语义", async () => {
+    resetLiveProviders();
+    const store = new MemorySqliteStore();
+    await store.saveSnapshot(snap("any-id"));
     expect(await store.latestSnapshots()).toHaveLength(1);
   });
 });

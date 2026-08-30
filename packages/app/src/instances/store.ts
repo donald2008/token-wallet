@@ -13,6 +13,7 @@ import type { InstanceConfig, CredentialRef } from "./schema";
 import { InstancesFileSchema, makeCredentialRef, parseInstances } from "./schema";
 import { instancesLoad, instancesSave, isDesktopHost, keyringDelete, keyringGet, keyringSet } from "../ipc";
 import { getSharedStorage } from "../runtime/storage";
+import { addLiveProvider, removeLiveProvider, setLiveProviders } from "../runtime/liveProviders";
 
 /** 钥匙串后端抽象(D-029: Windows 凭据管理器 / Keychain / Secret Service) */
 export interface KeyringBackend {
@@ -93,6 +94,8 @@ export class MemoryInstanceStore {
   /** 启动预填(P0-7): instances.yaml 载入的实例直接放入内存, 不触发写回 */
   hydrate(instances: InstanceConfig[]): void {
     this.items = [...instances];
+    // B-3: 初始化写库守卫的实例集合(启动流程恒经此处, 含零配置 hydrate([]))
+    setLiveProviders(this.items.map((i) => i.id));
     this.emit();
   }
 
@@ -101,18 +104,39 @@ export class MemoryInstanceStore {
   }
   add(inst: InstanceConfig): void {
     this.items = [...this.items, inst];
+    // B-3: 新实例准入写库(必须先于 emit/引擎重建, 否则首轮采集会被守卫误丢)
+    addLiveProvider(inst.id);
     this.emit();
     this.persist();
   }
   /**
-   * 删除实例 + 同步清钥匙串条目(D-029) + 同步清 DB 快照/用量历史(t_2ac39613:
-   * keyring 已清而余额历史残留是隐私语义不一致; 实例集合是唯一真相源,
-   * 删除即从 SQLite purge, 防止重启后 hydrate 读到幽灵快照)。
+   * 删除实例 —— B-3 契约: 顺序钉死的删除事务(t_2ac39613 comment #846)。
+   *
+   * 1. **先停源**: 从写库守卫集合剔除该 id —— 等价于"engine.stop() 前的写库带 provider 校验",
+   *    此后旧引擎在途采集的迟到响应走到 saveSnapshot 会被静默丢弃, 保证 purge 之后
+   *    不再有该 id 的新行落库(purge 与 saveSnapshot 无互斥, 只靠 purge 挡不住迟到写)。
+   * 2. **purge DB**: snapshots + usage_records 按 providerId 清除(D-029 对称清理,
+   *    keyring 已清而余额历史残留是隐私语义不一致)。
+   * 3. **清钥匙串**(D-029 现有语义不动)。
+   * 4. **内存移除 + emit**: UI 立即摘卡/空态, 不等引擎重建 → 不闪旧帧。
+   * 5. **instances.yaml 落盘**(异步; 失败由 W3 错误条兜底)。
    */
   remove(id: string, keyring: KeyringBackend): void {
     const removed = this.items.find((i) => i.id === id);
     if (!removed) return;
-    this.items = this.items.filter((i) => i.id !== id);
+    // (1/5) 先停源: 守卫立即生效, 与引擎何时 stop / React 何时重建无关
+    removeLiveProvider(id);
+
+    // (2/5) DB 侧对称清理: snapshots + usage_records 全清。失败不阻断内存态(引擎 hydrate
+    // 过滤兜底防复活), 但要 console.warn 不静默——与写盘失败同策略。
+    // 不 await: UI 立即更新是契约第 4 条; 幽灵行不会在 purge 后重生已由 (1/5) 保证。
+    void getSharedStorage().purgeProvider(id).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.warn(`[instances] purgeProvider 失败 ${id}(hydrate 过滤兜底):`, msg);
+    });
+
+    // (3/5) 清钥匙串条目(D-029)
     for (const ref of Object.values(removed.params)) {
       // 清一切 store 源引用(secret 值所在钥匙串条目)
       if (ref && typeof ref === "object" && (ref as CredentialRef).source === "store") {
@@ -120,14 +144,12 @@ export class MemoryInstanceStore {
         if (key) void keyring.delete(KEYRING_SERVICE, key);
       }
     }
-    // DB 侧对称清理: snapshots + usage_records 全清(失败不阻断内存态, 由引擎
-    // hydrate 过滤兜底防复活; 失败记录 console.warn, 不静默——与写盘失败同策略)
-    void getSharedStorage().purgeProvider(id).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      // eslint-disable-next-line no-console
-      console.warn(`[instances] purgeProvider 失败 ${id}(hydrate 过滤兜底):`, msg);
-    });
+
+    // (4/5) 内存移除 + emit: 面板同一帧摘卡(不等引擎重建, 无旧帧)
+    this.items = this.items.filter((i) => i.id !== id);
     this.emit();
+
+    // (5/5) instances.yaml 落盘
     this.persist();
   }
   subscribe(fn: () => void): () => void {

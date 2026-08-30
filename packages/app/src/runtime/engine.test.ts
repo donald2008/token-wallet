@@ -10,6 +10,7 @@ vi.mock("../ipc", () => ({
 import { RuntimeEngine, unsupportedSnapshot, type EngineOutput } from "./engine";
 import type { SnapshotStorage } from "./storage";
 import type { InstanceConfig } from "../instances/schema";
+import type { ProviderSnapshot } from "../types";
 
 const fakeStorage: SnapshotStorage = {
   init: async () => {},
@@ -121,6 +122,107 @@ describe("hydrate 过滤(t_2ac39613: 删除的 provider 不复活)", () => {
     expect(ids).toContain("live-1");
     expect(ids).not.toContain("deleted-a");
     expect(ids).not.toContain("deleted-b");
+    engine.stop();
+  });
+});
+
+/**
+ * B-3(契约追加): 引擎层写库守卫 —— 「先停源」的等价实现。
+ *
+ * 删除实例 → React 异步销毁旧引擎/新建引擎, 旧引擎 stop() 之前在途采集仍可能回调
+ * onResult 写库。守卫要求: 引擎已 stop / provider 不在构造时的实例集合 / 快照 id 串号
+ * 三种迟到响应一律静默丢弃(不落库、不进 latest、不 emit)。
+ */
+describe("B-3 onResult 写库守卫(迟到采集响应静默丢弃)", () => {
+  const okSnap = (providerId: string): ProviderSnapshot => ({
+    provider_id: providerId,
+    display_name: `卡 ${providerId}`,
+    plan_type: "balance",
+    fetched_at: 1_700_000_000,
+    status: "ok",
+    metrics: [{ key: "remaining", kind: "balance", unit: "cny", used: 42.5 }],
+    alerts: [],
+  });
+
+  /** 记录落库调用的探针 storage */
+  function probeStorage(): { storage: SnapshotStorage; saved: string[] } {
+    const saved: string[] = [];
+    return {
+      saved,
+      storage: {
+        init: async () => {},
+        saveSnapshot: async (s) => {
+          saved.push(s.provider_id);
+        },
+        latestSnapshots: async () => [],
+        history: async () => [],
+        purgeProvider: async () => {},
+      },
+    };
+  }
+
+  const inst = (id: string): InstanceConfig => ({
+    id,
+    channel: "deepseek/balance",
+    name: `实例 ${id}`,
+    params: { api_key: { source: "store", key: `${id}:api_key` } },
+  });
+
+  /** 直接驱动私有 onResult(模拟调度器的采集回调, 无需真实 HTTP) */
+  type EngineInternals = {
+    onResult(providerId: string, snap: ProviderSnapshot): Promise<void>;
+  };
+  const drive = (engine: RuntimeEngine) => engine as unknown as EngineInternals;
+
+  it("引擎已 stop(实例集合变更, 旧引擎被废弃): 迟到响应不落库不进 latest", async () => {
+    const { storage, saved } = probeStorage();
+    const engine = new RuntimeEngine([inst("inst-a")], storage);
+    engine.subscribe(() => {});
+    engine.start();
+    engine.stop(); // 删除实例 → React 销毁旧引擎
+
+    await drive(engine).onResult("inst-a", okSnap("inst-a"));
+
+    expect(saved).toEqual([]); // 不落库(purge 后不重生幽灵行)
+    expect(engine.snapshots).toEqual([]); // 不进 latest(面板不闪旧帧)
+  });
+
+  it("provider 不在构造时实例集合: 迟到响应被丢弃", async () => {
+    const { storage, saved } = probeStorage();
+    const engine = new RuntimeEngine([inst("inst-live")], storage);
+    engine.subscribe(() => {});
+    engine.start();
+
+    await drive(engine).onResult("inst-deleted", okSnap("inst-deleted"));
+
+    expect(saved).toEqual([]);
+    expect(engine.snapshots.map((s) => s.provider_id)).not.toContain("inst-deleted");
+    engine.stop();
+  });
+
+  it("快照 provider_id 与调度 id 串号: 丢弃(防写错 provider 的库)", async () => {
+    const { storage, saved } = probeStorage();
+    const engine = new RuntimeEngine([inst("inst-a"), inst("inst-b")], storage);
+    engine.subscribe(() => {});
+    engine.start();
+
+    await drive(engine).onResult("inst-a", okSnap("inst-b"));
+
+    expect(saved).toEqual([]);
+    expect(engine.snapshots).toEqual([]);
+    engine.stop();
+  });
+
+  it("对照: 运行中且在实例集合内 → 正常落库并进 latest", async () => {
+    const { storage, saved } = probeStorage();
+    const engine = new RuntimeEngine([inst("inst-a")], storage);
+    engine.subscribe(() => {});
+    engine.start();
+
+    await drive(engine).onResult("inst-a", okSnap("inst-a"));
+
+    expect(saved).toEqual(["inst-a"]);
+    expect(engine.snapshots.map((s) => s.provider_id)).toEqual(["inst-a"]);
     engine.stop();
   });
 });

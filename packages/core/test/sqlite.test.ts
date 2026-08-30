@@ -179,6 +179,77 @@ describe("SqliteStore — purgeProvider(t_2ac39613)", () => {
   });
 });
 
+/**
+ * B-3 写库守卫(t_2ac39613 契约追加): setLiveProviders 声明当前实例集合后,
+ * saveSnapshot/saveUsageRecords 入口丢弃集合外的 providerId ——
+ * 防实例删除后在途采集的迟到响应把幽灵行写回库(purge 与 save 无互斥)。
+ */
+describe("SqliteStore — B-3 写库守卫 setLiveProviders", () => {
+  const rec = (overrides: Partial<UsageRecord> = {}): UsageRecord => ({
+    provider_id: "deepseek",
+    model: "k3",
+    window_start: 1724900000,
+    window_end: 1724903600,
+    tokens: 15230,
+    credits: null,
+    cost_cny: null,
+    ...overrides,
+  });
+
+  it("删除后迟到的 saveSnapshot 被静默丢弃(purge 后不重生幽灵行)", async () => {
+    store = new SqliteStore(":memory:");
+    store.setLiveProviders(["deepseek", "kimi"]);
+    await store.saveSnapshot(snap({ fetched_at: 100 }));
+    expect(await store.latestSnapshot("deepseek")).not.toBeNull();
+
+    // 删除 deepseek: 先停源(集合剔除) → purge
+    store.setLiveProviders(["kimi"]);
+    await store.purgeProvider("deepseek");
+
+    // 迟到响应: 无守卫则会重新落库
+    await expect(store.saveSnapshot(snap({ fetched_at: 300 }))).resolves.toBeUndefined();
+
+    expect(await store.latestSnapshot("deepseek")).toBeNull();
+    expect(await store.snapshotHistory("deepseek")).toHaveLength(0);
+    expect(await store.latestSnapshots()).toHaveLength(0);
+  });
+
+  it("saveUsageRecords 逐条按集合准入: 幽灵记录丢弃, 存活记录照常入库", async () => {
+    store = new SqliteStore(":memory:");
+    store.setLiveProviders(["kimi"]);
+
+    await store.saveUsageRecords([
+      rec({ provider_id: "deepseek" }), // 已删除 → 丢弃
+      rec({ provider_id: "kimi" }), // 存活 → 入库
+    ]);
+
+    expect(await store.queryUsage({ providerId: "deepseek" })).toHaveLength(0);
+    expect(await store.queryUsage({ providerId: "kimi" })).toHaveLength(1);
+  });
+
+  it("全部记录都是幽灵时不开事务也不报错", async () => {
+    store = new SqliteStore(":memory:");
+    store.setLiveProviders([]);
+    await expect(store.saveUsageRecords([rec()])).resolves.toBeUndefined();
+    expect(await store.queryUsage({})).toHaveLength(0);
+  });
+
+  it("未声明集合(默认)或显式 null → 不过滤, 保持原语义(mcp-server 等宿主)", async () => {
+    store = new SqliteStore(":memory:");
+    // 默认未声明
+    await store.saveSnapshot(snap({ provider_id: "any-1" }));
+    await store.saveUsageRecords([rec({ provider_id: "any-1" })]);
+    expect(await store.latestSnapshot("any-1")).not.toBeNull();
+    expect(await store.queryUsage({ providerId: "any-1" })).toHaveLength(1);
+
+    // 声明后再关闭过滤
+    store.setLiveProviders(["kimi"]);
+    store.setLiveProviders(null);
+    await store.saveSnapshot(snap({ provider_id: "any-2" }));
+    expect(await store.latestSnapshot("any-2")).not.toBeNull();
+  });
+});
+
 describe("SCHEMA_SQL", () => {
   it("包含 §7 约定的两表与全部列", () => {
     expect(SCHEMA_SQL).toContain("snapshots");

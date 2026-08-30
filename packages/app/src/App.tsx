@@ -24,8 +24,11 @@ import { RuntimeEngine, type EngineOutput } from "./runtime/engine";
 
 const THEME_CYCLE: ThemeMode[] = ["system", "light", "dark"];
 
-/** 真实引擎绑定: 实例变更 → 重建引擎 → 订阅快照(面板只读内存 latest, 启动从库恢复) */
-function useRealEngine(instances: ReturnType<typeof useInstances>): {
+/**
+ * 真实引擎绑定: 实例变更 → 重建引擎 → 订阅快照(面板只读内存 latest, 启动从库恢复)。
+ * 导出供 L1 测试直接驱动删除流程(B-3「删除后 UI 无旧帧」React act 断言)。
+ */
+export function useRealEngine(instances: ReturnType<typeof useInstances>): {
   engine: RuntimeEngine | null;
   output: EngineOutput;
 } {

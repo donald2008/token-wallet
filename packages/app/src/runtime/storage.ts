@@ -9,12 +9,16 @@
 import type { ProviderSnapshot } from "../types";
 import { SCHEMA_SQL } from "@token-wallet/core/storage/schema-sql";
 import { isDesktopHost, sqliteBatch, sqliteExec, sqliteQuery } from "../ipc";
+import { isLiveProvider } from "./liveProviders";
 
 /** app 侧快照存储契约(D-020 StorageBackend 的 webview 形态, 只读查询按面板需要最小化) */
 export interface SnapshotStorage {
   /** 建表(幂等); 启动时调用一次 */
   init(): Promise<void>;
-  /** 写一条快照(原子由 Rust 事务保证) */
+  /**
+   * 写一条快照(原子由主进程事务保证)。
+   * B-3 写库守卫: provider 已不在当前实例集合(删除后的迟到响应)→ 静默丢弃, 不落库。
+   */
   saveSnapshot(snap: ProviderSnapshot): Promise<void>;
   /** 每 provider 最新一条(面板渲染用) */
   latestSnapshots(): Promise<ProviderSnapshot[]>;
@@ -48,6 +52,9 @@ export class HostSqliteStore implements SnapshotStorage {
   }
 
   async saveSnapshot(snap: ProviderSnapshot): Promise<void> {
+    // B-3 写库守卫(兜底层): 该 provider 已被删除(不在当前实例集合)→ 静默丢弃。
+    // 防「purge 先跑 → 旧引擎在途采集的迟到响应后写」把幽灵快照重新落库。
+    if (!isLiveProvider(snap.provider_id)) return;
     await this.init();
     await sqliteExec(
       "INSERT INTO snapshots(provider_id, fetched_at, status, raw_json) VALUES (?, ?, ?, ?)",
@@ -94,6 +101,8 @@ export class MemorySqliteStore implements SnapshotStorage {
   }
 
   async saveSnapshot(snap: ProviderSnapshot): Promise<void> {
+    // B-3 写库守卫(与 HostSqliteStore 同语义): 已删除 provider 的迟到写入静默丢弃
+    if (!isLiveProvider(snap.provider_id)) return;
     this.rows.push(snap);
   }
 
