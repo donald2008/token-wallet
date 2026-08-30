@@ -1,4 +1,4 @@
-import type { HealthLevel, Metric, ProviderSnapshot } from "./types";
+import type { HealthLevel, Metric, ProviderSnapshot, ProviderStatus } from "./types";
 
 /** 阈值默认值(D-022): 黄线 30% / 红线 10%(剩余百分比), P0 后续卡片入全局设置 */
 export const WARN_THRESHOLD = 0.3;
@@ -12,12 +12,35 @@ export const HEALTH_RANK: Record<HealthLevel, number> = {
   ok: 0,
 };
 
+/** 配额健康度文案(D-022): 仅表达配额维度, 不表达 status 原因(status 文案见 STATUS_BADGE) */
 export const HEALTH_LABEL: Record<HealthLevel, string> = {
   ok: "健康",
   warn: "偏低",
-  bad: "过期",
+  // 额度打满/耗尽(剩余 ≤10%), 不是"过期" — 耗尽只需等窗口重置, 无需重新授权
+  bad: "已耗尽",
   unknown: "未知",
 };
+
+/**
+ * 徽章短文案(≤4 汉字, D-005 status 一等公民) — 徽章位表达"原因", 非颜色带。
+ * 唯一真相源: ProviderCard 徽章与托盘 tooltipSummary 共用, 禁止组件内散落三元。
+ * - status !== "ok" → status 短文案(卡体长文案 STATUS_TEXT 不变, 两者不是一回事)
+ * - status === "ok" → 才看配额健康度(HEALTH_LABEL)
+ */
+const STATUS_BADGE: Record<Exclude<ProviderStatus, "ok">, string> = {
+  auth_expired: "待授权",
+  stale: "已陈旧",
+  unsupported: "未接入",
+  error: "采集失败",
+};
+
+export function statusBadge(p: ProviderSnapshot): string {
+  if (p.status !== "ok") return STATUS_BADGE[p.status];
+  return HEALTH_LABEL[providerHealth(p)];
+}
+
+/** tooltip 摘要分组的展示顺序: 严重度降序(采集失败 > 耗尽 > 待授权 > 偏低 > 已陈旧 > 未接入 > 健康) */
+const BADGE_ORDER = ["采集失败", "已耗尽", "待授权", "偏低", "已陈旧", "未接入", "健康"];
 
 /** 单条 metric 健康度(剩余百分比 vs 阈值) */
 export function metricHealth(m: Metric): HealthLevel {
@@ -105,13 +128,16 @@ export function sortByHealth(providers: ProviderSnapshot[]): ProviderSnapshot[] 
   });
 }
 
-/** 托盘 tooltip 摘要, 如 "2健康 1偏低 1过期"(§6.2) */
+/** 托盘 tooltip 摘要, 如 "1待授权 1已耗尽 2健康"(§6.2)。
+ * P1 起按 statusBadge(原因)分组, 不再按颜色带分组 —— auth_expired 不再被统计成"偏低",
+ * 配额耗尽显示"已耗尽"而非"过期"。 */
 export function tooltipSummary(providers: ProviderSnapshot[]): string {
   if (providers.length === 0) return "token-wallet — 暂无 Provider";
-  const counts: Record<HealthLevel, number> = { ok: 0, warn: 0, bad: 0, unknown: 0 };
-  for (const p of providers) counts[providerHealth(p)] += 1;
-  const parts = (Object.keys(counts) as HealthLevel[])
-    .filter((k) => counts[k] > 0)
-    .map((k) => `${counts[k]}${HEALTH_LABEL[k]}`);
+  const counts = new Map<string, number>();
+  for (const p of providers) {
+    const label = statusBadge(p);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const parts = BADGE_ORDER.filter((l) => counts.has(l)).map((l) => `${counts.get(l)}${l}`);
   return `token-wallet — ${parts.join(" ")}`;
 }

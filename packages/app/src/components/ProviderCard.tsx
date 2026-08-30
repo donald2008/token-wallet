@@ -1,5 +1,5 @@
 import type { ProviderSnapshot } from "../types";
-import { HEALTH_LABEL, providerHealth } from "../health";
+import { providerHealth, statusBadge } from "../health";
 import { getTemplateFor } from "../templates/registry";
 
 /** 品牌色块(§6.1 第 4 条): 16px 平台识别色, 正式版替换为内置单色 SVG 品牌图标 */
@@ -70,7 +70,7 @@ export function ProviderCard({ p }: { p: ProviderSnapshot }) {
         <span className="card-name" title={p.provider_id}>
           {p.display_name}
         </span>
-        <span className={`card-status-text text-${health}`}>{HEALTH_LABEL[health]}</span>
+        <span className={`card-status-text text-${health}`}>{statusBadge(p)}</span>
       </div>
       {p.status === "ok" ? <Template p={p} /> : <AbnormalBody p={p} />}
     </section>
