@@ -2,16 +2,17 @@ import { expect as pwExpect } from "@playwright/test";
 import { test } from "./fixtures";
 
 /**
- * L2 设置页 + 首开向导(D-017/D-019/D-021/D-024/D-025/D-026)
+ * L2 添加向导 + 设置页(D-017/D-019/D-021/D-024/D-025/D-026, D-038 信息架构改造后)
  *
  * 覆盖(任务 comment #710 必带):
  *   - 首开向导: 隐私声明须同意才进面板; 空态"添加 Provider"进入引导添加首个 provider
  *   - 树形通道选择器(平台→产品, D-025)
  *   - 动态表单: params_schema 渲染, secret 密码框不回显
  *   - 测试连接: 成功显示余额快照 / 失败显示具体错误(D-017)
- *   - 实例增/列/删(删除同步清钥匙串, D-029)
+ *   - 实例增(向导)/删(卡内删除钮, D-038 起不再在设置页; 删除同步清钥匙串 D-029)
  *   - 双重 zod 拒绝重复 name(D-026)
  *   - 存储路径显示(D-019) / 开机自启默认关(D-024)
+ *   - D-038: 设置弹窗 = 纯偏好页(provider 管理不在此处, 见 information-architecture.spec)
  */
 
 /** 同意首开隐私声明 → 空态 */
@@ -20,9 +21,15 @@ async function agree(page: import("@playwright/test").Page) {
   await pwExpect(page.getByTestId("empty-state")).toBeVisible();
 }
 
-/** 从空态"添加 Provider"进入设置页添加流程(首个 provider 引导) */
+/** 从空态"添加 Provider"进入添加向导(首个 provider 引导, D-021 页内导航不变) */
 async function openAddFlow(page: import("@playwright/test").Page) {
   await page.getByTestId("add-provider").click();
+  await pwExpect(page.getByTestId("add-channel-step")).toBeVisible();
+}
+
+/** 侧栏 ＋ 添加 → 添加向导弹窗(非首开路径, D-038) */
+async function openAddModal(page: import("@playwright/test").Page) {
+  await page.getByTestId("sidebar-add").click();
   await pwExpect(page.getByTestId("add-channel-step")).toBeVisible();
 }
 
@@ -98,7 +105,7 @@ test("测试连接: 失败显示具体错误(D-017)", async ({ hostPage, page })
   await pwExpect(page.getByTestId("test-err")).toContainText("401");
 });
 
-test("实例: 添加 → 列表 → 删除(D-029 同步清钥匙串)", async ({ hostPage, page }) => {
+test("实例: 向导添加 → 面板出卡 → 卡内删除(D-029 同步清钥匙串, D-038)", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await openAddFlow(page);
@@ -108,14 +115,16 @@ test("实例: 添加 → 列表 → 删除(D-029 同步清钥匙串)", async ({ 
   await page.getByTestId("param-api_key").fill("sk-keep");
   // 填 secret 后保存
   await page.getByTestId("save-instance").click();
-  // 回到 overview: 实例出现在列表, 空态按钮变"+ 添加 Provider"
-  await pwExpect(page.getByTestId("instance-list")).toBeVisible();
-  await pwExpect(page.getByTestId("instance-list")).toContainText("DeepSeek-按量 #1");
-  // 删除(两次确认)
-  const dyn = page.getByTestId("instance-list").first();
-  await dyn.getByTestId(/^del-/).click();
-  await dyn.getByTestId(/^confirm-del-/).click();
-  await pwExpect(page.getByTestId("no-instances")).toBeVisible();
+  // D-038: 保存即关向导回面板, 新实例直接出卡(不再回落"实例列表")
+  const card = page.getByTestId("provider-card").filter({ hasText: "DeepSeek-按量 #1" });
+  await pwExpect(card).toHaveCount(1, { timeout: 10_000 });
+  // 删除 = 卡内删除钮 + 确认气泡(两次点击, 就近操作)
+  await card.hover();
+  await card.getByTestId(/^card-del-/).click();
+  await card.getByTestId(/^card-confirm-del-/).click();
+  // 删完回空态(scenario=empty), 空态大按钮引导首加不受影响
+  await pwExpect(page.getByTestId("empty-state")).toBeVisible({ timeout: 10_000 });
+  await pwExpect(page.getByTestId("add-provider")).toBeVisible();
 });
 
 test("双重 zod 校验: 表单拒绝重复实例名(D-026)", async ({ hostPage, page }) => {
@@ -126,9 +135,11 @@ test("双重 zod 校验: 表单拒绝重复实例名(D-026)", async ({ hostPage,
   await pickDeepseekBalance(page);
   await page.getByTestId("param-api_key").fill("sk-1");
   await page.getByTestId("save-instance").click();
-  await pwExpect(page.getByTestId("instance-list")).toContainText("DeepSeek-按量 #1");
-  // 再加第二个, 手动改成重复名 → 拒绝
-  await page.getByTestId("add-instance").click();
+  await pwExpect(
+    page.getByTestId("provider-card").filter({ hasText: "DeepSeek-按量 #1" }),
+  ).toHaveCount(1, { timeout: 10_000 });
+  // 再加第二个(侧栏 ＋), 手动改成重复名 → 拒绝
+  await openAddModal(page);
   await pickDeepseekBalance(page);
   await page.getByTestId("inst-name").fill("DeepSeek-按量 #1");
   await page.getByTestId("param-api_key").fill("sk-2");
@@ -156,7 +167,7 @@ test("开机自启默认关 + 可切换(D-024)", async ({ hostPage, page }) => {
   await pwExpect(toggle).not.toBeChecked();
 });
 
-/** 从面板标题栏"设置"按钮进入设置(弹窗, P0-6) */
+/** 从侧栏"设置"按钮进入设置(弹窗, P0-6; D-038 起入口在侧栏底部) */
 async function openSettings(page: import("@playwright/test").Page) {
   await page.getByTestId("settings-btn").click();
   await pwExpect(page.getByTestId("settings-view")).toBeVisible();
@@ -205,16 +216,20 @@ test("设置弹窗: ESC 键关闭(P0-6)", async ({ hostPage, page }) => {
   await pwExpect(page.getByTestId("settings-overlay")).toHaveCount(0);
 });
 
-test("设置弹窗: 内容完整(实例管理/存储路径/开机自启/主题)(P0-6)", async ({ hostPage, page }) => {
+test("设置弹窗: 内容 = 纯偏好(主题/排序/开机自启/存储路径), 无 provider 增删(D-038)", async ({
+  hostPage,
+  page,
+}) => {
   void hostPage;
   await agree(page);
   await openSettingsModal(page);
   const modal = page.getByTestId("settings-overlay");
-  await pwExpect(modal.getByTestId("instance-list").or(modal.getByTestId("no-instances"))).toBeVisible();
-  await pwExpect(modal.getByTestId("add-instance")).toBeVisible();
+  await pwExpect(modal.getByTestId("instance-list")).toHaveCount(0);
+  await pwExpect(modal.getByTestId("add-instance")).toHaveCount(0);
   await pwExpect(modal.getByTestId("storage-paths")).toBeVisible();
   await pwExpect(modal.getByTestId("autostart-toggle")).toBeVisible();
   await pwExpect(modal.getByTestId("theme-seg")).toBeVisible();
+  await pwExpect(modal.getByTestId("sort-sec")).toBeVisible();
 });
 
 test("首开向导回归: 空态添加 Provider 仍走页内导航, 不弹模态(D-021)", async ({ hostPage, page }) => {
@@ -223,8 +238,9 @@ test("首开向导回归: 空态添加 Provider 仍走页内导航, 不弹模态
   await openAddFlow(page);
   // 页内导航: 设置视图直接替换面板, 无遮罩弹层
   await pwExpect(page.getByTestId("settings-overlay")).toHaveCount(0);
-  await pwExpect(page.getByTestId("settings-view")).toBeVisible();
-  await pwExpect(page.getByTestId("settings-back")).toBeVisible();
+  await pwExpect(page.getByTestId("add-overlay")).toHaveCount(0);
+  await pwExpect(page.getByTestId("add-wizard")).toBeVisible();
+  await pwExpect(page.getByTestId("add-back")).toBeVisible();
 });
 
 /* ---------- #829 R1: 卡间排序配置(key×dir 两正交参数, 缺省名称正排) ---------- */

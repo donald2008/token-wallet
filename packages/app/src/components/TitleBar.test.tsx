@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// L1(t_05271be0): 标题栏主题按钮 — ① 文案缩短(system→「自动」), title 提示保留全语义;
-// ② CSS 契约: .btn white-space:nowrap 防换行撑高; .bar-row 恒有 2px 透明左缘+4px padding
-// 对齐占位, tightest 只换 border-color(进度条左缘逐行对齐)。360px 视口高度稳定由 e2e 兜底。
+// L1(D-038 信息架构 + t_05271be0/t_2ac39613 回归): 标题栏瘦身后只剩 图钉/最小化/关闭,
+// hover 显隐逻辑整体移除(CSS 无 toolbar-btn 淡出规则); 标题不断词换行 + 进度条对齐占位
+// 等既有 CSS 契约继续锁定(布局行为由 e2e boundingBox 兜底)。
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { act } from "react";
@@ -29,41 +29,44 @@ afterEach(() => {
   container.remove();
 });
 
-function renderTitleBar(themeMode: "system" | "light" | "dark") {
+function renderTitleBar(pinned = false) {
   act(() => {
     root.render(
-      <TitleBar
-        health="ok"
-        tooltip=""
-        themeMode={themeMode}
-        refreshing={false}
-        pinned={false}
-        onTogglePin={() => {}}
-        onCycleTheme={() => {}}
-        onRefresh={() => {}}
-        onOpenSettings={() => {}}
-      />,
+      <TitleBar health="ok" tooltip="" pinned={pinned} onTogglePin={() => {}} />,
     );
   });
-  return container.querySelector<HTMLButtonElement>('[data-testid="theme-toggle"]')!;
+  return container.querySelector<HTMLElement>(".titlebar")!;
 }
 
-describe("TitleBar 主题按钮(t_05271be0 #1)", () => {
-  it("system 态按钮文案 = 「自动」(2 字, 360px 宽度预算内不换行)", () => {
-    const btn = renderTitleBar("system");
-    expect(btn.textContent).toBe("自动");
-    expect(btn.textContent!.length).toBeLessThanOrEqual(2);
+describe("标题栏瘦身(D-038)", () => {
+  it("只剩 3 个控件: 图钉 / 最小化 / 关闭(+ app-title, 非按钮)", () => {
+    const bar = renderTitleBar();
+    const buttons = [...bar.querySelectorAll("button")];
+    expect(buttons.map((b) => b.dataset.testid)).toEqual([
+      "pin-btn",
+      "win-min-btn",
+      "win-close-btn",
+    ]);
+    expect(bar.querySelector(".app-title")!.textContent).toBe("token-wallet");
   });
 
-  it("title 提示保留全语义「主题: 跟随系统(点击切换)」", () => {
-    const btn = renderTitleBar("system");
-    expect(btn.getAttribute("title")).toBe("主题: 跟随系统(点击切换)");
+  it("刷新 / 设置 / 主题切换三钮已移除(迁侧栏 + 设置页)", () => {
+    const bar = renderTitleBar();
+    for (const id of ["refresh-btn", "settings-btn", "theme-toggle"]) {
+      expect(bar.querySelector(`[data-testid="${id}"]`), `${id} 不应再在标题栏`).toBeNull();
+    }
   });
 
-  it("light/dark 态文案与 title 不受影响", () => {
-    expect(renderTitleBar("light").textContent).toBe("浅色");
-    expect(renderTitleBar("dark").textContent).toBe("深色");
-    expect(renderTitleBar("dark").getAttribute("title")).toBe("主题: 深色(点击切换)");
+  it("按钮不带 toolbar-btn 淡出类(hover 显隐整体移除, 全部常显)", () => {
+    const bar = renderTitleBar();
+    expect(bar.querySelectorAll(".toolbar-btn").length).toBe(0);
+  });
+
+  it("图钉置顶态: data-pinned / aria-pressed 同步(无常显特判, 本就常显)", () => {
+    expect(renderTitleBar(false).querySelector("[data-testid=pin-btn]")!.getAttribute("aria-pressed")).toBe("false");
+    const pinned = renderTitleBar(true).querySelector("[data-testid=pin-btn]")!;
+    expect(pinned.getAttribute("aria-pressed")).toBe("true");
+    expect(pinned.getAttribute("data-pinned")).toBe("true");
   });
 });
 
@@ -78,7 +81,12 @@ function ruleBlock(selector: string): string {
   return m![1];
 }
 
-describe("CSS 契约(t_05271be0 #1/#2)", () => {
+describe("CSS 契约(D-038 + t_05271be0 #1/#2 回归)", () => {
+  it("hover 显隐规则已整体移除(无 toolbar-btn opacity 淡出)", () => {
+    expect(css).not.toContain("toolbar-btn");
+    expect(css).not.toContain('.titlebar .btn-pin[data-pinned="true"]');
+  });
+
   it(".btn 有 white-space: nowrap(防按钮文字换行撑高 titlebar)", () => {
     expect(ruleBlock(".btn")).toContain("white-space: nowrap");
   });
@@ -91,6 +99,13 @@ describe("CSS 契约(t_05271be0 #1/#2)", () => {
     expect(block).toContain("text-overflow: ellipsis");
     // spacer 允许收缩是截断生效的前提(否则 min-width:auto 阻止标题收缩)
     expect(ruleBlock(".titlebar .spacer")).toContain("min-width: 0");
+  });
+
+  it(".panel 横向布局 + .panel-main 可收缩(侧栏定宽, 内容区不横向溢出)", () => {
+    expect(ruleBlock(".panel")).toContain("flex-direction: row");
+    const main = ruleBlock(".panel-main");
+    expect(main).toContain("min-width: 0");
+    expect(main).toContain("overflow: hidden");
   });
 
   it(".bar-row 恒有 2px 透明左缘 + 4px 左 padding(对齐占位)", () => {

@@ -99,15 +99,14 @@ test("混合: aliyun(暂未接入) + deepseek(数据卡) 同面板共存", async
   void hostPage;
   await agree(page);
   await seedUnsupportedInstance(page);
-  // 再通过树形通道添加 deepseek(真实链路)
-  await page.getByTestId("settings-btn").click();
-  await pwExpect(page.getByTestId("settings-view")).toBeVisible();
-  await page.getByTestId("add-instance").click();
+  // 再通过树形通道添加 deepseek(真实链路; D-038: 入口 = 侧栏 ＋ 添加向导)
+  await page.getByTestId("sidebar-add").click();
+  await pwExpect(page.getByTestId("add-wizard")).toBeVisible();
   await page.getByTestId("tree-product-deepseek-balance").click();
   await page.getByTestId("param-api_key").fill("sk-ds-valid");
   await page.getByTestId("save-instance").click();
-  await pwExpect(page.getByTestId("instance-list")).toContainText("DeepSeek-按量 #1");
-  await page.getByTestId("settings-close").click();
+  // 保存即关向导回面板(D-038)
+  await pwExpect(page.getByTestId("add-overlay")).toHaveCount(0);
 
   // 两张卡: deepseek 出数 + aliyun 暂未接入
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(2, { timeout: 10_000 });
@@ -133,8 +132,8 @@ test("真实通道: 树形添加 kimi → 面板出真实数据卡(71/100 + 5h �
   pwExpect(await page.getByTestId("inst-name").inputValue()).toBe("Kimi-Coding #1");
   await page.getByTestId("param-api_key").fill("sk-kimi-1");
   await page.getByTestId("save-instance").click();
-  await pwExpect(page.getByTestId("instance-list")).toContainText("Kimi-Coding #1");
-  await page.getByTestId("settings-back").click();
+  // D-038: 保存即回面板(页内向导自行收起, 无需再点返回)
+  await pwExpect(page.getByTestId("add-wizard")).toHaveCount(0);
 
   // kimi 是真实通道 → 采集出数据卡(不是"暂未接入")
   const card = page.getByTestId("provider-card").first();
@@ -160,8 +159,8 @@ test("真实通道: 树形添加 opencode → 面板出三窗数据卡(weekly �
   pwExpect(await page.getByTestId("inst-name").inputValue()).toBe("opencode-Go Coding #1");
   await page.getByTestId("param-api_key").fill("sk-oc-1");
   await page.getByTestId("save-instance").click();
-  await pwExpect(page.getByTestId("instance-list")).toContainText("opencode-Go Coding #1");
-  await page.getByTestId("settings-back").click();
+  // D-038: 保存即回面板
+  await pwExpect(page.getByTestId("add-wizard")).toHaveCount(0);
 
   // opencode 是真实通道 → 数据卡; 整卡 ok 语义: weekly rate-limited 是单窗,
   // 由 bars 最紧窗口判红, 不是整卡 error/unsupported(D-036)

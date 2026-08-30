@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ProviderSnapshot } from "../types";
 import { providerHealth, statusBadge } from "../health";
 import { getTemplateFor } from "../templates/registry";
@@ -57,9 +58,25 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
   );
 }
 
-export function ProviderCard({ p }: { p: ProviderSnapshot }) {
+/**
+ * Provider 卡片。
+ *
+ * D-038 操作分区: **卡片 = 实例动作** —— head 右上删除钮(hover 卡片淡入),
+ * 点击弹既有 confirm-delete 气泡(含取消, 红调), 确认后走 onDelete → store.remove
+ * (钥匙串 D-029 + DB 快照清理 t_2ac39613 契约, 全在 store 侧, 本组件不碰持久化)。
+ * `onDelete` 未传(dev 场景 mock 预览卡)时不渲染删除钮 —— 不给用户可点但无效的按钮。
+ */
+export function ProviderCard({
+  p,
+  onDelete,
+}: {
+  p: ProviderSnapshot;
+  /** 传入即渲染卡内删除钮(仅真实实例); 参数 = provider_id(= 实例 id) */
+  onDelete?: (id: string) => void;
+}) {
   const health = providerHealth(p);
   const Template = getTemplateFor(p).component;
+  const [confirming, setConfirming] = useState(false);
   return (
     <section className="card" data-testid="provider-card" data-provider={p.provider_id} data-health={health}>
       <div className="card-head">
@@ -71,6 +88,54 @@ export function ProviderCard({ p }: { p: ProviderSnapshot }) {
           {p.display_name}
         </span>
         <span className={`card-status-text text-${health}`}>{statusBadge(p)}</span>
+        {onDelete && !confirming && (
+          <button
+            type="button"
+            className="btn btn-icon btn-danger card-del-btn"
+            data-testid={`card-del-${p.provider_id}`}
+            title={`删除 ${p.display_name}`}
+            aria-label={`删除 ${p.display_name}`}
+            onClick={() => setConfirming(true)}
+          >
+            {/* 手绘垃圾桶(D-002 不引图标库, 与图钉/侧栏同 stroke 风格) */}
+            <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path
+                d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
+        {onDelete && confirming && (
+          // 确认气泡(沿用设置页 confirm-delete 模式: 文案 + 确认 + 取消, 红调);
+          // 绝对定位浮在卡右上, 不挤压 360px 卡头布局
+          <span className="confirm-row card-confirm" data-testid={`card-confirm-row-${p.provider_id}`}>
+            <span className="confirm-text">删除并清钥匙串?</span>
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              data-testid={`card-confirm-del-${p.provider_id}`}
+              onClick={() => {
+                setConfirming(false);
+                onDelete(p.provider_id);
+              }}
+            >
+              确认
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              data-testid={`card-cancel-del-${p.provider_id}`}
+              onClick={() => setConfirming(false)}
+            >
+              取消
+            </button>
+          </span>
+        )}
       </div>
       {p.status === "ok" ? <Template p={p} /> : <AbnormalBody p={p} />}
     </section>

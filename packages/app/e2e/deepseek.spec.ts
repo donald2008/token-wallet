@@ -18,14 +18,14 @@ async function agree(page: import("@playwright/test").Page) {
   await pwExpect(page.getByTestId("empty-state")).toBeVisible();
 }
 
-/** 添加 deepseek 实例: 树形选择 → 填 key → 保存 → 回面板 */
+/** 添加 deepseek 实例: 空态引导 → 树形选择 → 填 key → 保存(D-038: 保存即关向导回面板) */
 async function addDeepseekInstance(page: import("@playwright/test").Page, apiKey: string) {
   await page.getByTestId("add-provider").click();
   await page.getByTestId("tree-product-deepseek-balance").click();
   await page.getByTestId("param-api_key").fill(apiKey);
   await page.getByTestId("save-instance").click();
-  await pwExpect(page.getByTestId("instance-list")).toContainText("DeepSeek-按量 #1");
-  await page.getByTestId("settings-back").click();
+  // D-038: 保存成功即关向导回面板(不再回落实例列表)
+  await pwExpect(page.getByTestId("add-wizard")).toHaveCount(0);
 }
 
 test("真实链路: deepseek key → 钥匙串 → 引擎拉取 → 面板显示真实余额+拆分+预计天数", async ({

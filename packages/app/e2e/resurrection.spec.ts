@@ -48,22 +48,28 @@ async function seedInstances(page: import("@playwright/test").Page, instances: S
   await page.reload();
 }
 
-/** 打开设置弹窗(标题栏设置按钮) */
-async function openSettings(page: import("@playwright/test").Page) {
-  await page.getByTestId("settings-btn").click();
-  await pwExpect(page.getByTestId("settings-overlay")).toBeVisible();
-}
-
-/** 添加一个 deepseek/balance 实例(modal 内: 通道树 → 表单 → 保存) */
+/** 添加一个 deepseek/balance 实例(D-038: 侧栏 ＋ → 添加向导弹窗 → 通道树 → 表单 → 保存) */
 async function addDeepseekInstance(page: import("@playwright/test").Page, name: string, secret: string) {
-  const modal = page.getByTestId("settings-overlay");
-  await modal.getByTestId("add-instance").click();
+  await page.getByTestId("sidebar-add").click();
+  const modal = page.getByTestId("add-overlay");
+  await pwExpect(modal).toBeVisible();
   await modal.getByTestId("tree-product-deepseek-balance").click();
   await pwExpect(modal.getByTestId("dynamic-form")).toBeVisible();
   await modal.getByTestId("inst-name").fill(name);
   await modal.getByTestId("param-api_key").fill(secret);
   await modal.getByTestId("save-instance").click();
-  await pwExpect(modal.getByTestId("instance-list")).toContainText(name);
+  // D-038: 保存即关向导回面板(不再回落实例列表)
+  await pwExpect(page.getByTestId("add-overlay")).toHaveCount(0);
+}
+
+/** 删除一个 provider(D-038: 卡内删除钮 → 确认气泡) */
+async function deleteProviderCard(page: import("@playwright/test").Page, providerId: string) {
+  const card = page.locator(`[data-testid="provider-card"][data-provider="${providerId}"]`);
+  await pwExpect(card).toHaveCount(1);
+  await card.hover();
+  await card.getByTestId(`card-del-${providerId}`).click();
+  await card.getByTestId(`card-confirm-del-${providerId}`).click();
+  await pwExpect(card).toHaveCount(0, { timeout: 10_000 });
 }
 
 /** 读 mock sqlite 当前快照行的 provider_id 集合(验证 purge 真的清了库) */
@@ -91,21 +97,16 @@ test("删除全部 provider 后重添加: 面板仅新实例, reload 后仍仅�
   await pwExpect(cards.filter({ hasText: "DeepSeek-按量 #1" })).toBeVisible();
   await pwExpect(cards.filter({ hasText: "Opencode Go #1" })).toBeVisible();
 
-  // 删除 A、B(两次确认, 同 settings.spec D-029 流程)
-  await openSettings(page);
-  const list = page.getByTestId("settings-overlay").getByTestId("instance-list");
+  // 删除 A、B(D-038 卡内删除钮 + 确认气泡, D-029 清钥匙串语义不变)
   for (const id of ["inst-a", "inst-b"]) {
-    await list.getByTestId(`del-${id}`).click();
-    await list.getByTestId(`confirm-del-${id}`).click();
+    await deleteProviderCard(page, id);
   }
-  await pwExpect(page.getByTestId("settings-overlay").getByTestId("no-instances")).toBeVisible();
 
   // 删除即清库: mock sqlite 里 A/B 快照已被 purge(DELETE 走既有 sqlite_exec 通道)
   await pwExpect.poll(() => mockSqliteProviderIds(page)).toEqual([]);
 
-  // 添加 C(modal 内 deepseek/balance)
+  // 添加 C(侧栏 ＋ 向导内 deepseek/balance)
   await addDeepseekInstance(page, "DeepSeek-按量 #2", "sk-c");
-  await page.getByTestId("settings-close").click();
 
   // 面板仅 C: 一张卡, A/B 不复活
   await pwExpect(cards).toHaveCount(1, { timeout: 10_000 });
@@ -145,21 +146,16 @@ test("删除→立即重添加同名通道: 迟到采集响应不复活旧数据
 
   // 制造在途请求: 注入 4s 采集延迟 → 手动刷新(§3.1 立即同步)
   await page.evaluate(() => localStorage.setItem("token-wallet.mock.httpdelayms", "4000"));
-  await page.getByTestId("refresh-btn").click();
+  await page.getByTestId("sidebar").getByTestId("refresh-btn").click();
 
-  // 在途期间删除 A: 停源 → purge → 摘卡(契约五步)
-  await openSettings(page);
-  const list = page.getByTestId("settings-overlay").getByTestId("instance-list");
-  await list.getByTestId("del-inst-a").click();
-  await list.getByTestId("confirm-del-inst-a").click();
-  await pwExpect(page.getByTestId("settings-overlay").getByTestId("no-instances")).toBeVisible();
+  // 在途期间删除 A(卡内删除): 停源 → purge → 摘卡(契约五步)
+  await deleteProviderCard(page, "inst-a");
   // 删除即清库: A 的快照行(含预置历史)已全清
   await pwExpect.poll(() => mockSqliteProviderIds(page)).toEqual([]);
 
   // 立即重添加同一通道(deepseek/balance)的新实例 C; 清掉延迟只影响 C 的新请求
   await page.evaluate(() => localStorage.removeItem("token-wallet.mock.httpdelayms"));
   await addDeepseekInstance(page, "DeepSeek-按量 #2", "sk-c");
-  await page.getByTestId("settings-close").click();
   await pwExpect(cards).toHaveCount(1, { timeout: 10_000 });
   await pwExpect(cards.first().locator(".card-name")).toContainText("DeepSeek-按量 #2");
 

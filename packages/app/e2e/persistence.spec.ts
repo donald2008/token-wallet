@@ -21,7 +21,8 @@ test("consent 持久化: 同意后重启不再弹隐私声明(§10)", async ({ h
   // 空态仅首次同意后进入 — 断言"已越过 consent 页"为验收核心)
   await page.reload();
   await pwExpect(page.getByTestId("consent-page")).toHaveCount(0);
-  await pwExpect(page.getByTestId("settings-btn")).toBeVisible();
+  // D-038: 设置入口在侧栏底部(标题栏已瘦身)
+  await pwExpect(page.getByTestId("sidebar").getByTestId("settings-btn")).toBeVisible();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
 });
 
@@ -35,7 +36,10 @@ test("实例持久化: 添加 provider → 重启 → 实例仍在且面板直�
   await page.getByTestId("tree-product-deepseek-balance").click();
   await page.getByTestId("param-api_key").fill("sk-persist");
   await page.getByTestId("save-instance").click();
-  await pwExpect(page.getByTestId("instance-list")).toContainText("DeepSeek-按量 #1");
+  // D-038: 保存即关向导回面板, 实例直接出卡
+  await pwExpect(page.getByTestId("card-list")).toContainText("DeepSeek-按量 #1", {
+    timeout: 10_000,
+  });
 
   // 重启: 不再弹 consent; 实例从 instances.yaml 恢复 → 引擎拉取 → 面板出数(golden 448.45)
   await page.reload();

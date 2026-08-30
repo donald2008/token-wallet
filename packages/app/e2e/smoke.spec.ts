@@ -17,8 +17,8 @@ test("首开: 隐私声明必须同意才能进面板", async ({ hostPage, page 
   await pwExpect(page.getByTestId("empty-state")).toBeVisible();
 });
 
-/** L2 冒烟: 主题切换 + D-016 双 token 语义 */
-test("主题切换: system→light/dark 生效且双 token 语义正确", async ({ hostPage, page }) => {
+/** L2 冒烟: 主题切换(D-038 起唯一入口 = 设置页) + D-016 双 token 语义 */
+test("主题切换: 设置页 system→light 生效且双 token 语义正确", async ({ hostPage, page }) => {
   void hostPage;
   // 固定系统主题为 dark, 让 system 模式的解析结果确定
   await page.emulateMedia({ colorScheme: "dark" });
@@ -28,8 +28,12 @@ test("主题切换: system→light/dark 生效且双 token 语义正确", async 
   const initial = await themeOf();
   pwExpect(initial).toBe("dark"); // system → 追随 prefers-color-scheme(dark)
 
-  // 切换: system → light(覆盖), 必须脱离系统值
-  await page.getByTestId("theme-toggle").click();
+  // 切换: system → light(覆盖), 必须脱离系统值。D-038: 标题栏主题钮已移除,
+  // 入口收进设置弹窗既有的主题分段控件(未新增控件)
+  await page.getByTestId("settings-btn").click();
+  await pwExpect(page.getByTestId("theme-seg")).toBeVisible();
+  await page.getByTestId("theme-light").click();
+  await page.getByTestId("settings-close").click();
   const next = await themeOf();
   pwExpect(next).toBe("light");
   pwExpect(next).not.toBe(initial);

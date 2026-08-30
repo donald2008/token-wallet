@@ -2,8 +2,8 @@ import { expect as pwExpect } from "@playwright/test";
 import { test } from "./fixtures";
 
 /**
- * L2(t_05271be0 #1/#2): 真机复验第二批 ——
- * - 标题栏: 360px 视口下主题按钮(system→「自动」)不换行、不撑高 titlebar(三态高度一致)
+ * L2(t_05271be0 #1/#2 + D-038): 真机复验第二批 ——
+ * - 标题栏: 360px 视口下瘦身后控件(图钉/最小化/关闭)不换行、置顶轮换不撑高 titlebar
  * - 进度条对齐: 三行 .progress 左缘 x 坐标差 ≤1px(tightest 行 2px 左缘+4px padding
  *   改为全行恒定占位, 只换 border-color)
  */
@@ -31,7 +31,7 @@ async function seedOpencodeInstance(page: import("@playwright/test").Page) {
   await page.reload();
 }
 
-test("标题栏: 360px 视口下主题切换不撑高 titlebar, 主题按钮不换行", async ({
+test("标题栏: 360px 视口下置顶切换不撑高 titlebar, 按钮文字不换行(D-038)", async ({
   hostPage,
   page,
 }) => {
@@ -40,22 +40,21 @@ test("标题栏: 360px 视口下主题切换不撑高 titlebar, 主题按钮不�
   await page.getByTestId("consent-agree").click();
 
   const titlebar = page.locator(".titlebar");
-  const toggle = page.getByTestId("theme-toggle");
+  const pinBtn = page.getByTestId("pin-btn");
 
-  // 文案缩短: system 态 = 「自动」, title 提示保留全语义
-  await pwExpect(toggle).toHaveText("自动");
-  await pwExpect(toggle).toHaveAttribute("title", "主题: 跟随系统(点击切换)");
+  // D-038: 主题按钮已从标题栏移除(唯一入口 = 设置页既有分段控件)
+  await pwExpect(page.getByTestId("theme-toggle")).toHaveCount(0);
 
-  // CSS 层: 按钮文字禁止换行(根因①)
-  const whiteSpace = await toggle.evaluate((el) => getComputedStyle(el).whiteSpace);
+  // CSS 层: 按钮文字禁止换行(根因①, .btn 全局 nowrap)
+  const whiteSpace = await pinBtn.evaluate((el) => getComputedStyle(el).whiteSpace);
   pwExpect(whiteSpace).toBe("nowrap");
 
-  // 三态轮换(system→light→dark), titlebar 高度必须不变(换行会撑高)
+  // 置顶轮换(off→on→off), titlebar 高度必须不变(换行/图标切换都不得撑高)
   const heights: number[] = [];
   for (let i = 0; i < 3; i++) {
     const box = await titlebar.boundingBox();
     heights.push(Math.round(box!.height));
-    await toggle.click();
+    await pinBtn.click();
   }
   pwExpect(new Set(heights).size).toBe(1);
 });

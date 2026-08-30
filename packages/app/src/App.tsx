@@ -4,8 +4,9 @@ import { globalHealth, sortProviders, tooltipSummary, type SortConfig } from "./
 import { getBootstrap, getSortConfig, getStoragePaths, persistConsent, setSortConfig as persistSortConfig, updateTrayStatus, winGetAlwaysOnTop, winSetAlwaysOnTop } from "./ipc";
 import { selectPanelProviders } from "./panelProviders";
 import type { ScenarioId } from "./mockData";
-import { useTheme, type ThemeMode } from "./theme";
+import { useTheme } from "./theme";
 import { TitleBar } from "./components/TitleBar";
+import { SideBar } from "./components/SideBar";
 import { ProviderCard } from "./components/ProviderCard";
 import {
   ConsentPage,
@@ -17,12 +18,17 @@ import {
 } from "./components/States";
 import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
+import { AddProviderWizard } from "./components/AddProviderWizard";
 import { LocalAgentSection } from "./components/LocalAgentSection";
-import { loadPersistedInstances, useInstances, usePersistError } from "./instances/store";
+import {
+  getSharedKeyring,
+  getSharedStore,
+  loadPersistedInstances,
+  useInstances,
+  usePersistError,
+} from "./instances/store";
 import { useDismissibleError } from "./instances/useDismissibleError";
 import { RuntimeEngine, type EngineOutput } from "./runtime/engine";
-
-const THEME_CYCLE: ThemeMode[] = ["system", "light", "dark"];
 
 /**
  * 真实引擎绑定: 实例变更 → 重建引擎 → 订阅快照(面板只读内存 latest, 启动从库恢复)。
@@ -77,10 +83,11 @@ export default function App() {
   const [pinned, setPinned] = useState(false);
   // P1(#829 R1): 卡间排序配置(key×dir, 缺省名称正排); 启动读回, 切换即持久化
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", dir: "asc" });
-  // 页内导航仅留给首开向导(D-021 一次性引导); 设置入口 = 模态弹窗(P0-6)
-  const [view, setView] = useState<"panel" | "settings">("panel");
+  // 页内导航仅留给首开向导(D-021 一次性引导): view="add" = 添加向导页内形态
+  const [view, setView] = useState<"panel" | "add">("panel");
+  // D-038: 设置弹窗(纯偏好) 与 添加向导弹窗(侧栏 ＋) 是两个独立模态
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsStep, setSettingsStep] = useState<"overview" | "add-channel" | "fill-form">("overview");
+  const [addOpen, setAddOpen] = useState(false);
 
   const instances = useInstances();
   const { engine, output } = useRealEngine(instances);
@@ -183,26 +190,28 @@ export default function App() {
     }
   }, [engine]);
 
-  const onCycleTheme = useCallback(() => {
-    const next = THEME_CYCLE[(THEME_CYCLE.indexOf(themeMode) + 1) % THEME_CYCLE.length];
-    setThemeMode(next);
-  }, [themeMode, setThemeMode]);
-
   const onAgree = useCallback(() => {
     void persistConsent(); // P0-7: 落盘 settings.json(桌面壳) / localStorage(浏览器)
     setConsented(true);
     setScenario("empty"); // 初始零 provider 配置(§10)
   }, []);
 
-  // D-021 首开引导: 空态"添加 Provider" → 页内导航进设置添加流程(一次性引导, 保持现状)
+  // D-021 首开引导: 空态"添加 Provider" → 页内导航进添加向导(一次性引导, 保持现状)
   const openAddProvider = useCallback(() => {
-    setSettingsStep("add-channel");
-    setView("settings");
+    setView("add");
   }, []);
 
-  // 设置入口 = 模态弹窗(P0-6): 叠在面板上, × / 点遮罩 / ESC 关闭
+  // D-038: 侧栏 ＋ 添加 → 添加向导弹窗(叠面板, 流程本体不变)
+  const openAddModal = useCallback(() => {
+    setAddOpen(true);
+  }, []);
+
+  const closeAddModal = useCallback(() => {
+    setAddOpen(false);
+  }, []);
+
+  // 设置入口 = 模态弹窗(P0-6, D-038 起入口在侧栏底部): 叠在面板上, × / 点遮罩 / ESC 关闭
   const openSettings = useCallback(() => {
-    setSettingsStep("overview");
     setSettingsOpen(true);
   }, []);
 
@@ -210,15 +219,25 @@ export default function App() {
     setSettingsOpen(false);
   }, []);
 
-  // ESC 关闭设置弹窗
+  // D-038: 卡内删除 → 既有 store.remove(五步删除事务: 停源→purge DB→清钥匙串→摘卡→落盘)
+  const onDeleteProvider = useCallback((id: string) => {
+    getSharedStore().remove(id, getSharedKeyring());
+  }, []);
+
+  // 真实实例集合: 仅真实实例卡渲染删除钮(dev 场景 mock 预览卡不给无效按钮)
+  const realInstanceIds = useMemo(() => new Set(instances.map((i) => i.id)), [instances]);
+
+  // ESC 关闭模态(设置 / 添加向导)
   useEffect(() => {
-    if (!settingsOpen) return;
+    if (!settingsOpen && !addOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeSettings();
+      if (e.key !== "Escape") return;
+      if (addOpen) closeAddModal();
+      else closeSettings();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [settingsOpen, closeSettings]);
+  }, [settingsOpen, addOpen, closeSettings, closeAddModal]);
 
   if (!bootstrap) {
     return (
@@ -244,56 +263,51 @@ export default function App() {
     );
   }
 
-  if (view === "settings") {
-    // 首开向导(D-021): 一次性引导流程保持页内导航
+  if (view === "add") {
+    // 首开向导(D-021): 一次性引导流程保持页内导航(不弹模态)
     return (
       <div className="panel">
-        <SettingsView
-          variant="page"
-          themeMode={themeMode}
-          onThemeMode={setThemeMode}
-          sortConfig={sortConfig}
-          onSortConfig={onSortConfig}
-          initialStep={settingsStep}
-          onBack={() => setView("panel")}
-        />
+        <AddProviderWizard variant="page" onBack={() => setView("panel")} />
       </div>
     );
   }
 
   return (
     <div className="panel">
-      {visiblePersistError && (
-        // W3: 写盘失败顶部错误条(内存态仍可用, 可关闭; 恢复后同消息再失败会重弹)
-        <PersistErrorBar error={visiblePersistError} onDismiss={dismissPersistError} />
-      )}
-      <TitleBar
-        health={health}
-        tooltip={tooltip}
-        themeMode={themeMode}
-        refreshing={refreshing}
-        pinned={pinned}
-        onTogglePin={onTogglePin}
-        onCycleTheme={onCycleTheme}
+      {/* D-038 左侧窄功能侧栏(全局动作: 添加/刷新/设置), 与面板同高常驻 */}
+      <SideBar
+        onAdd={openAddModal}
         onRefresh={onRefresh}
         onOpenSettings={openSettings}
+        refreshing={refreshing}
       />
-      {providers === null ? (
-        <LoadingState />
-      ) : collecting ? (
-        // P0-8: 已配置实例但快照未到 → "数据采集中", 不显示 EmptyState 误导
-        <CollectingState />
-      ) : providers.length === 0 ? (
-        <EmptyState onAdd={openAddProvider} />
-      ) : (
-        <main className="card-list" data-testid="card-list">
-          {sortProviders(providers, sortConfig).map((p) => (
-            <ProviderCard key={p.provider_id} p={p} />
-          ))}
-        </main>
-      )}
-      <LocalAgentSection />
-      {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}
+      <div className="panel-main" data-testid="panel-main">
+        {visiblePersistError && (
+          // W3: 写盘失败顶部错误条(内存态仍可用, 可关闭; 恢复后同消息再失败会重弹)
+          <PersistErrorBar error={visiblePersistError} onDismiss={dismissPersistError} />
+        )}
+        <TitleBar health={health} tooltip={tooltip} pinned={pinned} onTogglePin={onTogglePin} />
+        {providers === null ? (
+          <LoadingState />
+        ) : collecting ? (
+          // P0-8: 已配置实例但快照未到 → "数据采集中", 不显示 EmptyState 误导
+          <CollectingState />
+        ) : providers.length === 0 ? (
+          <EmptyState onAdd={openAddProvider} />
+        ) : (
+          <main className="card-list" data-testid="card-list">
+            {sortProviders(providers, sortConfig).map((p) => (
+              <ProviderCard
+                key={p.provider_id}
+                p={p}
+                onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
+              />
+            ))}
+          </main>
+        )}
+        <LocalAgentSection />
+        {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}
+      </div>
       {settingsOpen && (
         // 设置模态弹窗(P0-6): 半透明遮罩叠在面板上方, 点遮罩关闭; 弹层自身圆角+阴影(D-031 无边框窗口)
         <div className="settings-overlay" data-testid="settings-overlay" onClick={closeSettings}>
@@ -310,9 +324,22 @@ export default function App() {
               onThemeMode={setThemeMode}
               sortConfig={sortConfig}
               onSortConfig={onSortConfig}
-              initialStep={settingsStep}
               onBack={closeSettings}
             />
+          </div>
+        </div>
+      )}
+      {addOpen && (
+        // D-038: 添加向导弹窗(与设置弹窗同形态: 遮罩 + 圆角弹层, × / 遮罩 / ESC 关闭)
+        <div className="settings-overlay" data-testid="add-overlay" onClick={closeAddModal}>
+          <div
+            className="settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="添加 Provider"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AddProviderWizard variant="modal" onBack={closeAddModal} />
           </div>
         </div>
       )}
