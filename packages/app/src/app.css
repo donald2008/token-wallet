@@ -337,9 +337,12 @@ body {
   flex: 0 0 auto;
   font-size: 11px;
   color: var(--fg-dim);
+  /* 固定宽+右对齐(P1 契约): 按最长预期文案"99天23小时"预留, 多行进度条右列宽度稳定不漂移 */
+  min-width: 84px;
+  text-align: right;
 }
 
-/* bars 模板: 最紧窗口置顶标红(§6.3) — 薄红左缘 + 标签加粗红字, 一眼定位最先耗尽的风险窗 */
+/* bars 模板: 最紧窗口标红(§6.3, P1 起只标不置顶) — 薄红左缘 + 标签加粗红字, 一眼定位最先耗尽的风险窗 */
 .bar-row[data-tightest] {
   border-left: 2px solid var(--bad);
   padding-left: 4px;
@@ -481,6 +484,8 @@ body {
   border-radius: 14px; /* 与 .panel 圆角卡片协调(被 overflow:hidden 裁齐) */
   background: rgba(0, 0, 0, 0.45);
   display: flex;
+  /* P1: 显式排除 drag 区干扰 — 弹窗控件(取消/×)命中不被 -webkit-app-region: drag 祖先吃掉 */
+  -webkit-app-region: no-drag;
 }
 
 .settings-modal {
@@ -499,6 +504,14 @@ body {
   min-height: 0;
 }
 
+/* P1: 弹窗内按钮命中区 ≥28px 高(真机验收报"取消按钮点击精度不准"; .btn 原 padding 4px 8px 偏小) */
+.settings-modal .btn {
+  min-height: 28px;
+}
+.settings-modal .btn-icon {
+  min-width: 28px;
+}
+
 /* ---- 设置抽屉占位 ---- */
 .settings-view {
   flex: 1;
@@ -507,6 +520,8 @@ body {
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
+  /* P1: 弹窗内部滚动不穿透 — 滚到底后背景面板完全不跟滚(链式滚动截断) */
+  overscroll-behavior: contain;
 }
 
 .settings-section {

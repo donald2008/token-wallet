@@ -50,27 +50,54 @@ export function getTemplateFor(p: ProviderSnapshot): Template {
 
 /* ---------------- 窗口制: bars 模板(§6.3) ---------------- */
 
-/** 窗口紧度排序: used/limit 比例降序(最紧在前) */
-function sortByTightness(metrics: Metric[]): Metric[] {
-  return [...metrics].sort((a, b) => {
-    const ra = a.limit !== undefined && a.limit > 0 ? a.used / a.limit : 0;
-    const rb = b.limit !== undefined && b.limit > 0 ? b.used / b.limit : 0;
-    return rb - ra;
-  });
+/**
+ * 窗口时间跨度分级(P1 真机验收反馈): 按 key 语义识别窗口时长 ——
+ * 短(5h/小时级)=0, 中(周)=1, 长(月及更长)=2, 未识别=3(保持原相对顺序追加在已知窗口之后, 不丢不崩)。
+ */
+export function windowSpanRank(key: string): 0 | 1 | 2 | 3 {
+  const k = key.toLowerCase();
+  if (/month|月|30d/.test(k)) return 2;
+  if (/week|周|7d/.test(k)) return 1;
+  if (/\d+\s*h\b|小时|hour/.test(k)) return 0;
+  return 3;
+}
+
+/**
+ * 窗口排序: 按时间窗升序(5小时窗 → 周窗 → 月窗 → 更长窗), 不按紧度。
+ * 未识别 key 稳定排在已知窗口之后(Array.sort 稳定, 同 rank 保持原相对顺序)。
+ * 纯函数, 不改输入。
+ */
+export function sortByWindowSpan(metrics: Metric[]): Metric[] {
+  return [...metrics].sort((a, b) => windowSpanRank(a.key) - windowSpanRank(b.key));
+}
+
+/** 最紧窗口 = used/limit 比例最高者(只用于标红定位风险, 不参与排序) */
+export function tightestMetric(metrics: Metric[]): Metric | undefined {
+  let best: Metric | undefined;
+  let bestRatio = -1;
+  for (const m of metrics) {
+    const r = m.limit !== undefined && m.limit > 0 ? m.used / m.limit : 0;
+    if (r > bestRatio) {
+      bestRatio = r;
+      best = m;
+    }
+  }
+  return best;
 }
 
 /**
  * bars 模板: 多窗口嵌套, 每窗口一条进度条 + 压字 + 重置倒计时;
- * 最紧窗口(剩余比例最小)置顶并标红, 一眼定位最先耗尽的风险窗。
+ * 窗口按时间窗升序排列(5h→周→月, P1 真机验收契约); 最紧窗口(剩余比例最小)仍标红,
+ * 但只标不排序 —— 红色标记风险, 顺序归时间窗, 一眼定位最先耗尽的风险窗。
  * 状态微部件全手绘(D-002), 不引 Chart.js。
  */
 export function BarsTemplate({ p }: { p: ProviderSnapshot }) {
-  const metrics = sortByTightness(p.metrics);
-  const tightest = metrics[0];
+  const metrics = sortByWindowSpan(p.metrics);
+  const tightest = tightestMetric(p.metrics);
   return (
     <div className="bars-template" data-testid="bars-template">
       {metrics.map((m) => {
-        // 最紧窗口(剩余比例最小)置顶后标红 —— 风险带(warn/bad)才标, 健康窗口不误标红(颜色即状态)
+        // 最紧窗口(used/limit 最高)标红 —— 风险带(warn/bad)才标, 健康窗口不误标红(颜色即状态)
         const tight = m === tightest && metricHealth(m) !== "ok";
         return <ProgressBar key={m.key} metric={m} tightest={tight} />;
       })}

@@ -138,8 +138,8 @@ test("bars+ticker 模板: 进度条/倒计时/最紧标红 + 余额预计可用�
   await pwExpect(bars).toHaveCount(2); // kimi(window) + ark(window)
   const kimiBars = bars.first();
   await pwExpect(kimiBars.locator(".progress")).toHaveCount(2); // rolling_5h + weekly 两窗
-  // 最紧窗口(rolling_5h 剩余<30%)置顶标红
+  // 最紧窗口(rolling_5h 剩余<30%)标红 —— P1 起按时间窗升序排列, 只标不置顶(rolling_5h 为最短窗仍在首行)
   await pwExpect(kimiBars.locator(".bar-row[data-tightest] .bar-label")).toContainText("rolling_5h");
-  // 重置倒计时("分钟后重置")存在
-  await pwExpect(kimiBars.locator(".bar-reset").first()).toContainText("重置");
+  // 重置倒计时(P1 契约: 纯倒计时无"后重置", 阶梯 X天X小时/X小时X分/X分)
+  await pwExpect(kimiBars.locator(".bar-reset").first()).toContainText(/\d+(天\d+小时|小时\d+分|分)/);
 });

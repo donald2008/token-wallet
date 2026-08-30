@@ -18,7 +18,7 @@
 | 原型 | 代表 | 核心指标 | 展示规则 |
 |------|------|---------|---------|
 | `balance` 余额制 | DeepSeek, Kimi 开放平台 | remaining/currency, granted/topped_up 拆分 | 余额大数字 + 按近 7 天速率的预计可用天数 |
-| `window` 窗口制 | Kimi Code(5h滚动+7d+月), 方舟 Coding(5h/周/月), 百炼 Token Plan(7d Credits) | 多窗口嵌套, 每窗口 used/limit/reset_at | 每窗口一条进度条+重置倒计时; 最紧窗口置顶标红 |
+| `window` 窗口制 | Kimi Code(5h滚动+7d+月), 方舟 Coding(5h/周/月), 百炼 Token Plan(7d Credits) | 多窗口嵌套, 每窗口 used/limit/reset_at | 每窗口一条进度条+重置倒计时; 窗口按时间窗升序(5h→周→月), 最紧窗口标红(只标不排序) |
 | `local` 本地用量 | Hermes 各 agent token 消耗 | per agent/model 时段用量 | 用量列表 + 云×本地对比行 |
 
 ### 2.1 统一快照 schema (适配器唯一输出契约)
@@ -266,6 +266,8 @@ spike 产出 = YES/NO + 接口样本; NO 降级为 unsupported 卡片。
 
 - **Theme**(配色/密度): dark / light, 默认追随系统, 可配置覆盖
 - **Template**(信息结构与视觉形态): 每原型一个默认模板, 用户可全局选或按 provider 覆盖
+- **bars 模板窗口顺序**(P1 真机验收变更): 按时间窗升序(5 小时窗 → 周窗 → 月窗 → 更长窗), 不按紧度;
+  "最紧窗口标红"保留但只标不排序 —— 红色标记风险, 顺序归时间窗(2026-08-30 真机反馈: 按紧度排序在 kimi 卡上观感错乱)
 
 | 模板 | 视觉形态 | 适合原型 | 阶段 |
 |------|---------|---------|------|
