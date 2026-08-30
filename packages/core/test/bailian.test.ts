@@ -23,6 +23,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(here, "..", "src", "channels", "__fixtures__");
 const HEALTHY = readFileSync(join(FIXTURES, "bailian-usage-healthy.json"), "utf8");
 const AUTH_EXPIRED = readFileSync(join(FIXTURES, "bailian-usage-auth-expired.json"), "utf8");
+// t_c561c8a8 终审 BLOCKING 补证: 真实 bl(1.18.x, 未登录)把错误 JSON 写 **stderr**、stdout 空
+const AUTH_EXPIRED_STDERR = readFileSync(join(FIXTURES, "bailian-usage-auth-expired-stderr.json"), "utf8");
 const NEVER_CONFIGURED = readFileSync(join(FIXTURES, "bailian-auth-status-never-configured.json"), "utf8");
 
 const INSTANCE: InstanceConfig = {
@@ -91,6 +93,18 @@ describe("aliyun-bailian/token-plan golden sample(D-041 三态)", () => {
   it("会话失效: exit=3 + 'No console access token found' → auth_expired + setup_hint", async () => {
     const adapter = new BailianTokenPlanAdapter(
       runnerReturning({ stdout: AUTH_EXPIRED, code: 3 }),
+    );
+    const snap = await adapter.fetchSnapshot(ALIYUN_BAILIAN_TOKEN_PLAN, INSTANCE, makeCtx());
+
+    expect(snap.status).toBe("auth_expired");
+    expect(snap.setup_hint).toContain("bl auth login --console");
+    expect(snap.metrics).toEqual([]);
+  });
+
+  it("会话失效真实形态: exit=3 + body 写 stderr(stdout 空) → auth_expired + setup_hint", async () => {
+    // t_c561c8a8 终审 BLOCKING 补证: 真实 bl(1.18.x, 未登录)错误 JSON 落 stderr、stdout 空
+    const adapter = new BailianTokenPlanAdapter(
+      runnerReturning({ stdout: "", code: 3, stderr: AUTH_EXPIRED_STDERR }),
     );
     const snap = await adapter.fetchSnapshot(ALIYUN_BAILIAN_TOKEN_PLAN, INSTANCE, makeCtx());
 
@@ -172,6 +186,16 @@ describe("healthCheck: bl auth status 判从未配置(exit code 不可信, 解�
   it("未登录也 exit=0 + 含 'not logged in or has expired' → ok=false + setup_hint", async () => {
     const adapter = new BailianTokenPlanAdapter(
       runnerReturning({ stdout: NEVER_CONFIGURED, code: 0 }),
+    );
+    const res = await adapter.healthCheck(ALIYUN_BAILIAN_TOKEN_PLAN, INSTANCE, makeCtx());
+    expect(res.ok).toBe(false);
+    expect(res.setupHint).toContain("bl auth login --console");
+  });
+
+  it("会话失效 body 写 stderr(与采集同口径) → ok=false + setup_hint", async () => {
+    // t_c561c8a8 终审 BLOCKING 补证: healthCheck 判别同样要覆盖 stderr(真实 bl 未登录形态)
+    const adapter = new BailianTokenPlanAdapter(
+      runnerReturning({ stdout: "", code: 3, stderr: AUTH_EXPIRED_STDERR }),
     );
     const res = await adapter.healthCheck(ALIYUN_BAILIAN_TOKEN_PLAN, INSTANCE, makeCtx());
     expect(res.ok).toBe(false);

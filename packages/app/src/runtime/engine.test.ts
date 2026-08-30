@@ -332,8 +332,10 @@ describe("D-042 command 通道引擎接线(command_run IPC 桥)", () => {
     engine.stop();
   });
 
-  it("目录内 command 描述符但注册表缺失(不变量破坏)→ 显式 unsupported(防御保留)", () => {
-    // COMMAND_ADAPTERS 是 D-041 常量, 无法在测试中删除 key; 用假通道模拟注册表缺失路径
+  it("目录外未知 command 通道(不在 PRESET_CHANNELS)→ !descriptor 分支显式 unsupported", () => {
+    // 注意: 本用例走的是 !descriptor(目录外)分支, 不是 COMMAND_ADAPTERS 缺失分支 ——
+    // 注册表缺失(目录内有 command 描述符但 COMMAND_ADAPTERS 无条目)由
+    // engine-command-registry.test.ts(vi.mock 空注册表)真覆盖, 本用例不改名会误导维护者。
     const unknownCommand: InstanceConfig = {
       id: "inst-unknown",
       channel: "unknown-command/plan",

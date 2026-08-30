@@ -110,7 +110,9 @@ export class BailianTokenPlanAdapter extends ScriptedAdapter {
       };
     }
 
-    if (isAuthExpiredBody(res.stdout)) {
+    // D-041 round3(t_c561c8a8 终审 BLOCKING): 真实 bl 未登录时错误 JSON 写 **stderr**、
+    // stdout 空(exit=3)。判别必须覆盖双 stream, 否则 auth_expired 永不命中。
+    if (isAuthExpiredBody(res.stdout + res.stderr)) {
       return {
         ...base,
         status: "auth_expired",
@@ -200,7 +202,8 @@ export class BailianTokenPlanAdapter extends ScriptedAdapter {
       // auth status 失败不判会话失效(exit code 不可信); 返回 ok 让采集给结论
       return { ok: true };
     }
-    if (isAuthExpiredBody(res.stdout)) {
+    // D-041 round3: auth status 失效 body 同样可能落 stderr, 与采集同口径判双 stream
+    if (isAuthExpiredBody(res.stdout + res.stderr)) {
       return { ok: false, setupHint: SETUP_HINT };
     }
     // win32 cmd /c 包装: bl 缺失 → 非零退出 + stderr 未找到 → 安装提示

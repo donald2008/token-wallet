@@ -79,13 +79,19 @@ async function realCommandTest(channel: ChannelDescriptor): Promise<TestConnecti
   if (!descriptor) {
     return { ok: false, error: `通道 ${channel.channel} 未接入真实采集(目录不变量破坏)` };
   }
-  const snap = await commandRun({
-    channel: channel.channel,
-    descriptor,
-    instance: { id: "test-conn", channel: channel.channel, name: "测试连接", params: {} },
-    fetchedAt: NOW,
-    timeoutMs: 15_000,
-  });
+  let snap: unknown;
+  try {
+    snap = await commandRun({
+      channel: channel.channel,
+      descriptor,
+      instance: { id: "test-conn", channel: channel.channel, name: "测试连接", params: {} },
+      fetchedAt: NOW,
+      timeoutMs: 15_000,
+    });
+  } catch (err) {
+    // t_c561c8a8 round3(W1): 桥 reject(主进程异常/注册表破坏) → 显式失败, 不停「测试中…」
+    return { ok: false, error: `command 测试连接失败: ${err instanceof Error ? err.message : String(err)}` };
+  }
   if (snap === null) {
     return { ok: false, error: "command 通道需桌面壳(主进程)执行" };
   }
