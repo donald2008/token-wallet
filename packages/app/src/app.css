@@ -108,6 +108,36 @@ body {
   padding: 4px 6px;
 }
 
+/* ---- P1: 工具区 hover 显隐 + 置顶图钉 ----
+ * 默认淡出(零额外控件, 不占视觉); 鼠标进入面板淡入。
+ * 例外: 置顶开启时图钉常显(状态必须可见, 否则无法一眼判断是否置顶)。
+ * 键盘可达: focus-within(栏内任一控件聚焦)/focus-visible 时必须显示,
+ * 否则 Tab 导航会瞎。
+ * ⚠️ 只用 opacity 不加 pointer-events:none — 实证后者会让 Playwright click
+ * 命中拦截(titlebar 拖拽区拦截指针)且真实点击前 hover 已淡入, 无遮拦收益。 */
+.titlebar .toolbar-btn {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.panel:hover .titlebar .toolbar-btn,
+.titlebar:focus-within .toolbar-btn,
+.titlebar .toolbar-btn:focus-visible {
+  opacity: 1;
+}
+.titlebar .btn-pin[data-pinned="true"] {
+  opacity: 1;
+}
+/* 图钉手写 SVG: 非置顶=空心描边(currentColor 随主题), 置顶=实心 --accent 高亮
+   (D-016 双 token 既有语义, 填充用 --accent, 不引入第五种强调色) */
+.btn-pin .pin-shape {
+  fill: none;
+  stroke: currentColor;
+}
+.btn-pin[data-pinned="true"] .pin-shape {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
 .btn.spinning .icon-refresh {
   animation: tw-spin 0.8s linear infinite;
 }

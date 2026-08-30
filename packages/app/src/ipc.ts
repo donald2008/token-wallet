@@ -9,7 +9,7 @@ import type { Bootstrap, HealthLevel } from "./types";
  * 通道名契约保全(换壳不变): get_bootstrap / instances_load / instances_save /
  * record_consent / keyring_get|set|delete / http_get_json / sqlite_batch|exec|query /
  * get_storage_paths / update_tray_status / get_launch_at_login / set_launch_at_login /
- * win_minimize / win_close(E1 新增)。
+ * win_minimize / win_close(E1 新增) / win_get_always_on_top / win_set_always_on_top(P1 新增)。
  */
 
 interface TokenWalletBridge {
@@ -218,4 +218,35 @@ export async function winMinimize(): Promise<void> {
 export async function winClose(): Promise<void> {
   const viaHost = hostInvoke<void>("win_close");
   if (viaHost) await viaHost;
+}
+
+// ---------------- P1: 窗口置顶开关(标题栏图钉, 默认关, 持久化 settings.json) ----------------
+
+/** 浏览器降级 localStorage 键(真壳置顶态在主进程 settings.json, D-019) */
+const ALWAYS_ON_TOP_KEY = "token-wallet.always-on-top.v1";
+
+/** 查询当前置顶态; 浏览器降级读 localStorage */
+export async function winGetAlwaysOnTop(): Promise<boolean> {
+  const viaHost = await hostInvoke<boolean>("win_get_always_on_top");
+  if (viaHost !== null) return viaHost;
+  try {
+    return localStorage.getItem(ALWAYS_ON_TOP_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** 切换置顶并回写持久化; 浏览器降级记 localStorage + no-op 窗口行为 */
+export async function winSetAlwaysOnTop(enabled: boolean): Promise<void> {
+  const viaHost = hostInvoke<void>("win_set_always_on_top", { enabled });
+  if (viaHost) {
+    await viaHost;
+    return;
+  }
+  try {
+    if (enabled) localStorage.setItem(ALWAYS_ON_TOP_KEY, "1");
+    else localStorage.removeItem(ALWAYS_ON_TOP_KEY);
+  } catch {
+    /* ignore */
+  }
 }

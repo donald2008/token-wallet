@@ -67,6 +67,24 @@ const ipcMocks: Record<string, IpcHandler> = {
   update_tray_status: () => null,
   win_minimize: () => null,
   win_close: () => null,
+  // P1 置顶开关: localStorage 持久化(真壳 settings.json 跨重启存活, mock 同语义,
+  // 可测"开置顶 → reload → 图钉仍实心常显")
+  win_get_always_on_top: () => {
+    try {
+      return localStorage.getItem("token-wallet.mock.always-on-top.v1") === "1";
+    } catch {
+      return false;
+    }
+  },
+  win_set_always_on_top: (args) => {
+    try {
+      if (args?.enabled) localStorage.setItem("token-wallet.mock.always-on-top.v1", "1");
+      else localStorage.removeItem("token-wallet.mock.always-on-top.v1");
+    } catch {
+      /* ignore */
+    }
+    return null;
+  },
   get_storage_paths: () => ({
     configDir: "/home/test/.config/token-wallet",
     dataDir: "/home/test/.local/share/token-wallet",

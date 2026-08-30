@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Bootstrap } from "./types";
 import { globalHealth, sortByHealth, tooltipSummary } from "./health";
-import { getBootstrap, getStoragePaths, persistConsent, updateTrayStatus } from "./ipc";
+import { getBootstrap, getStoragePaths, persistConsent, updateTrayStatus, winGetAlwaysOnTop, winSetAlwaysOnTop } from "./ipc";
 import { selectPanelProviders } from "./panelProviders";
 import type { ScenarioId } from "./mockData";
 import { useTheme, type ThemeMode } from "./theme";
@@ -70,6 +70,8 @@ export default function App() {
   const { visible: visiblePersistError, dismiss: dismissPersistError } = useDismissibleError(persistError);
   const [scenario, setScenario] = useState<ScenarioId>("mixed");
   const [refreshing, setRefreshing] = useState(false);
+  // P1 窗口置顶态: 启动时读回(真壳=settings.json, 浏览器=localStorage 降级)
+  const [pinned, setPinned] = useState(false);
   // 页内导航仅留给首开向导(D-021 一次性引导); 设置入口 = 模态弹窗(P0-6)
   const [view, setView] = useState<"panel" | "settings">("panel");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -135,6 +137,23 @@ export default function App() {
           : tooltipSummary(providers),
     [collecting, providers],
   );
+
+  // P1: 置顶态启动读回(win_get_always_on_top → settings.json)
+  useEffect(() => {
+    let alive = true;
+    void winGetAlwaysOnTop().then((v) => {
+      if (alive) setPinned(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const onTogglePin = useCallback(() => {
+    const next = !pinned;
+    setPinned(next);
+    void winSetAlwaysOnTop(next); // 回写持久化(settings.json / localStorage 降级)
+  }, [pinned]);
 
   // 托盘联动: 全局最差状态 → 托盘色点 + tooltip(D-003)
   useEffect(() => {
@@ -238,6 +257,8 @@ export default function App() {
         tooltip={tooltip}
         themeMode={themeMode}
         refreshing={refreshing}
+        pinned={pinned}
+        onTogglePin={onTogglePin}
         onCycleTheme={onCycleTheme}
         onRefresh={onRefresh}
         onOpenSettings={openSettings}
