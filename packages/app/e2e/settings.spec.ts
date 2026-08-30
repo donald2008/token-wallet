@@ -239,9 +239,10 @@ test("排序配置: 缺省名称正排 + 切紧要度生效 + 方向倒排 + 重
   const cards = page.getByTestId("provider-card");
   await pwExpect(cards).toHaveCount(4);
 
-  // 缺省 = 名称正排(无历史设置时)
+  // 缺省 = 名称正排(无历史设置时); 期望钉 "zh" 与 sortProviders 的 Intl.Collator("zh") 同语义,
+  // 消除 Node 测试进程默认 locale 跨机差异(t_6c6dd54f)
   const names = await cards.locator(".card-name").allTextContents();
-  pwExpect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
+  pwExpect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, "zh", { numeric: true })));
 
   // 设置弹窗: 排序键/方向两正交控件, 缺省态高亮
   await openSettingsModal(page);

@@ -107,9 +107,10 @@ test("混合场景: 缺省名称正排, auth_expired 黄灯+setup_hint, 异常�
   const cards = page.getByTestId("provider-card");
   await pwExpect(cards).toHaveCount(4);
 
-  // #829 R1: 缺省排序 = 名称正排(localeCompare 自然序), 不再按健康度置顶
+  // #829 R1: 缺省排序 = 名称正排(localeCompare 自然序), 不再按健康度置顶;
+  // 期望钉 "zh" 与 sortProviders 的 Intl.Collator("zh") 同语义(t_6c6dd54f)
   const names = await cards.locator(".card-name").allTextContents();
-  pwExpect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
+  pwExpect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, "zh", { numeric: true })));
 
   // auth_expired 卡(黄 warn)内容语义不变(位置随名称排序, 按内容定位)
   const expiredCard = cards.filter({ hasText: "登录态过期" });
@@ -140,7 +141,13 @@ test("bars+ticker 模板: 进度条/倒计时/最紧标红 + 余额预计可用�
   // bars 模板(window): 多窗口各一条进度条 + 重置倒计时
   const bars = page.getByTestId("bars-template");
   await pwExpect(bars).toHaveCount(2); // kimi(window) + ark(window)
-  const kimiBars = bars.first();
+  // 按内容定位 kimi 卡(不耦合卡间排序位置 —— #829 R1 起卡片按配置排序, t_6c6dd54f 钉 zh 后拼音序 kimi 不再居首)
+  // 注: 卡名在卡头, bars-template 是卡内子元素不含名称, 须在 provider-card 层过滤再取内部模板
+  const kimiBars = page
+    .getByTestId("provider-card")
+    .filter({ hasText: "Kimi-Code" })
+    .getByTestId("bars-template");
+  await pwExpect(kimiBars).toHaveCount(1);
   await pwExpect(kimiBars.locator(".progress")).toHaveCount(2); // rolling_5h + weekly 两窗
   // 最紧窗口(rolling_5h 剩余<30%)标红 —— P1 起按时间窗升序排列, 只标不置顶(rolling_5h 为最短窗仍在首行)
   await pwExpect(kimiBars.locator(".bar-row[data-tightest] .bar-label")).toContainText("rolling_5h");

@@ -64,6 +64,26 @@ describe("sortProviders: name 键(localeCompare 自然序)", () => {
     expect(sorted[1].status).toBe("ok");
     expect(sorted[2].status).toBe("error");
   });
+
+  it("中文名拼音序 + 中英混合(locale 显式钉 zh, 不随运行时默认 locale 漂移, t_6c6dd54f)", () => {
+    // zh 拼音序: 百炼(bai) < 方舟(fang) < DeepSeek(d) < Kimi(k)
+    // —— 拼音与拉丁同序列比对, 与 en(拉丁整体在前)不同; 钉 zh 后 Node/Chrome 结果一致
+    const cards = [snap("Kimi"), snap("方舟"), snap("DeepSeek"), snap("百炼")];
+    expect(names(sortProviders(cards, { key: "name", dir: "asc" }))).toEqual([
+      "百炼",
+      "方舟",
+      "DeepSeek",
+      "Kimi",
+    ]);
+    // 与 e2e 期望值计算同式(localeCompare 钉 zh) —— 两侧锁同一语义
+    const e2eNames = ["Kimi", "方舟", "DeepSeek", "百炼"];
+    expect([...e2eNames].sort((a, b) => a.localeCompare(b, "zh", { numeric: true }))).toEqual([
+      "百炼",
+      "方舟",
+      "DeepSeek",
+      "Kimi",
+    ]);
+  });
 });
 
 describe("sortProviders: urgency 键(卡内最紧窗口剩余比例)", () => {

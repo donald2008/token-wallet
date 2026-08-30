@@ -169,18 +169,22 @@ export function normalizeSortConfig(raw: unknown): SortConfig {
 /**
  * 卡间排序(#829 R1): key × dir 两正交参数。
  * - key=name: display_name localeCompare 自然序(asc 正排), 同名保持原相对顺序(排序稳定)
+ *   locale 显式钉 "zh"(中文名拼音序, #829 语义) —— 不钉则排序随运行时默认 locale 漂移
+ *   (Node zh=拼音前 vs Chrome en=拉丁前), 跨机 e2e 必红(t_6c6dd54f)
  * - key=urgency: 卡内 min(remaining/limit) 升序(asc = 越快耗尽越靠前);
  *   limit 缺失/为 0 的卡剩余比例视为 1(asc 时排最后, 不崩); 同比例按 sortByHealth 次序稳定(健康差在前)
  * - dir=desc 对两种 key 都是整体直接反转
  * 托盘(globalHealth/tooltipSummary)不经此函数 —— 排序配置不影响托盘全局最差状态。
  */
+const NAME_COLLATOR = new Intl.Collator("zh", { numeric: true });
+
 export function sortProviders(
   providers: ProviderSnapshot[],
   config: SortConfig = DEFAULT_SORT_CONFIG,
 ): ProviderSnapshot[] {
   const asc = [...providers].sort((a, b) => {
     if (config.key === "name") {
-      return a.display_name.localeCompare(b.display_name, undefined, { numeric: true });
+      return NAME_COLLATOR.compare(a.display_name, b.display_name);
     }
     const diff = minRemainingRatio(a) - minRemainingRatio(b);
     if (diff !== 0) return diff;
