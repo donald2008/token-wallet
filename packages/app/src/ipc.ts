@@ -210,6 +210,31 @@ export async function sqliteQuery(sql: string, params: unknown[]): Promise<unkno
   return [];
 }
 
+// ---------------- D-042: command 类通道执行桥(主进程真实 spawn) ----------------
+
+/**
+ * command 类通道采集载荷(D-042): renderer 把通道 + 实例 + 采集上下文传给主进程,
+ * 主进程内 COMMAND_ADAPTERS[channel]() 构造真实适配器(缺省 runner=真实 spawn)
+ * 执行 fetchSnapshot, 返回 ProviderSnapshot。renderer 零 Node 能力(P0-4 同族纪律)。
+ */
+export interface CommandRunPayload {
+  channel: string;
+  descriptor?: unknown;
+  instance?: unknown;
+  fetchedAt?: number;
+  timeoutMs?: number;
+}
+
+/**
+ * command 类通道采集 — 主进程 command_run 桥。
+ * 返回 ProviderSnapshot(JSON 序列化; status=ok/auth_expired/error 全由 core 适配器分类)。
+ * 纯浏览器 dev(无桌面桥)→ null 语义: command 无法在浏览器执行, 由引擎侧转 error 快照。
+ */
+export async function commandRun(payload: CommandRunPayload): Promise<unknown | null> {
+  const viaHost = await hostInvoke<unknown>("command_run", payload as unknown as Record<string, unknown>);
+  return viaHost;
+}
+
 // ---------------- E1 新增: 窗口控制(HTML TitleBar 的 min/close) ----------------
 
 /** 最小化窗口(无边框窗的 HTML TitleBar 按钮); 浏览器降级 no-op */

@@ -26,6 +26,7 @@ import { hostHttpGetJson } from "./host-http";
 import { SafeStorageLike, deleteSecret, getSecret, setSecret } from "./keyring";
 import { deriveStoragePaths, type StoragePaths } from "./paths";
 import { batch, closeAll, exec, query } from "./sqlite";
+import { runCommandFetch, type CommandRunPayload } from "./command-run";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
@@ -349,6 +350,12 @@ function registerIpc(): void {
   // 非 2xx 不抛(引擎层分类, 换壳前后语义一致), 网络错/超时抛(消息脱敏) ----
   ipcMain.handle("http_get_json", (_event, payload: Record<string, unknown> | undefined) =>
     hostHttpGetJson(payload ?? {}),
+  );
+
+  // ---- D-042: command 类通道执行桥(主进程真实 spawn, renderer 零 Node 能力) ----
+  // 纯逻辑在 command-run.ts(node vitest 直测), 这里仅做 IPC 注册
+  ipcMain.handle("command_run", (_event, payload: CommandRunPayload | undefined) =>
+    runCommandFetch(payload ?? {}),
   );
 }
 

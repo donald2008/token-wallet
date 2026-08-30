@@ -232,6 +232,48 @@ const ipcMocks: Record<string, IpcHandler> = {
     }
     return result;
   },
+  // ---- D-042: command 类通道执行桥(browser mock, 语义与主进程真实适配器产出一致) ----
+  // ⚠️ 契约 5: browser 模式 mock IPC 不经主进程, 对主进程接线零信息量——本 mock 只
+  //    驱动 renderer 侧逻辑(引擎 command 分支解析/面板出卡), 不许改 mock 语义凑绿;
+  //    真实 spawn 接线由 electron/command-run.test.ts 真实取证。
+  // 默认返回健康快照(bl 已装 + 会话有效); localStorage token-wallet.mock.commandfail=1
+  // 时返回 error + 安装 hint(bl 未装语义)——与 core BailianTokenPlanAdapter 产出同形态。
+  command_run: (args) => {
+    const inst = (args?.instance ?? {}) as { id?: string; name?: string };
+    const id = inst.id ?? "inst-cmd";
+    const name = inst.name ?? "百炼 Token Plan #1";
+    const fetched_at = Math.floor(Date.now() / 1000);
+    let fail = false;
+    try {
+      fail = localStorage.getItem("token-wallet.mock.commandfail") === "1";
+    } catch {
+      /* ignore */
+    }
+    if (fail) {
+      return {
+        provider_id: id,
+        display_name: name,
+        plan_type: "window",
+        fetched_at,
+        status: "error",
+        metrics: [],
+        alerts: [{ level: "critical", message: "bl CLI 不在 PATH, 请安装后重启应用", code: "cli_missing" }],
+        error_message: "bl CLI 不在 PATH, 请安装后重启应用",
+        setup_hint: "未检测到 bl CLI: 请安装(见 DESIGN.md D-023 一键安装)后重启应用",
+      };
+    }
+    return {
+      provider_id: id,
+      display_name: name,
+      plan_type: "window",
+      fetched_at,
+      status: "ok",
+      metrics: [
+        { key: "weekly", kind: "window", unit: "percent", used: 37.9, limit: 100, reset_at: fetched_at + 86_400 },
+      ],
+      alerts: [],
+    };
+  },
   sqlite_batch: () => null,
   sqlite_exec: (args) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

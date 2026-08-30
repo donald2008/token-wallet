@@ -12,14 +12,15 @@
  * - 通道映射零代码(§5.1): GenericHttpAdapter + CHANNEL_MAPPINGS(与 PRESET_CHANNELS 配套)。
  */
 import { GenericHttpAdapter, type AdapterContext } from "@token-wallet/core/generic-http";
-import { CHANNEL_MAPPINGS, getPresetChannel } from "@token-wallet/core/channels";
+import { CHANNEL_MAPPINGS, getPresetChannel, type ChannelDescriptor } from "@token-wallet/core/channels";
+import { COMMAND_ADAPTERS } from "@token-wallet/core/channels/aliyun-bailian";
 import { Scheduler } from "@token-wallet/core/scheduler";
 import { dailyRateFromHistory } from "@token-wallet/core/rate";
 import type { ProviderSnapshot } from "../types";
 import type { InstanceConfig, CredentialRef } from "../instances/schema";
 import { KEYRING_SERVICE, getSharedKeyring } from "../instances/store";
 import { getSharedStorage, type SnapshotStorage } from "./storage";
-import { httpGetJson } from "../ipc";
+import { commandRun, httpGetJson } from "../ipc";
 
 const HTTP_TIMEOUT_MS = 10_000;
 
@@ -125,13 +126,34 @@ export class RuntimeEngine {
   /** 注册实例到调度器; 未接入的通道产出显式 unsupported 快照(P0-8, 不静默) */
   private buildInstances(): void {
     for (const inst of this.instances) {
-      // 通道 → 声明式映射(零代码 §5.1, CHANNEL_MAPPINGS 与 PRESET_CHANNELS 配套, D-036)
-      const mapping = CHANNEL_MAPPINGS[inst.channel];
       const descriptor = getPresetChannel(inst.channel);
-      if (!mapping || !descriptor) {
-        // P0-8: 显式"暂未接入"卡, 不进调度器(无适配器可轮询)
+      if (!descriptor) {
+        // P0-8: 目录外通道 → 显式"暂未接入"卡, 不进调度器(无适配器可轮询)
         // eslint-disable-next-line no-console
         console.warn(`[engine] 通道 ${inst.channel} 暂无真实适配器, 显式 unsupported 卡`);
+        this.latest.set(inst.id, unsupportedSnapshot(inst));
+        continue;
+      }
+      // D-042: command 类通道走 COMMAND_ADAPTERS(D-036 不变量的 command 半边);
+      // 真实 spawn 在主进程 command_run 桥, renderer 零 Node 能力(P0-4 同族纪律)
+      if (descriptor.adapter === "command") {
+        const commandFactory = COMMAND_ADAPTERS[inst.channel];
+        if (!commandFactory) {
+          // 目录有 command 描述符但注册表缺(不变量破坏, D-041 断言过)——显式 unsupported
+          // eslint-disable-next-line no-console
+          console.warn(`[engine] command 通道 ${inst.channel} 未注册适配器, 显式 unsupported 卡`);
+          this.latest.set(inst.id, unsupportedSnapshot(inst));
+          continue;
+        }
+        this.registerCommandInstance(inst, descriptor);
+        continue;
+      }
+      // http 类通道: 声明式映射(零代码 §5.1, CHANNEL_MAPPINGS 与 PRESET_CHANNELS 配套, D-036)
+      const mapping = CHANNEL_MAPPINGS[inst.channel];
+      if (!mapping) {
+        // P0-8: 目录有描述符但 http 映射缺(不变量破坏)——显式 unsupported
+        // eslint-disable-next-line no-console
+        console.warn(`[engine] http 通道 ${inst.channel} 缺映射, 显式 unsupported 卡`);
         this.latest.set(inst.id, unsupportedSnapshot(inst));
         continue;
       }
@@ -160,6 +182,47 @@ export class RuntimeEngine {
         onResult: (snap) => void this.onResult(inst.id, snap),
       });
     }
+  }
+
+  /**
+   * D-042: command 类实例注册到调度器 — fetch 经主进程 command_run 桥执行真实 spawn。
+   * 纯浏览器 dev(无桌面桥)→ commandRun 返回 null, 转显式 error 快照(不是 unsupported:
+   * 通道已接入, 只是当前运行时无法执行; 用户看到「需桌面壳执行」而非「暂未接入」)。
+   */
+  private registerCommandInstance(inst: InstanceConfig, descriptor: ChannelDescriptor): void {
+    this.scheduler.add({
+      id: inst.id,
+      kind: "command",
+      intervalMs: parsePollIntervalMs(inst.poll_interval),
+      fetch: async (ctx) => {
+        const snap = await commandRun({
+          channel: inst.channel,
+          descriptor,
+          instance: {
+            id: inst.id,
+            channel: inst.channel,
+            name: inst.name,
+            params: inst.params as Record<string, unknown>,
+          },
+          fetchedAt: Math.floor(Date.now() / 1000),
+          timeoutMs: ctx.timeoutMs,
+        });
+        if (snap === null) {
+          return {
+            provider_id: inst.id,
+            display_name: inst.name,
+            plan_type: descriptor.plan_type,
+            fetched_at: Math.floor(Date.now() / 1000),
+            status: "error",
+            metrics: [],
+            alerts: [{ level: "critical", message: "command 通道需桌面壳(主进程)执行", code: "no_host" }],
+            error_message: "command 通道需桌面壳(主进程)执行",
+          };
+        }
+        return snap as ProviderSnapshot;
+      },
+      onResult: (snap) => void this.onResult(inst.id, snap),
+    });
   }
 
   /** 一次采集结果: 落库 → 速率附着 → 通知面板 */

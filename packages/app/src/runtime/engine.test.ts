@@ -5,6 +5,7 @@ vi.mock("../ipc", () => ({
   httpGetJson: vi.fn(async () => {
     throw new Error("不应调用: 未接入通道不进调度器");
   }),
+  commandRun: vi.fn(async () => null),
 }));
 
 import { RuntimeEngine, unsupportedSnapshot, type EngineOutput } from "./engine";
@@ -223,6 +224,127 @@ describe("B-3 onResult 写库守卫(迟到采集响应静默丢弃)", () => {
 
     expect(saved).toEqual(["inst-a"]);
     expect(engine.snapshots.map((s) => s.provider_id)).toEqual(["inst-a"]);
+    engine.stop();
+  });
+});
+
+/**
+ * D-042: command 类通道引擎接线 — COMMAND_ADAPTERS 解析 + 主进程 command_run 桥。
+ * 契约 1: descriptor.adapter==="command" → COMMAND_ADAPTERS[channel](不再落 unsupported);
+ * 契约 2: renderer 经 commandRun IPC 传输, 真实 spawn 在主进程(本测试 mock 桥返回值);
+ * 契约 3: 引擎不注入假 runner —— 主进程侧缺省 runner 真实 spawn 由 command-run.test.ts 取证。
+ */
+describe("D-042 command 通道引擎接线(command_run IPC 桥)", () => {
+  const bailianInstance: InstanceConfig = {
+    id: "inst-bailian",
+    channel: "aliyun-bailian/token-plan",
+    name: "百炼 Token Plan #1",
+    params: {}, // 零录入(D-041)
+  };
+
+  it("已注册 command 通道(aliyun-bailian/token-plan)进调度器, 不产 unsupported", () => {
+    const engine = new RuntimeEngine([bailianInstance], fakeStorage);
+    engine.subscribe(() => {});
+    engine.start();
+
+    // 进调度器: stats 有该实例(unsupported 卡不进调度器, 见 P0-8 用例)
+    expect(engine.stats["inst-bailian"]?.state).toBeTruthy();
+    // 同步段不产 unsupported 卡(等 hydrate/首轮采集出数)
+    expect(engine.snapshots.map((s) => s.status)).not.toContain("unsupported");
+    engine.stop();
+  });
+
+  it("commandRun 返回主进程真实快照 → 面板出卡(ok 态透传)", async () => {
+    const { commandRun } = await import("../ipc");
+    const commandRunMock = commandRun as unknown as ReturnType<typeof vi.fn>;
+    const snap: ProviderSnapshot = {
+      provider_id: "inst-bailian",
+      display_name: "百炼 Token Plan #1",
+      plan_type: "window",
+      fetched_at: 1_700_000_000,
+      status: "ok",
+      metrics: [{ key: "weekly", kind: "window", unit: "percent", used: 37.9, limit: 100, reset_at: 1_788_586_320 }],
+      alerts: [],
+    };
+    commandRunMock.mockResolvedValueOnce(snap);
+
+    const engine = new RuntimeEngine([bailianInstance], fakeStorage);
+    const outs: EngineOutput[] = [];
+    engine.subscribe((o) => outs.push(o));
+    engine.start();
+    // 等 hydrate + refreshAll 完成(首轮采集走 command_run 桥)
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const last = outs[outs.length - 1];
+    const card = last?.snapshots.find((s) => s.provider_id === "inst-bailian");
+    expect(card?.status).toBe("ok");
+    expect(card?.metrics[0]).toMatchObject({ key: "weekly", used: 37.9 });
+    // 桥调用载荷: channel + descriptor + instance
+    const callArg = commandRunMock.mock.calls[0]?.[0] as { channel?: string };
+    expect(callArg?.channel).toBe("aliyun-bailian/token-plan");
+    engine.stop();
+  });
+
+  it("主进程返回 error 快照(bl 未装) → error 卡透传, 不落 unsupported", async () => {
+    const { commandRun } = await import("../ipc");
+    const commandRunMock = commandRun as unknown as ReturnType<typeof vi.fn>;
+    commandRunMock.mockResolvedValueOnce({
+      provider_id: "inst-bailian",
+      display_name: "百炼 Token Plan #1",
+      plan_type: "window",
+      fetched_at: 1_700_000_000,
+      status: "error",
+      metrics: [],
+      alerts: [{ level: "critical", message: "bl CLI 不在 PATH, 请安装后重启应用", code: "cli_missing" }],
+      error_message: "bl CLI 不在 PATH, 请安装后重启应用",
+      setup_hint: "未检测到 bl CLI: 请安装(见 DESIGN.md D-023 一键安装)后重启应用",
+    });
+
+    const engine = new RuntimeEngine([bailianInstance], fakeStorage);
+    const outs: EngineOutput[] = [];
+    engine.subscribe((o) => outs.push(o));
+    engine.start();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const card = outs[outs.length - 1]?.snapshots.find((s) => s.provider_id === "inst-bailian");
+    expect(card?.status).toBe("error");
+    expect(card?.setup_hint).toContain("未检测到 bl CLI");
+    engine.stop();
+  });
+
+  it("纯浏览器 dev(commandRun 返回 null) → 显式 error 快照(非 unsupported)", async () => {
+    const { commandRun } = await import("../ipc");
+    const commandRunMock = commandRun as unknown as ReturnType<typeof vi.fn>;
+    commandRunMock.mockResolvedValueOnce(null);
+
+    const engine = new RuntimeEngine([bailianInstance], fakeStorage);
+    const outs: EngineOutput[] = [];
+    engine.subscribe((o) => outs.push(o));
+    engine.start();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const card = outs[outs.length - 1]?.snapshots.find((s) => s.provider_id === "inst-bailian");
+    expect(card?.status).toBe("error");
+    expect(card?.error_message).toContain("桌面壳");
+    engine.stop();
+  });
+
+  it("目录内 command 描述符但注册表缺失(不变量破坏)→ 显式 unsupported(防御保留)", () => {
+    // COMMAND_ADAPTERS 是 D-041 常量, 无法在测试中删除 key; 用假通道模拟注册表缺失路径
+    const unknownCommand: InstanceConfig = {
+      id: "inst-unknown",
+      channel: "unknown-command/plan",
+      name: "未知 command",
+      params: {},
+    };
+    // 目录内无此通道 → 走 P0-8 unsupported(契约: 两者都缺 → 显式 unsupported 卡)
+    const engine = new RuntimeEngine([unknownCommand], fakeStorage);
+    engine.subscribe(() => {});
+    engine.start();
+    expect(engine.snapshots.map((s) => s.status)).toEqual(["unsupported"]);
     engine.stop();
   });
 });

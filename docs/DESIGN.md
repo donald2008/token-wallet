@@ -145,6 +145,22 @@ channels/  (两层模型: platform → product, D-025)
 
 command 类健康检查: 跑通道定义的 health_check 命令(如 `bl auth status` / `arkcli auth status`), 会话失效 → auth_expired, 卡片展示 setup_hint(如 `bl auth login --console` / `arkcli auth login --no-browser`)。
 
+### 5.0.2 引擎适配器解析 + command 主进程桥(D-042)
+
+`RuntimeEngine.buildInstances` 按 descriptor 分流:
+
+| descriptor.adapter | 解析路径 | 执行位置 |
+|------|------|------|
+| `http` | `CHANNEL_MAPPINGS[channel]` → GenericHttpAdapter(声明式映射) | renderer fetch → 主进程 http_get_json 桥 |
+| `command` | `COMMAND_ADAPTERS[channel]`(core channels/aliyun-bailian.ts) | **主进程 command_run 桥**: renderer 经 `window.tokenWallet.invoke("command_run", {channel, descriptor, instance})`, 主进程 handler 内 `COMMAND_ADAPTERS[channel]()`(缺省 runner=**真实 spawn**) 执行 fetchSnapshot, 返回 ProviderSnapshot |
+| 两者都缺 | 显式 `unsupported` 卡(P0-8, 不静默) | — |
+
+**IPC 名单登记(D-033 搬迁不变量, 新增必须登记)**: `get_bootstrap` / `instances_load` / `instances_save` / `record_consent` / `keyring_get|set|delete` / `http_get_json` / `sqlite_batch|exec|query` / `get_storage_paths` / `update_tray_status` / `win_minimize` / `win_close` / `win_get_always_on_top` / `win_set_always_on_top` / `get_sort_config` / `set_sort_config` / **`command_run`(D-042 新增)**。
+
+**spawn 为什么必须走主进程**: renderer 是 vite bundle, 静态 import `node:child_process` 不可行(P0-4 同族); core `adapters.ts` 的 spawn 逻辑在 Node 侧, 主进程 handler 内调用零风险。renderer 侧只读 `COMMAND_ADAPTERS` 判断通道是否注册(vite 可打包, node:child_process 动态 import 被 externalize), 不执行 spawn。浏览器 dev 无桌面桥时 commandRun 返回 null → 引擎转显式 error 快照(「需桌面壳执行」, 非 unsupported 语义)。
+
+**testConnection 同路径(D-042)**: command 通道测试连接也走 command_run 桥真实 spawn; bl 未装(ENOENT/win32 cmd 非零退出)→ core 适配器产出 error + 安装 setup_hint, 原样转错误消息。不再 mock 兜底。
+
 ### 5.0.1 配置设计: 三层分离
 
 ```
