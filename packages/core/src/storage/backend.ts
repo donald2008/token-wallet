@@ -61,6 +61,13 @@ export interface StorageBackend {
   /** 用量聚合查询 */
   queryUsage(q?: UsageQuery): Promise<UsageRecord[]>;
 
+  /**
+   * 删除一个 provider 的全部历史数据(快照 + 用量记录)。
+   * 删除实例时调用(D-029 对称清理: keyring 已清, 余额历史不再残留)。
+   * 必须原子: 要么全清, 要么不动。
+   */
+  purgeProvider(providerId: string): Promise<void>;
+
   /** 关闭底层连接 */
   close(): Promise<void>;
 }

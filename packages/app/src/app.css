@@ -56,10 +56,18 @@ body {
 .app-title {
   font-weight: 600;
   letter-spacing: 0.2px;
+  /* t_2ac39613: 360px 宽度预算不足时禁止断词换行(token-wall/et 断词撑高 titlebar),
+     空间不够则标题截断省略号; 六工具按钮(nowrap)优先保留, 标题是唯一可牺牲项 */
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .titlebar .spacer {
   flex: 1;
+  /* 允许自身收缩, 否则 spacer 的默认 min-width:auto 会阻止标题截断 */
+  min-width: 0;
 }
 
 .status-dot {

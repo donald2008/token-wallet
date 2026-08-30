@@ -19,6 +19,8 @@ interface TokenWalletBridge {
 }
 
 function bridge(): TokenWalletBridge | null {
+  // node 环境(部分 L1 测试无 jsdom)下 window 不存在, 直接判非桌面宿主
+  if (typeof window === "undefined") return null;
   const w = window as unknown as { tokenWallet?: TokenWalletBridge };
   return w.tokenWallet?.invoke ? w.tokenWallet : null;
 }

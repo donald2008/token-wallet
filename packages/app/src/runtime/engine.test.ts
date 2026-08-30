@@ -16,6 +16,7 @@ const fakeStorage: SnapshotStorage = {
   saveSnapshot: async () => {},
   latestSnapshots: async () => [],
   history: async () => [],
+  purgeProvider: async () => {},
 };
 
 // 真正未接入的通道(不在 PRESET_CHANNELS/CHANNEL_MAPPINGS): 本卡后 kimi/opencode 已接入,
@@ -78,6 +79,48 @@ describe("P0-8 未支持通道显式化(不静默跳过)", () => {
     expect(engine.stats["a"]?.state).toBeTruthy();
     expect(engine.stats["b"]?.state).toBeTruthy();
     expect(engine.stats["c"]?.state).toBeTruthy();
+    engine.stop();
+  });
+});
+
+describe("hydrate 过滤(t_2ac39613: 删除的 provider 不复活)", () => {
+  /** 幽灵快照(库里残留的已删实例历史) */
+  const ghostSnap = (providerId: string, name: string) => ({
+    provider_id: providerId,
+    display_name: name,
+    plan_type: "balance" as const,
+    fetched_at: 1_700_000_000,
+    status: "ok" as const,
+    metrics: [{ key: "remaining", kind: "balance" as const, unit: "cny" as const, used: 42.5 }],
+    alerts: [],
+  });
+
+  it("库里幽灵 provider 快照不进入 latest(实例集合是唯一真相源)", async () => {
+    const storage: SnapshotStorage = {
+      init: async () => {},
+      saveSnapshot: async () => {},
+      latestSnapshots: async () => [
+        ghostSnap("live-1", "活着的 #1"),
+        ghostSnap("deleted-a", "已删除 A"),
+        ghostSnap("deleted-b", "已删除 B"),
+      ],
+      history: async () => [],
+      purgeProvider: async () => {},
+    };
+    // 实例集合只剩 live-1 —— deleted-a/b 是已删实例, hydrate 后不得出现在 latest
+    const engine = new RuntimeEngine(
+      [
+        { ...unsupportedInstance, id: "live-1", channel: "deepseek/balance", name: "活着的 #1" },
+      ],
+      storage,
+    );
+    engine.subscribe(() => {});
+    engine.start();
+    await new Promise((r) => setTimeout(r, 0)); // 等 hydrate 完成
+    const ids = engine.snapshots.map((s) => s.provider_id);
+    expect(ids).toContain("live-1");
+    expect(ids).not.toContain("deleted-a");
+    expect(ids).not.toContain("deleted-b");
     engine.stop();
   });
 });

@@ -248,6 +248,19 @@ const ipcMocks: Record<string, IpcHandler> = {
       w.__MOCK_SQLITE__.rows.push({ provider_id, fetched_at, status, raw_json });
       return 1;
     }
+    // t_2ac39613: 删除实例 → purgeProvider → DELETE FROM snapshots/usage_records
+    if (/^DELETE FROM snapshots/i.test(sql.trim())) {
+      const [provider_id] = (args?.params ?? []) as [string];
+      const before = w.__MOCK_SQLITE__.rows.length;
+      w.__MOCK_SQLITE__.rows = w.__MOCK_SQLITE__.rows.filter(
+        (r: { provider_id: string }) => r.provider_id !== provider_id,
+      );
+      return before - w.__MOCK_SQLITE__.rows.length;
+    }
+    if (/^DELETE FROM usage_records/i.test(sql.trim())) {
+      // 浏览器 mock 不维护 usage_records 行, 视为成功(主进程侧真实执行)
+      return 0;
+    }
     return 0;
   },
   sqlite_query: (args) => {

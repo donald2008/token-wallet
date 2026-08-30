@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import type { InstanceConfig, CredentialRef } from "./schema";
 import { InstancesFileSchema, makeCredentialRef, parseInstances } from "./schema";
 import { instancesLoad, instancesSave, isDesktopHost, keyringDelete, keyringGet, keyringSet } from "../ipc";
+import { getSharedStorage } from "../runtime/storage";
 
 /** 钥匙串后端抽象(D-029: Windows 凭据管理器 / Keychain / Secret Service) */
 export interface KeyringBackend {
@@ -103,7 +104,11 @@ export class MemoryInstanceStore {
     this.emit();
     this.persist();
   }
-  /** 删除实例 + 同步清钥匙串条目(D-029) */
+  /**
+   * 删除实例 + 同步清钥匙串条目(D-029) + 同步清 DB 快照/用量历史(t_2ac39613:
+   * keyring 已清而余额历史残留是隐私语义不一致; 实例集合是唯一真相源,
+   * 删除即从 SQLite purge, 防止重启后 hydrate 读到幽灵快照)。
+   */
   remove(id: string, keyring: KeyringBackend): void {
     const removed = this.items.find((i) => i.id === id);
     if (!removed) return;
@@ -115,6 +120,11 @@ export class MemoryInstanceStore {
         if (key) void keyring.delete(KEYRING_SERVICE, key);
       }
     }
+    // DB 侧对称清理: snapshots + usage_records 全清(失败不阻断内存态, 由引擎
+    // hydrate 过滤兜底防复活; 与写盘失败同策略——不静默, 但不回滚)
+    void getSharedStorage().purgeProvider(id).catch(() => {
+      /* 清理失败不阻断删除; hydrate 过滤仍保证面板不复活 */
+    });
     this.emit();
     this.persist();
   }

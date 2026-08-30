@@ -20,6 +20,11 @@ export interface SnapshotStorage {
   latestSnapshots(): Promise<ProviderSnapshot[]>;
   /** 某 provider 的历史快照(速率计算用), 默认近 7 天 */
   history(providerId: string, since?: number, limit?: number): Promise<ProviderSnapshot[]>;
+  /**
+   * 删除一个 provider 的全部历史数据(快照 + 用量记录)。
+   * 删除实例时调用(t_2ac39613: D-029 对称清理, keyring 已清余额历史不再残留)。
+   */
+  purgeProvider(providerId: string): Promise<void>;
 }
 
 function parseRow(raw: unknown): ProviderSnapshot | null {
@@ -71,6 +76,13 @@ export class HostSqliteStore implements SnapshotStorage {
     );
     return rows.map((r) => parseRow(r[0])).filter((x): x is ProviderSnapshot => x !== null);
   }
+
+  async purgeProvider(providerId: string): Promise<void> {
+    // 走既有 sqlite IPC 通道(与 sqlite_exec 同通道, 主进程 node:sqlite 执行 DELETE)
+    await this.init();
+    await sqliteExec("DELETE FROM snapshots WHERE provider_id = ?", [providerId]);
+    await sqliteExec("DELETE FROM usage_records WHERE provider_id = ?", [providerId]);
+  }
 }
 
 /** 纯浏览器 dev / Playwright browser 模式兜底(内存数组) */
@@ -99,6 +111,10 @@ export class MemorySqliteStore implements SnapshotStorage {
       .filter((r) => r.provider_id === providerId && r.fetched_at >= since)
       .sort((a, b) => b.fetched_at - a.fetched_at)
       .slice(0, limit);
+  }
+
+  async purgeProvider(providerId: string): Promise<void> {
+    this.rows = this.rows.filter((r) => r.provider_id !== providerId);
   }
 }
 

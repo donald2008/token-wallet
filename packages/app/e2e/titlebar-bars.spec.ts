@@ -60,6 +60,31 @@ test("标题栏: 360px 视口下主题切换不撑高 titlebar, 主题按钮不�
   pwExpect(new Set(heights).size).toBe(1);
 });
 
+test("标题栏: 360px 与 800px 视口高度一致, app-title 不换行两行(t_2ac39613 #1)", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await page.setViewportSize({ width: 360, height: 600 });
+  await page.getByTestId("consent-agree").click();
+  const titlebar = page.locator(".titlebar");
+  const appTitle = page.locator(".app-title");
+
+  const h360 = Math.round((await titlebar.boundingBox())!.height);
+  // 标题单行: app-title 高度 == titlebar 高度(换行成两行必然更高)
+  const titleH360 = Math.round((await appTitle.boundingBox())!.height);
+  pwExpect(titleH360).toBeLessThanOrEqual(h360);
+
+  // 800px 视口: 面板仍是 360 布局(定宽), titlebar 高度必须一致
+  await page.setViewportSize({ width: 800, height: 600 });
+  const h800 = Math.round((await titlebar.boundingBox())!.height);
+  pwExpect(h800).toBe(h360);
+
+  // 布局预算最紧时(360 面板宽)标题也不断词换行(white-space 计算值)
+  const ws = await appTitle.evaluate((el) => getComputedStyle(el).whiteSpace);
+  pwExpect(ws).toBe("nowrap");
+});
+
 test("进度条对齐: 三行进度条左缘 x 坐标差 ≤1px(tightest 占位一致)", async ({
   hostPage,
   page,

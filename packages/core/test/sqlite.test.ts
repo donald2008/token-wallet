@@ -127,6 +127,58 @@ describe("SqliteStore — usage_records", () => {
   });
 });
 
+describe("SqliteStore — purgeProvider(t_2ac39613)", () => {
+  // rec 复用 usage_records 组同款构造(局部定义, 作用域在 purge 组内)
+  const rec = (overrides: Partial<UsageRecord> = {}): UsageRecord => ({
+    provider_id: "local-hermes",
+    model: "k3",
+    window_start: 1724900000,
+    window_end: 1724903600,
+    tokens: 15230,
+    credits: null,
+    cost_cny: null,
+    ...overrides,
+  });
+
+  it("purge 后该 provider 快照/历史/用量全无; 其他 provider 不受影响", async () => {
+    store = new SqliteStore(":memory:");
+    // deepseek: 两条快照 + 一条用量
+    await store.saveSnapshot(snap({ fetched_at: 100 }));
+    await store.saveSnapshot(snap({ fetched_at: 200 }));
+    await store.saveUsageRecords([rec({ provider_id: "deepseek" })]);
+    // kimi: 一条快照 + 一条用量(对照组, 必须保留)
+    await store.saveSnapshot(
+      snap({ provider_id: "kimi", display_name: "Kimi Code #1", plan_type: "window", fetched_at: 150 }),
+    );
+    await store.saveUsageRecords([rec({ provider_id: "kimi", model: "k3" })]);
+
+    expect(await store.latestSnapshots()).toHaveLength(2);
+    expect((await store.snapshotHistory("deepseek")).length).toBeGreaterThan(0);
+    expect((await store.queryUsage({ providerId: "deepseek" })).length).toBeGreaterThan(0);
+
+    await store.purgeProvider("deepseek");
+
+    // 快照三视角全清
+    expect(await store.latestSnapshot("deepseek")).toBeNull();
+    const remaining = await store.latestSnapshots();
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]!.provider_id).toBe("kimi");
+    expect(await store.snapshotHistory("deepseek")).toHaveLength(0);
+    // 用量全清
+    expect(await store.queryUsage({ providerId: "deepseek" })).toHaveLength(0);
+    // 对照组完整
+    expect(await store.latestSnapshot("kimi")).not.toBeNull();
+    expect(await store.queryUsage({ providerId: "kimi" })).toHaveLength(1);
+  });
+
+  it("purge 不存在的 provider 是 no-op, 不报错", async () => {
+    store = new SqliteStore(":memory:");
+    await store.saveSnapshot(snap());
+    await expect(store.purgeProvider("ghost")).resolves.toBeUndefined();
+    expect(await store.latestSnapshots()).toHaveLength(1);
+  });
+});
+
 describe("SCHEMA_SQL", () => {
   it("包含 §7 约定的两表与全部列", () => {
     expect(SCHEMA_SQL).toContain("snapshots");

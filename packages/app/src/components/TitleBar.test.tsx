@@ -83,6 +83,16 @@ describe("CSS 契约(t_05271be0 #1/#2)", () => {
     expect(ruleBlock(".btn")).toContain("white-space: nowrap");
   });
 
+  it(".app-title 禁止断词换行 + 截断省略(t_2ac39613 #1: token-wallet 不换行撑高)", () => {
+    const block = ruleBlock(".app-title");
+    expect(block).toContain("white-space: nowrap");
+    expect(block).toContain("min-width: 0");
+    expect(block).toContain("overflow: hidden");
+    expect(block).toContain("text-overflow: ellipsis");
+    // spacer 允许收缩是截断生效的前提(否则 min-width:auto 阻止标题收缩)
+    expect(ruleBlock(".titlebar .spacer")).toContain("min-width: 0");
+  });
+
   it(".bar-row 恒有 2px 透明左缘 + 4px 左 padding(对齐占位)", () => {
     const block = ruleBlock(".bar-row");
     expect(block).toContain("border-left: 2px solid transparent");

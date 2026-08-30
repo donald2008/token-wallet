@@ -191,7 +191,12 @@ export class RuntimeEngine {
     try {
       await this.storage.init();
       const snaps = await this.storage.latestSnapshots();
-      for (const s of snaps) this.latest.set(s.provider_id, s);
+      // t_2ac39613: 实例集合是唯一真相源 —— 库里可能有已删实例的历史快照,
+      // 必须按现有实例 id 过滤, 否则幽灵快照会进 latest map 导致删除的 provider 复活。
+      const liveIds = new Set(this.instances.map((i) => i.id));
+      for (const s of snaps) {
+        if (liveIds.has(s.provider_id)) this.latest.set(s.provider_id, s);
+      }
     } catch {
       /* 无历史数据则从空开始 */
     }

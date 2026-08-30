@@ -165,6 +165,20 @@ export class SqliteStore implements StorageBackend {
     );
   }
 
+  async purgeProvider(providerId: string): Promise<void> {
+    // 删除实例对称清理(D-029): keyring 已清, 快照/用量历史一并清除, 不留隐私残留。
+    // 原子: 两表同事务, 要么全清要么不动。
+    this.db.exec("BEGIN");
+    try {
+      this.db.prepare("DELETE FROM snapshots WHERE provider_id = ?").run(providerId);
+      this.db.prepare("DELETE FROM usage_records WHERE provider_id = ?").run(providerId);
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
   async close(): Promise<void> {
     this.db.close();
   }
