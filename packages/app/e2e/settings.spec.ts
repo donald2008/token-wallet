@@ -226,3 +226,87 @@ test("首开向导回归: 空态添加 Provider 仍走页内导航, 不弹模态
   await pwExpect(page.getByTestId("settings-view")).toBeVisible();
   await pwExpect(page.getByTestId("settings-back")).toBeVisible();
 });
+
+/* ---------- #829 R1: 卡间排序配置(key×dir 两正交参数, 缺省名称正排) ---------- */
+
+test("排序配置: 缺省名称正排 + 切紧要度生效 + 方向倒排 + 重启保持(#829 R1)", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await agree(page);
+  await page.getByTestId("scenario-mixed").click();
+  const cards = page.getByTestId("provider-card");
+  await pwExpect(cards).toHaveCount(4);
+
+  // 缺省 = 名称正排(无历史设置时)
+  const names = await cards.locator(".card-name").allTextContents();
+  pwExpect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
+
+  // 设置弹窗: 排序键/方向两正交控件, 缺省态高亮
+  await openSettingsModal(page);
+  await pwExpect(page.getByTestId("sort-key-name")).toHaveClass(/active/);
+  await pwExpect(page.getByTestId("sort-dir-asc")).toHaveClass(/active/);
+  // 切紧要度 → 最紧卡(kimi 5h 窗 100/100 耗尽, 剩余比例最小)置顶
+  await page.getByTestId("sort-key-urgency").click();
+  await page.getByTestId("settings-close").click();
+  await pwExpect(cards.first().locator(".card-name")).toContainText("Kimi");
+
+  // 方向独立生效: 倒排 → 整体反转, kimi 到最末
+  await openSettingsModal(page);
+  await page.getByTestId("sort-dir-desc").click();
+  await page.getByTestId("settings-close").click();
+  await pwExpect(cards.last().locator(".card-name")).toContainText("Kimi");
+
+  // 重启保持(mock 桥 localStorage 与真壳 settings.json 同语义, reload 不丢)
+  await page.reload();
+  await pwExpect(cards).toHaveCount(4);
+  await pwExpect(cards.last().locator(".card-name")).toContainText("Kimi");
+  await openSettingsModal(page);
+  await pwExpect(page.getByTestId("sort-key-urgency")).toHaveClass(/active/);
+  await pwExpect(page.getByTestId("sort-dir-desc")).toHaveClass(/active/);
+});
+
+/* ---------- #829 R3: 设置弹窗头部固定, 滚动只在内容区 ---------- */
+
+test("设置弹窗: 头部固定不随内容滚动, 内容区滚到底 × 仍可见可点(#829 R3)", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await agree(page);
+  await openSettingsModal(page);
+
+  // 结构断言: .settings-head 不是滚动容器 .settings-body 的子元素(modal variant)
+  const headInsideBody = await page.evaluate(() => {
+    const body = document.querySelector(".settings-body");
+    const head = document.querySelector(".settings-head");
+    return body && head ? body.contains(head) : true;
+  });
+  pwExpect(headInsideBody).toBe(false);
+
+  // CSS 断言: .settings-view 不滚, .settings-body 内滚且链式滚动截断(背景不跟滚)
+  const css = await page.evaluate(() => {
+    const view = document.querySelector(".settings-view")!;
+    const body = document.querySelector(".settings-body")!;
+    const vcs = getComputedStyle(view);
+    const bcs = getComputedStyle(body);
+    return {
+      viewOverflowY: vcs.overflowY,
+      bodyOverflowY: bcs.overflowY,
+      bodyOverscroll: bcs.overscrollBehaviorY,
+    };
+  });
+  pwExpect(css.viewOverflowY).toBe("hidden");
+  pwExpect(css.bodyOverflowY).toBe("auto");
+  pwExpect(css.bodyOverscroll).toBe("contain");
+
+  // 行为断言: 内容区滚到底后头部(标题+×)仍在视口, × 可点关闭
+  const body = page.getByTestId("settings-body");
+  await body.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await pwExpect(page.locator(".settings-head")).toBeVisible();
+  await page.getByTestId("settings-close").click();
+  await pwExpect(page.getByTestId("settings-overlay")).toHaveCount(0);
+});

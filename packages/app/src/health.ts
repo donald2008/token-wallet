@@ -115,17 +115,68 @@ function minRemainingRatio(p: ProviderSnapshot): number {
   return worst;
 }
 
-/** 面板排序(§6.1 glanceability): 最坏情况优先。
+/** 面板排序比较器: 最坏情况优先(§6.1 glanceability 的历史默认, 现为 urgency 次级稳定键)。
  * 主键 = 健康度带(红>黄>灰>绿); 同带内二级 = status 严重度(error/auth_expired 前置);
  * 三级 = ok 态按最紧 metric 剩余比例升序(消耗多的在前)。 */
+function compareByHealth(a: ProviderSnapshot, b: ProviderSnapshot): number {
+  const rankDiff = HEALTH_RANK[providerHealth(b)] - HEALTH_RANK[providerHealth(a)];
+  if (rankDiff !== 0) return rankDiff;
+  const sevDiff = statusSeverity(b) - statusSeverity(a);
+  if (sevDiff !== 0) return sevDiff;
+  return minRemainingRatio(a) - minRemainingRatio(b);
+}
+
+/** 健康度排序(保留: urgency 模式的次级稳定键; 不再是面板唯一排序, 见 sortProviders) */
 export function sortByHealth(providers: ProviderSnapshot[]): ProviderSnapshot[] {
-  return [...providers].sort((a, b) => {
-    const rankDiff = HEALTH_RANK[providerHealth(b)] - HEALTH_RANK[providerHealth(a)];
-    if (rankDiff !== 0) return rankDiff;
-    const sevDiff = statusSeverity(b) - statusSeverity(a);
-    if (sevDiff !== 0) return sevDiff;
-    return minRemainingRatio(a) - minRemainingRatio(b);
+  return [...providers].sort(compareByHealth);
+}
+
+// ---------------- P1(#829 R1): 卡间排序 = key(名称|紧要度) × dir(正排|倒排) 两正交参数 ----------------
+
+export type SortKey = "name" | "urgency";
+export type SortDir = "asc" | "desc";
+export interface SortConfig {
+  key: SortKey;
+  dir: SortDir;
+}
+/** 缺省 = 名称正排(#829 R1 缺省不是紧要度; 无历史设置时的出厂行为) */
+export const DEFAULT_SORT_CONFIG: SortConfig = { key: "name", dir: "asc" };
+
+/**
+ * 排序配置归一化: 非对象/非法 key/非法 dir → 缺省(名称正排), 不抛错。
+ * 真壳 settings.json 与浏览器 localStorage 两侧共用同一宽容语义(损坏配置不崩 UI)。
+ */
+export function normalizeSortConfig(raw: unknown): SortConfig {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    const key: SortKey | null = o.key === "name" ? "name" : o.key === "urgency" ? "urgency" : null;
+    const dir: SortDir | null = o.dir === "asc" ? "asc" : o.dir === "desc" ? "desc" : null;
+    if (key && dir) return { key, dir };
+  }
+  return DEFAULT_SORT_CONFIG;
+}
+
+/**
+ * 卡间排序(#829 R1): key × dir 两正交参数。
+ * - key=name: display_name localeCompare 自然序(asc 正排), 同名保持原相对顺序(排序稳定)
+ * - key=urgency: 卡内 min(remaining/limit) 升序(asc = 越快耗尽越靠前);
+ *   limit 缺失/为 0 的卡剩余比例视为 1(asc 时排最后, 不崩); 同比例按 sortByHealth 次序稳定(健康差在前)
+ * - dir=desc 对两种 key 都是整体直接反转
+ * 托盘(globalHealth/tooltipSummary)不经此函数 —— 排序配置不影响托盘全局最差状态。
+ */
+export function sortProviders(
+  providers: ProviderSnapshot[],
+  config: SortConfig = DEFAULT_SORT_CONFIG,
+): ProviderSnapshot[] {
+  const asc = [...providers].sort((a, b) => {
+    if (config.key === "name") {
+      return a.display_name.localeCompare(b.display_name, undefined, { numeric: true });
+    }
+    const diff = minRemainingRatio(a) - minRemainingRatio(b);
+    if (diff !== 0) return diff;
+    return compareByHealth(a, b);
   });
+  return config.dir === "desc" ? asc.reverse() : asc;
 }
 
 /** 托盘 tooltip 摘要, 如 "1待授权 1已耗尽 2健康"(§6.2)。

@@ -1,4 +1,5 @@
 import type { Bootstrap, HealthLevel } from "./types";
+import { DEFAULT_SORT_CONFIG, normalizeSortConfig, type SortConfig } from "./health";
 
 /**
  * 桌面壳 IPC 封装(D-033: Electron 壳) — 浏览器降级:
@@ -9,7 +10,8 @@ import type { Bootstrap, HealthLevel } from "./types";
  * 通道名契约保全(换壳不变): get_bootstrap / instances_load / instances_save /
  * record_consent / keyring_get|set|delete / http_get_json / sqlite_batch|exec|query /
  * get_storage_paths / update_tray_status / get_launch_at_login / set_launch_at_login /
- * win_minimize / win_close(E1 新增) / win_get_always_on_top / win_set_always_on_top(P1 新增)。
+ * win_minimize / win_close(E1 新增) / win_get_always_on_top / win_set_always_on_top(P1 新增) /
+ * get_sort_config / set_sort_config(P1 #829 R1 新增)。
  */
 
 interface TokenWalletBridge {
@@ -233,6 +235,38 @@ export async function winGetAlwaysOnTop(): Promise<boolean> {
     return localStorage.getItem(ALWAYS_ON_TOP_KEY) === "1";
   } catch {
     return false;
+  }
+}
+
+// ---------------- P1(#829 R1): 卡间排序配置(真壳 settings.json RMW / 浏览器 localStorage 降级) ----------------
+
+/** 浏览器降级 localStorage 键(整体一个配置 {key,dir}, #829 R1) */
+const SORT_CONFIG_KEY = "token-wallet.sortConfig.v1";
+
+/** 读排序配置; 真壳读 settings.json(主进程归一化), 浏览器读 localStorage; 非法/缺失 → 缺省名称正排 */
+export async function getSortConfig(): Promise<SortConfig> {
+  const viaHost = await hostInvoke<unknown>("get_sort_config");
+  if (viaHost !== null) return normalizeSortConfig(viaHost);
+  try {
+    const raw = localStorage.getItem(SORT_CONFIG_KEY);
+    if (raw) return normalizeSortConfig(JSON.parse(raw));
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_SORT_CONFIG;
+}
+
+/** 写排序配置; 真壳 RMW 落 settings.json, 浏览器降级 localStorage */
+export async function setSortConfig(config: SortConfig): Promise<void> {
+  const viaHost = hostInvoke<void>("set_sort_config", { config });
+  if (viaHost) {
+    await viaHost;
+    return;
+  }
+  try {
+    localStorage.setItem(SORT_CONFIG_KEY, JSON.stringify(config));
+  } catch {
+    /* ignore */
   }
 }
 

@@ -98,8 +98,8 @@ test("托盘四色联动: 场景切换驱动标题栏状态点与托盘 IPC", as
   pwExpect(String((warnCall!.args as { tooltip?: string }).tooltip)).toContain("偏低");
 });
 
-/** L2 冒烟: mock 面板渲染 — 健康度排序 + 异常卡整卡文字, 不显示假数据(§2.1/§6.1) */
-test("混合场景: auth_expired 黄灯+setup_hint 置顶, 异常卡不显示假数据", async ({ hostPage, page }) => {
+/** L2 冒烟: mock 面板渲染 — 缺省名称正排 + 异常卡整卡文字, 不显示假数据(§2.1/#829 R1) */
+test("混合场景: 缺省名称正排, auth_expired 黄灯+setup_hint, 异常卡不显示假数据", async ({ hostPage, page }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
   await page.getByTestId("scenario-mixed").click();
@@ -107,15 +107,19 @@ test("混合场景: auth_expired 黄灯+setup_hint 置顶, 异常卡不显示假
   const cards = page.getByTestId("provider-card");
   await pwExpect(cards).toHaveCount(4);
 
-  // 最坏情况优先: auth_expired 卡(黄 warn)置顶, 因 status 严重度排在 ok 态黄卡之前
-  await pwExpect(cards.first()).toHaveAttribute("data-health", "warn");
-  await pwExpect(cards.first()).toContainText("登录态过期");
+  // #829 R1: 缺省排序 = 名称正排(localeCompare 自然序), 不再按健康度置顶
+  const names = await cards.locator(".card-name").allTextContents();
+  pwExpect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
+
+  // auth_expired 卡(黄 warn)内容语义不变(位置随名称排序, 按内容定位)
+  const expiredCard = cards.filter({ hasText: "登录态过期" });
+  await pwExpect(expiredCard).toHaveAttribute("data-health", "warn");
   // auth_expired 亮黄灯 + setup_hint 恢复指引(§2.1)
-  await pwExpect(cards.first().locator(`[data-lamp="auth_expired"]`)).toBeVisible();
-  await pwExpect(cards.first().getByTestId("setup-hint")).toContainText("bl auth login --console");
+  await pwExpect(expiredCard.locator(`[data-lamp="auth_expired"]`)).toBeVisible();
+  await pwExpect(expiredCard.getByTestId("setup-hint")).toContainText("bl auth login --console");
   // 异常卡整卡文字替代图表: 不出现进度条/余额大数字(不显示假数据)
-  await pwExpect(cards.first().locator(".progress")).toHaveCount(0);
-  await pwExpect(cards.first().locator(".ticker-number")).toHaveCount(0);
+  await pwExpect(expiredCard.locator(".progress")).toHaveCount(0);
+  await pwExpect(expiredCard.locator(".ticker-number")).toHaveCount(0);
 
   // 窗口卡(ok 态)有手写进度条(D-002)
   await pwExpect(page.getByTestId("bars-template").first().locator(".progress").first()).toBeVisible();
@@ -140,6 +144,6 @@ test("bars+ticker 模板: 进度条/倒计时/最紧标红 + 余额预计可用�
   await pwExpect(kimiBars.locator(".progress")).toHaveCount(2); // rolling_5h + weekly 两窗
   // 最紧窗口(rolling_5h 剩余<30%)标红 —— P1 起按时间窗升序排列, 只标不置顶(rolling_5h 为最短窗仍在首行)
   await pwExpect(kimiBars.locator(".bar-row[data-tightest] .bar-label")).toContainText("rolling_5h");
-  // 重置倒计时(P1 契约: 纯倒计时无"后重置", 阶梯 X天X小时/X小时X分/X分)
-  await pwExpect(kimiBars.locator(".bar-reset").first()).toContainText(/\d+(天\d+小时|小时\d+分|分)/);
+  // 重置倒计时(#829 R2: 纯倒计时无旧后缀, 单单位一位小数 X.X天/X.X小时/X分)
+  await pwExpect(kimiBars.locator(".bar-reset").first()).toContainText(/\d+\.\d+天|\d+\.\d+小时|\d+分/);
 });

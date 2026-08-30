@@ -89,6 +89,28 @@ const ipcMocks: Record<string, IpcHandler> = {
     configDir: "/home/test/.config/token-wallet",
     dataDir: "/home/test/.local/share/token-wallet",
   }),
+  // P1 #829 R1 排序配置: localStorage 持久化(真壳 settings.json 跨重启存活, mock 同语义,
+  // 可测"切紧要度 → reload → 排序仍保持")
+  get_sort_config: () => {
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.sort-config.v1");
+      if (raw) return JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return { key: "name", dir: "asc" };
+  },
+  set_sort_config: (args) => {
+    try {
+      localStorage.setItem(
+        "token-wallet.mock.sort-config.v1",
+        JSON.stringify((args as { config?: unknown } | undefined)?.config ?? null),
+      );
+    } catch {
+      /* ignore */
+    }
+    return null;
+  },
   get_launch_at_login: () => false,
   set_launch_at_login: () => null,
   // ---- P0-5 真实链路(状态存浏览器全局, 见文件头警告) ----

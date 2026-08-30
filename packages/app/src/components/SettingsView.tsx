@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ThemeMode } from "../theme";
+import type { SortConfig, SortDir, SortKey } from "../health";
 import { getStoragePaths, getLaunchAtLogin, setLaunchAtLogin, type StoragePaths } from "../ipc";
 import type { InstanceConfig } from "../instances/schema";
 import { getSharedKeyring, getSharedStore, useInstances } from "../instances/store";
@@ -16,12 +17,25 @@ const THEME_OPTIONS: { id: ThemeMode; label: string }[] = [
 interface Props {
   themeMode: ThemeMode;
   onThemeMode: (m: ThemeMode) => void;
+  /** 卡间排序配置(#829 R1): key(名称|紧要度)×dir(正排|倒排), 由 App 持有并持久化 */
+  sortConfig: SortConfig;
+  onSortConfig: (c: SortConfig) => void;
   onBack: () => void;
   /** page = 首开向导页内导航(D-021); modal = 设置弹窗(P0-6), 头部渲染 × 关闭 */
   variant?: "page" | "modal";
   /** 首开引导(D-021): 从空态"添加 Provider"进入时直接开添加流程 */
   initialStep?: "overview" | "add-channel" | "fill-form";
 }
+
+const SORT_KEY_OPTIONS: { id: SortKey; label: string }[] = [
+  { id: "name", label: "名称" },
+  { id: "urgency", label: "紧要度" },
+];
+
+const SORT_DIR_OPTIONS: { id: SortDir; label: string }[] = [
+  { id: "asc", label: "正排" },
+  { id: "desc", label: "倒排" },
+];
 
 /**
  * 设置页(D-017/D-019/D-021/D-024/D-025/D-026):
@@ -30,8 +44,10 @@ interface Props {
  * - 添加流程: 树形通道选择器 → 动态表单 → 测试连接 → 保存
  * - 存储路径显示(D-019): 运行时解析
  * - 开机自启开关(D-024): 默认关
+ * - 排序配置(#829 R1): 键(名称/紧要度)×方向(正排/倒排)两正交控件, 缺省名称正排
+ * - 布局(#829 R3): .settings-head 固定不滚动, 滚动只发生在 .settings-body 内容区
  */
-export function SettingsView({ themeMode, onThemeMode, onBack, variant = "page", initialStep = "overview" }: Props) {
+export function SettingsView({ themeMode, onThemeMode, sortConfig, onSortConfig, onBack, variant = "page", initialStep = "overview" }: Props) {
   const instances = useInstances();
   const [step, setStep] = useState<"overview" | "add-channel" | "fill-form">(initialStep);
   const [selectedChannel, setSelectedChannel] = useState<ChannelDescriptor | null>(null);
@@ -88,6 +104,9 @@ export function SettingsView({ themeMode, onThemeMode, onBack, variant = "page",
         )}
       </div>
 
+      {/* #829 R3: 头部(.settings-head)固定不滚, 滚动只发生在头下方 .settings-body 内容区;
+          modal/page 两 variant 同结构生效 */}
+      <div className="settings-body" data-testid="settings-body">
       {step === "add-channel" && (
         <section className="settings-section" data-testid="add-channel-step">
           <h4>{isFirstRun ? "引导: 选择第一个平台" : "添加 Provider —— 选择平台"}</h4>
@@ -214,8 +233,44 @@ export function SettingsView({ themeMode, onThemeMode, onBack, variant = "page",
             </div>
             <p className="hint">默认追随系统(prefers-color-scheme), 可在此覆盖(D-010)。</p>
           </section>
+
+          <section className="settings-section" data-testid="sort-sec">
+            <h4>排序</h4>
+            <div className="sort-controls">
+              <div className="seg" data-testid="sort-key-seg">
+                {SORT_KEY_OPTIONS.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    className={`btn${sortConfig.key === o.id ? " active" : ""}`}
+                    data-testid={`sort-key-${o.id}`}
+                    onClick={() => onSortConfig({ ...sortConfig, key: o.id })}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+              <div className="seg" data-testid="sort-dir-seg">
+                {SORT_DIR_OPTIONS.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    className={`btn${sortConfig.dir === o.id ? " active" : ""}`}
+                    data-testid={`sort-dir-${o.id}`}
+                    onClick={() => onSortConfig({ ...sortConfig, dir: o.id })}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="hint">
+              缺省: 名称正排。紧要度 = 按卡内最紧窗口剩余比例(剩余越少越靠前), 方向独立生效(#829 R1)。
+            </p>
+          </section>
         </>
       )}
+      </div>
     </div>
   );
 }

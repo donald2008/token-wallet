@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { atomicWrite, consentSettingsJson, readSettingsFile, recordAlwaysOnTop, recordConsent } from "./persist";
+import { atomicWrite, consentSettingsJson, normalizeSortConfigValue, readSettingsFile, recordAlwaysOnTop, recordConsent, recordSortConfig } from "./persist";
 
 let dir: string;
 
@@ -145,5 +145,57 @@ describe("alwaysOnTop(P1 置顶开关, autostart 同款 RMW)", () => {
     recordAlwaysOnTop(file, true);
     const settings = readSettingsFile(file);
     expect(settings.alwaysOnTop).toBe(true);
+  });
+});
+
+describe("sortConfig(#829 R1 卡间排序, autostart 同款 RMW)", () => {
+  it("缺省: 文件不存在 / 旧文件无该字段 / 非法值 → 名称正排", () => {
+    const file = path.join(dir, "settings.json");
+    // 文件不存在(首开)
+    expect(normalizeSortConfigValue(readSettingsFile(file).sortConfig)).toEqual({
+      key: "name",
+      dir: "asc",
+    });
+    // 旧版文件无 sortConfig 字段
+    fs.writeFileSync(file, JSON.stringify({ version: 1, consentAgreed: true }), "utf8");
+    expect(normalizeSortConfigValue(readSettingsFile(file).sortConfig)).toEqual({
+      key: "name",
+      dir: "asc",
+    });
+    // 脏数据(非法 key/dir) → 缺省
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ version: 1, sortConfig: { key: "size", dir: "up" } }),
+      "utf8",
+    );
+    expect(normalizeSortConfigValue(readSettingsFile(file).sortConfig)).toEqual({
+      key: "name",
+      dir: "asc",
+    });
+  });
+
+  it("写入 → 读回: {key,dir} 整体往返, RMW 保留 consent/autostart/未知字段", () => {
+    const file = path.join(dir, "settings.json");
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ version: 1, consentAgreed: true, autostart: true, theme: "dark" }),
+      "utf8",
+    );
+    recordSortConfig(file, { key: "urgency", dir: "desc" });
+    const settings = readSettingsFile(file);
+    expect(settings.sortConfig).toEqual({ key: "urgency", dir: "desc" });
+    // RMW: 既有/未知字段不丢
+    expect(settings.consentAgreed).toBe(true);
+    expect(settings.autostart).toBe(true);
+    expect(settings.theme).toBe("dark");
+  });
+
+  it("写入非法配置 → 归一化落缺省(防脏数据入盘); settings 损坏 → 回退重写不崩", () => {
+    const file = path.join(dir, "settings.json");
+    recordSortConfig(file, { key: "bogus", dir: "sideways" });
+    expect(readSettingsFile(file).sortConfig).toEqual({ key: "name", dir: "asc" });
+    fs.writeFileSync(file, "{ not json", "utf8");
+    recordSortConfig(file, { key: "urgency", dir: "asc" });
+    expect(readSettingsFile(file).sortConfig).toEqual({ key: "urgency", dir: "asc" });
   });
 });

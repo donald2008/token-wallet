@@ -21,7 +21,7 @@ import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, Tray } fro
 import * as fs from "node:fs";
 import * as path from "node:path";
 import YAML from "yaml";
-import { atomicWrite, consentSettingsJson, readSettingsFile, recordAlwaysOnTop, recordAutostart } from "./persist";
+import { atomicWrite, consentSettingsJson, normalizeSortConfigValue, readSettingsFile, recordAlwaysOnTop, recordAutostart, recordSortConfig } from "./persist";
 import { hostHttpGetJson } from "./host-http";
 import { SafeStorageLike, deleteSecret, getSecret, setSecret } from "./keyring";
 import { deriveStoragePaths, type StoragePaths } from "./paths";
@@ -274,6 +274,19 @@ function registerIpc(): void {
       recordAlwaysOnTop(settingsFilePath(), enabled);
     } catch {
       /* 写盘失败不阻断窗口行为(下次启动按旧值恢复; 与托盘自启开关同策略) */
+    }
+  });
+
+  // 卡间排序配置(#829 R1): {key,dir} 整体 RMW 落 settings.json(重启不丢);
+  // 读取侧归一化(非法/缺失 → 缺省名称正排), 写入侧同样归一化防脏数据。
+  ipcMain.handle("get_sort_config", () =>
+    normalizeSortConfigValue(readSettingsFile(settingsFilePath()).sortConfig),
+  );
+  ipcMain.handle("set_sort_config", (_event, payload: { config?: unknown }) => {
+    try {
+      recordSortConfig(settingsFilePath(), payload?.config);
+    } catch {
+      /* 写盘失败不阻断 UI(内存态仍生效, 下次启动按旧值恢复; 与置顶开关同策略) */
     }
   });
 

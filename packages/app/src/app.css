@@ -337,8 +337,9 @@ body {
   flex: 0 0 auto;
   font-size: 11px;
   color: var(--fg-dim);
-  /* 固定宽+右对齐(P1 契约): 按最长预期文案"99天23小时"预留, 多行进度条右列宽度稳定不漂移 */
-  min-width: 84px;
+  /* 固定宽+右对齐(#829 R2 口径): 文案为单单位一位小数, 按最长预期"999.9天"预留,
+     多行进度条右列宽度稳定不漂移 */
+  min-width: 56px;
   text-align: right;
 }
 
@@ -513,15 +514,34 @@ body {
 }
 
 /* ---- 设置抽屉占位 ---- */
+/* #829 R3: .settings-view 自身不滚动(overflow hidden), 头部固定;
+   滚动只发生在 .settings-body 内容区(modal/page 两 variant 同结构生效) */
 .settings-view {
   flex: 1;
-  padding: 12px;
+  min-height: 0;
+  padding: 12px 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.settings-body {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
   /* P1: 弹窗内部滚动不穿透 — 滚到底后背景面板完全不跟滚(链式滚动截断) */
   overscroll-behavior: contain;
+  padding-bottom: 12px;
+}
+
+.sort-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .settings-section {
@@ -561,6 +581,8 @@ body {
 
 /* ---- 设置页: 头部 / 实例列表 / 树形通道选择器 / 动态表单 / 存储路径 / 自启 ---- */
 .settings-head {
+  /* #829 R3: 固定头部, 不随 .settings-body 内容滚动 */
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;

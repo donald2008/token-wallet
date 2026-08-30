@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Bootstrap } from "./types";
-import { globalHealth, sortByHealth, tooltipSummary } from "./health";
-import { getBootstrap, getStoragePaths, persistConsent, updateTrayStatus, winGetAlwaysOnTop, winSetAlwaysOnTop } from "./ipc";
+import { globalHealth, sortProviders, tooltipSummary, type SortConfig } from "./health";
+import { getBootstrap, getSortConfig, getStoragePaths, persistConsent, setSortConfig as persistSortConfig, updateTrayStatus, winGetAlwaysOnTop, winSetAlwaysOnTop } from "./ipc";
 import { selectPanelProviders } from "./panelProviders";
 import type { ScenarioId } from "./mockData";
 import { useTheme, type ThemeMode } from "./theme";
@@ -72,6 +72,8 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   // P1 窗口置顶态: 启动时读回(真壳=settings.json, 浏览器=localStorage 降级)
   const [pinned, setPinned] = useState(false);
+  // P1(#829 R1): 卡间排序配置(key×dir, 缺省名称正排); 启动读回, 切换即持久化
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", dir: "asc" });
   // 页内导航仅留给首开向导(D-021 一次性引导); 设置入口 = 模态弹窗(P0-6)
   const [view, setView] = useState<"panel" | "settings">("panel");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -86,12 +88,14 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [b, instErr, paths] = await Promise.all([
+      const [b, instErr, paths, sortCfg] = await Promise.all([
         getBootstrap(),
         loadPersistedInstances(),
         getStoragePaths(),
+        getSortConfig(),
       ]);
       if (!alive) return;
+      setSortConfig(sortCfg);
       // O1: configDir + 平台分隔符拼 instances.yaml 完整路径, 供配置错误页展示
       setInstancesPath(
         `${paths.configDir}${paths.configDir.includes("\\") ? "\\" : "/"}instances.yaml`,
@@ -154,6 +158,12 @@ export default function App() {
     setPinned(next);
     void winSetAlwaysOnTop(next); // 回写持久化(settings.json / localStorage 降级)
   }, [pinned]);
+
+  // 排序配置切换(#829 R1): 内存态即生效 + 回写持久化(真壳 settings.json / 浏览器 localStorage)
+  const onSortConfig = useCallback((next: SortConfig) => {
+    setSortConfig(next);
+    void persistSortConfig(next);
+  }, []);
 
   // 托盘联动: 全局最差状态 → 托盘色点 + tooltip(D-003)
   useEffect(() => {
@@ -239,6 +249,8 @@ export default function App() {
           variant="page"
           themeMode={themeMode}
           onThemeMode={setThemeMode}
+          sortConfig={sortConfig}
+          onSortConfig={onSortConfig}
           initialStep={settingsStep}
           onBack={() => setView("panel")}
         />
@@ -272,7 +284,7 @@ export default function App() {
         <EmptyState onAdd={openAddProvider} />
       ) : (
         <main className="card-list" data-testid="card-list">
-          {sortByHealth(providers).map((p) => (
+          {sortProviders(providers, sortConfig).map((p) => (
             <ProviderCard key={p.provider_id} p={p} />
           ))}
         </main>
@@ -293,6 +305,8 @@ export default function App() {
               variant="modal"
               themeMode={themeMode}
               onThemeMode={setThemeMode}
+              sortConfig={sortConfig}
+              onSortConfig={onSortConfig}
               initialStep={settingsStep}
               onBack={closeSettings}
             />

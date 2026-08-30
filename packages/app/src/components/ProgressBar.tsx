@@ -2,23 +2,19 @@ import type { Metric } from "../types";
 import { metricHealth } from "../health";
 
 /**
- * 重置倒计时文案(P1 真机验收契约): 纯倒计时, 去掉旧的动作后缀。
- * 阶梯(整除取余, 不截断精度, 禁出现"26天1小时60分"):
- *   ≥1天 → "X天X小时"(625h41m → 26天1小时)
- *   ≥1小时 → "X小时X分"(5小时42分)
- *   <1小时 → "X分"
+ * 重置倒计时文案(#829 R2): 纯倒计时, 去掉旧的动作后缀, 单单位 + 保留一位小数:
+ *   ≥1天 → "X.X天"(625h41m → 26.1天)
+ *   <1天 ≥1小时 → "X.X小时"(5h42m → 5.7小时; 86399s 四舍五入 → 24.0小时)
+ *   <1小时 → "X分"(整数分, 四舍五入; 599s → 10分)
  * 即将重置/空文案语义不变。nowSec 可注入便于单测。
  */
 export function resetText(resetAt?: number, nowSec: number = Math.floor(Date.now() / 1000)): string {
   if (!resetAt) return "";
   const s = resetAt - nowSec;
   if (s <= 0) return "即将重置";
-  const day = Math.floor(s / 86400);
-  const hour = Math.floor((s % 86400) / 3600);
-  const min = Math.floor((s % 3600) / 60);
-  if (day > 0) return `${day}天${hour}小时`;
-  if (hour > 0) return `${hour}小时${min}分`;
-  return `${min}分`;
+  if (s >= 86400) return `${(s / 86400).toFixed(1)}天`;
+  if (s >= 3600) return `${(s / 3600).toFixed(1)}小时`;
+  return `${Math.round(s / 60)}分`;
 }
 
 /** bars 模板微部件: 手写进度条 + 压字(D-002, 不引组件库/Chart.js)。
