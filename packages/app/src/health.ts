@@ -141,39 +141,63 @@ export function sortByHealth(providers: ProviderSnapshot[]): ProviderSnapshot[] 
   return [...providers].sort(compareByHealth);
 }
 
-// ---------------- P1(#829 R1): 卡间排序 = key(名称|紧要度) × dir(正排|倒排) 两正交参数 ----------------
+// ---------------- P1(#829 R1): 卡间排序 = key(名称|紧要度|手动) × dir(正排|倒排) 两正交参数 ----------------
 
-export type SortKey = "name" | "urgency";
+export type SortKey = "name" | "urgency" | "manual";
 export type SortDir = "asc" | "desc";
 export interface SortConfig {
   key: SortKey;
   dir: SortDir;
+  /**
+   * 手动排序顺序(providerId 数组, D-039): 仅 key=manual 时生效。
+   * order 永远是**附加信息**, 当前实例集合才是真相源 ——
+   * 排序时按实例集合做交集, 不因 order 过期/幽灵 id 丢卡(见 sortProviders)。
+   * 非 manual 模式下 order 仍保留在内存与盘上(切换回 manual 可恢复自定义顺序)。
+   */
+  order?: string[];
 }
 /** 缺省 = 名称正排(#829 R1 缺省不是紧要度; 无历史设置时的出厂行为) */
 export const DEFAULT_SORT_CONFIG: SortConfig = { key: "name", dir: "asc" };
 
+/** 从未知值提取合法的 order 数组(非数组/含非字符串 → 过滤; 空/非法 → undefined) */
+function normalizeOrder(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const order = raw.filter((x): x is string => typeof x === "string");
+  return order.length > 0 ? order : undefined;
+}
+
 /**
  * 排序配置归一化: 非对象/非法 key/非法 dir → 缺省(名称正排), 不抛错。
+ * - key=manual 接受(D-039): dir 强制 asc(manual 按 order 排, dir 无意义, 契约持久化 {key:"manual",dir:"asc"})
+ * - order 数组按字符串过滤保留; 非法/缺失 → undefined(manual 退化为尾部全追加 = 名称正排)
  * 真壳 settings.json 与浏览器 localStorage 两侧共用同一宽容语义(损坏配置不崩 UI)。
  */
 export function normalizeSortConfig(raw: unknown): SortConfig {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     const o = raw as Record<string, unknown>;
-    const key: SortKey | null = o.key === "name" ? "name" : o.key === "urgency" ? "urgency" : null;
+    const key: SortKey | null =
+      o.key === "name" ? "name" : o.key === "urgency" ? "urgency" : o.key === "manual" ? "manual" : null;
     const dir: SortDir | null = o.dir === "asc" ? "asc" : o.dir === "desc" ? "desc" : null;
-    if (key && dir) return { key, dir };
+    if (key) {
+      const order = normalizeOrder(o.order);
+      if (key === "manual") return { key, dir: "asc", ...(order ? { order } : {}) };
+      if (dir) return { key, dir, ...(order ? { order } : {}) };
+    }
   }
   return DEFAULT_SORT_CONFIG;
 }
 
 /**
- * 卡间排序(#829 R1): key × dir 两正交参数。
+ * 卡间排序(#829 R1 + D-039): key × dir 两正交参数 + manual(order 交集)。
  * - key=name: display_name localeCompare 自然序(asc 正排), 同名保持原相对顺序(排序稳定)
  *   locale 显式钉 "zh"(中文名拼音序, #829 语义) —— 不钉则排序随运行时默认 locale 漂移
  *   (Node zh=拼音前 vs Chrome en=拉丁前), 跨机 e2e 必红(t_6c6dd54f)
  * - key=urgency: 卡内 min(remaining/limit) 升序(asc = 越快耗尽越靠前);
  *   limit 缺失/为 0 的卡剩余比例视为 1(asc 时排最后, 不崩); 同比例按 sortByHealth 次序稳定(健康差在前)
- * - dir=desc 对两种 key 都是整体直接反转
+ * - key=manual(D-039): 按 config.order(providerId 数组)排 —— 以当前实例集合为准做交集:
+ *   order 里没有的 id(新添加/历史漂移)按缺省规则(名称正排)追加尾部; order 里的幽灵 id(已删除)忽略;
+ *   order 永远是附加信息, 实例集合是真相源, 不因 order 过期丢卡。
+ * - dir=desc 对 name/urgency 是整体直接反转; manual 忽略 dir(按 order 排)
  * 托盘(globalHealth/tooltipSummary)不经此函数 —— 排序配置不影响托盘全局最差状态。
  */
 const NAME_COLLATOR = new Intl.Collator("zh", { numeric: true });
@@ -182,6 +206,24 @@ export function sortProviders(
   providers: ProviderSnapshot[],
   config: SortConfig = DEFAULT_SORT_CONFIG,
 ): ProviderSnapshot[] {
+  // manual(D-039): order 交集 + 尾部按缺省规则(名称正排)追加 + 幽灵 id 忽略
+  if (config.key === "manual") {
+    const order = config.order ?? [];
+    const byId = new Map(providers.map((p) => [p.provider_id, p]));
+    const picked: ProviderSnapshot[] = [];
+    const seen = new Set<string>();
+    for (const id of order) {
+      const p = byId.get(id);
+      if (p && !seen.has(id)) {
+        picked.push(p);
+        seen.add(id);
+      }
+    }
+    const rest = providers
+      .filter((p) => !seen.has(p.provider_id))
+      .sort((a, b) => NAME_COLLATOR.compare(a.display_name, b.display_name));
+    return [...picked, ...rest];
+  }
   const asc = [...providers].sort((a, b) => {
     if (config.key === "name") {
       return NAME_COLLATOR.compare(a.display_name, b.display_name);
@@ -191,6 +233,17 @@ export function sortProviders(
     return compareByHealth(a, b);
   });
   return config.dir === "desc" ? asc.reverse() : asc;
+}
+
+/**
+ * 拖动落点(D-039): 把 dragId 从 ids 移到 overIndex 位置(其余保持原相对顺序)。
+ * overIndex = 拖动后 dragId 在**新列表中的下标**(0..ids.length)。
+ * 纯函数, App 的 drop 处理器与 L1 单测共用。
+ */
+export function reorderByIds(ids: string[], dragId: string, overIndex: number): string[] {
+  const others = ids.filter((id) => id !== dragId);
+  const idx = Math.max(0, Math.min(overIndex, others.length));
+  return [...others.slice(0, idx), dragId, ...others.slice(idx)];
 }
 
 /** 托盘 tooltip 摘要, 如 "1待授权 1已耗尽 2健康"(§6.2)。

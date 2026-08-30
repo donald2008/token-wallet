@@ -15,6 +15,7 @@ vi.mock("../ipc", () => ({
 }));
 
 import { SettingsView } from "./SettingsView";
+import type { SortConfig } from "../health";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -103,5 +104,64 @@ describe("设置页瘦身(D-038)", () => {
     const view = await renderSettings("page");
     expect(view.querySelector('[data-testid="settings-back"]')).toBeTruthy();
     expect(view.querySelector('[data-testid="settings-close"]')).toBeNull();
+  });
+});
+
+// ---- D-039: 排序第三档「手动」+ manual 时方向禁用 + order 保留切换恢复 ----
+describe("排序第三档「手动」(D-039)", () => {
+  async function renderWithConfig(
+    sortConfig: SortConfig,
+    onSortConfig: (c: SortConfig) => void,
+  ): Promise<HTMLElement> {
+    await act(async () => {
+      root.render(
+        <SettingsView
+          variant="modal"
+          themeMode="system"
+          onThemeMode={() => {}}
+          sortConfig={sortConfig}
+          onSortConfig={onSortConfig}
+          onBack={() => {}}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    return container.querySelector<HTMLElement>('[data-testid="settings-view"]')!;
+  }
+
+  it("排序键控件含第三档「手动」", async () => {
+    const view = await renderWithConfig({ key: "name", dir: "asc" }, () => {});
+    const manualBtn = view.querySelector<HTMLButtonElement>('[data-testid="sort-key-manual"]')!;
+    expect(manualBtn).toBeTruthy();
+    expect(manualBtn.textContent).toBe("手动");
+  });
+
+  it("manual 激活时方向控件禁用(manual 按拖拽顺序, dir 无意义)", async () => {
+    const view = await renderWithConfig({ key: "manual", dir: "asc" }, () => {});
+    expect(view.querySelector<HTMLButtonElement>('[data-testid="sort-key-manual"]')!.className).toContain(
+      "active",
+    );
+    for (const id of ["sort-dir-asc", "sort-dir-desc"]) {
+      expect(view.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)!.disabled).toBe(true);
+    }
+  });
+
+  it("切到名称/紧要度时 order 保留不清(再切回手动恢复自定义顺序)", async () => {
+    const calls: SortConfig[] = [];
+    const order = ["c", "a", "b"];
+    const view = await renderWithConfig({ key: "manual", dir: "asc", order }, (c) => calls.push(c));
+    // 从 manual 切到 name: onSortConfig 收到的配置必须带原 order
+    act(() => {
+      view.querySelector<HTMLButtonElement>('[data-testid="sort-key-name"]')!.click();
+    });
+    expect(calls).toEqual([{ key: "name", dir: "asc", order }]);
+    // 从 name 切回 manual: order 仍在, dir 由控件当前值决定(这里切回 manual 保留 order)
+    act(() => {
+      view.querySelector<HTMLButtonElement>('[data-testid="sort-key-manual"]')!.click();
+    });
+    expect(calls[1]).toEqual({ key: "manual", dir: "asc", order });
   });
 });

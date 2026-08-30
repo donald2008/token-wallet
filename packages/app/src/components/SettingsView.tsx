@@ -23,6 +23,7 @@ interface Props {
 const SORT_KEY_OPTIONS: { id: SortKey; label: string }[] = [
   { id: "name", label: "名称" },
   { id: "urgency", label: "紧要度" },
+  { id: "manual", label: "手动" },
 ];
 
 const SORT_DIR_OPTIONS: { id: SortDir; label: string }[] = [
@@ -118,13 +119,15 @@ export function SettingsView({
                 </button>
               ))}
             </div>
+            {/* D-039: 手动模式按拖拽顺序排列, dir 无意义 → 禁用方向控件(契约: manual 持久化 dir:"asc") */}
             <div className="seg" data-testid="sort-dir-seg">
               {SORT_DIR_OPTIONS.map((o) => (
                 <button
                   key={o.id}
                   type="button"
-                  className={`btn${sortConfig.dir === o.id ? " active" : ""}`}
+                  className={`btn${sortConfig.key !== "manual" && sortConfig.dir === o.id ? " active" : ""}`}
                   data-testid={`sort-dir-${o.id}`}
+                  disabled={sortConfig.key === "manual"}
                   onClick={() => onSortConfig({ ...sortConfig, dir: o.id })}
                 >
                   {o.label}
@@ -134,6 +137,7 @@ export function SettingsView({
           </div>
           <p className="hint">
             缺省: 名称正排。紧要度 = 按卡内最紧窗口剩余比例(剩余越少越靠前), 方向独立生效(#829 R1)。
+            手动 = 拖拽卡片顺序(D-039), 方向不适用。
           </p>
         </section>
 

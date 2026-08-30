@@ -196,6 +196,7 @@ body {
 
 /* ---- 卡片区 ---- */
 .card-list {
+  position: relative; /* D-039: drop-line 指示线定位容器 */
   flex: 1;
   overflow-y: auto;
   padding: 10px 12px;
@@ -210,6 +211,39 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 12px;
+  /* D-039: 松手归位动画(CSS transition, 不引库) —— 拖动中 .card-dragging 覆盖为 none */
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* D-039: 拖动浮起 —— shadow 提升同级 + z-index 置顶; transition 关掉让卡跟手 */
+.card-dragging {
+  z-index: 5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  border-color: var(--accent);
+  transition: none;
+}
+
+/* D-039: 落点指示线 —— 2px accent 横线, 绝对定位在插入边界(由 hook 算像素 Y) */
+.drop-line {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* D-039: 拖动手柄(品牌色块 16px) —— grab/grabbing 光标提示可拖 */
+.brand-block.drag-handle {
+  cursor: grab;
+  touch-action: none; /* pointer 事件不被触摸滚动抢占 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.brand-block.drag-handle:active {
+  cursor: grabbing;
 }
 
 .card-head {

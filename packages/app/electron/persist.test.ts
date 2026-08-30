@@ -198,4 +198,35 @@ describe("sortConfig(#829 R1 卡间排序, autostart 同款 RMW)", () => {
     recordSortConfig(file, { key: "urgency", dir: "asc" });
     expect(readSettingsFile(file).sortConfig).toEqual({ key: "urgency", dir: "asc" });
   });
+
+  it("manual + order 写入 → 读回整体往返(order 落盘, D-039)", () => {
+    const file = path.join(dir, "settings.json");
+    recordSortConfig(file, { key: "manual", dir: "desc", order: ["c", "a", "b"] });
+    const settings = readSettingsFile(file);
+    // dir 强制 asc(契约 §3: manual 持久化 {key:manual,dir:asc,order})
+    expect(settings.sortConfig).toEqual({ key: "manual", dir: "asc", order: ["c", "a", "b"] });
+    expect(normalizeSortConfigValue(settings.sortConfig)).toEqual({
+      key: "manual",
+      dir: "asc",
+      order: ["c", "a", "b"],
+    });
+  });
+
+  it("非 manual 模式写 order → order 也落盘(切回 manual 可恢复, 契约 §3)", () => {
+    const file = path.join(dir, "settings.json");
+    recordSortConfig(file, { key: "name", dir: "asc", order: ["c", "a", "b"] });
+    expect(readSettingsFile(file).sortConfig).toEqual({
+      key: "name",
+      dir: "asc",
+      order: ["c", "a", "b"],
+    });
+  });
+
+  it("order 非法(非数组/空) → 归一化省略, 不崩", () => {
+    const file = path.join(dir, "settings.json");
+    recordSortConfig(file, { key: "manual", dir: "asc", order: "nope" });
+    expect(readSettingsFile(file).sortConfig).toEqual({ key: "manual", dir: "asc" });
+    recordSortConfig(file, { key: "manual", dir: "asc", order: [] });
+    expect(readSettingsFile(file).sortConfig).toEqual({ key: "manual", dir: "asc" });
+  });
 });

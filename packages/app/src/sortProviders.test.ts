@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SORT_CONFIG,
   normalizeSortConfig,
+  reorderByIds,
   sortByHealth,
   sortProviders,
 } from "./health";
@@ -145,6 +146,121 @@ describe("normalizeSortConfig: 非法/缺失 → 缺省名称正排, 不抛错",
     ]) {
       expect(normalizeSortConfig(raw)).toEqual(DEFAULT_SORT_CONFIG);
     }
+  });
+});
+
+describe("normalizeSortConfig: manual(D-039)", () => {
+  it("接受 manual; dir 强制 asc(契约 §3 持久化 {key:manual,dir:asc,order})", () => {
+    expect(normalizeSortConfig({ key: "manual", dir: "desc", order: ["b", "a"] })).toEqual({
+      key: "manual",
+      dir: "asc",
+      order: ["b", "a"],
+    });
+    expect(normalizeSortConfig({ key: "manual" })).toEqual({ key: "manual", dir: "asc" });
+  });
+
+  it("order 非数组/空数组/含非字符串 → 过滤或省略, 不崩", () => {
+    expect(normalizeSortConfig({ key: "manual", order: "nope" })).toEqual({
+      key: "manual",
+      dir: "asc",
+    });
+    expect(normalizeSortConfig({ key: "manual", order: [] })).toEqual({ key: "manual", dir: "asc" });
+    expect(normalizeSortConfig({ key: "manual", order: ["a", 42, "b", null] })).toEqual({
+      key: "manual",
+      dir: "asc",
+      order: ["a", "b"],
+    });
+  });
+
+  it("非 manual 配置带 order → order 保留(切换回 manual 可恢复, 契约 §2/§3)", () => {
+    expect(normalizeSortConfig({ key: "name", dir: "asc", order: ["b", "a"] })).toEqual({
+      key: "name",
+      dir: "asc",
+      order: ["b", "a"],
+    });
+    expect(normalizeSortConfig({ key: "urgency", dir: "desc", order: ["a", "b"] })).toEqual({
+      key: "urgency",
+      dir: "desc",
+      order: ["a", "b"],
+    });
+  });
+});
+
+describe("sortProviders: manual(D-039 order 交集)", () => {
+  const A = snap("a", "ok", [metric(50, 100)]);
+  const B = snap("b", "ok", [metric(50, 100)]);
+  const C = snap("c", "ok", [metric(50, 100)]);
+  // 注: snap(id) 的 display_name = id(拉丁), NAME_COLLATOR(zh) 对拉丁串按码位序: a<b<c<d
+
+  it("按 order 顺序排(交集); dir 忽略(manual 固定 asc)", () => {
+    // dir 即使 desc 也不反转 —— manual 语义是「用户拖出来的顺序」
+    expect(names(sortProviders([A, B, C], { key: "manual", dir: "desc", order: ["c", "a", "b"] }))).toEqual([
+      "c",
+      "a",
+      "b",
+    ]);
+    expect(names(sortProviders([A, B, C], { key: "manual", dir: "desc", order: ["c", "a"] }))).toEqual([
+      "c",
+      "a",
+      "b",
+    ]);
+  });
+
+  it("order 里没有的 id(新添加/历史漂移)按缺省规则(名称正排)追加尾部", () => {
+    // order 只有 c; a/b 不在 order → 尾部按名称正排: a < b
+    expect(names(sortProviders([A, B, C], { key: "manual", dir: "asc", order: ["c"] }))).toEqual([
+      "c",
+      "a",
+      "b",
+    ]);
+    // 全新 provider d 未在 order(新添加) → 按名称正排追加尾部(a < b < d)
+    const D = snap("d", "ok", [metric(50, 100)]);
+    const cards = [A, B, C, D];
+    expect(names(sortProviders(cards, { key: "manual", dir: "asc", order: ["c"] }))).toEqual([
+      "c",
+      "a",
+      "b",
+      "d",
+    ]);
+  });
+
+  it("order 里的幽灵 id(已删除)忽略, 不丢现有卡", () => {
+    expect(
+      names(sortProviders([A, B], { key: "manual", dir: "asc", order: ["ghost-1", "a", "ghost-2"] })),
+    ).toEqual(["a", "b"]);
+  });
+
+  it("order 缺失/空 → 退化为名称正排(实例集合是真相源)", () => {
+    expect(names(sortProviders([A, B, C], { key: "manual", dir: "asc" }))).toEqual(["a", "b", "c"]);
+    expect(names(sortProviders([A, B, C], { key: "manual", dir: "asc", order: [] }))).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+  });
+
+  it("order 保留切换恢复: 切回 manual 后自定义顺序恢复(契约 §2)", () => {
+    // 模拟: manual 存了 order → 切 name(保留 order) → 切回 manual → 恢复
+    const manualCfg = normalizeSortConfig({ key: "manual", dir: "asc", order: ["c", "a", "b"] });
+    const nameCfg = { ...manualCfg, key: "name" as const };
+    expect(nameCfg.order).toEqual(["c", "a", "b"]); // 切换不清 order
+    const back = normalizeSortConfig({ ...nameCfg, key: "manual" });
+    expect(names(sortProviders([A, B, C], back))).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("reorderByIds(D-039 拖动落点)", () => {
+  it("把 dragId 移到 overIndex, 其余保持原相对顺序", () => {
+    expect(reorderByIds(["a", "b", "c"], "b", 0)).toEqual(["b", "a", "c"]);
+    expect(reorderByIds(["a", "b", "c"], "a", 2)).toEqual(["b", "c", "a"]);
+    expect(reorderByIds(["a", "b", "c"], "c", 1)).toEqual(["a", "c", "b"]);
+    expect(reorderByIds(["a", "b", "c"], "b", 2)).toEqual(["a", "c", "b"]);
+  });
+
+  it("overIndex 越界钳制(0..others.length)", () => {
+    expect(reorderByIds(["a", "b", "c"], "a", -5)).toEqual(["a", "b", "c"]);
+    expect(reorderByIds(["a", "b", "c"], "a", 99)).toEqual(["b", "c", "a"]);
+    expect(reorderByIds(["a", "b", "c"], "b", 99)).toEqual(["a", "c", "b"]);
   });
 });
 

@@ -8,6 +8,7 @@ import { useTheme } from "./theme";
 import { TitleBar } from "./components/TitleBar";
 import { SideBar } from "./components/SideBar";
 import { ProviderCard } from "./components/ProviderCard";
+import { useCardDragSort } from "./useCardDragSort";
 import {
   ConsentPage,
   ConfigErrorState,
@@ -175,6 +176,21 @@ export default function App() {
     void persistSortConfig(next);
   }, []);
 
+  // D-039 拖动排序: 渲染顺序 = sortProviders 输出; drop 才切 manual + 持久化一次
+  const sortedCards = useMemo(() => sortProviders(providers ?? [], sortConfig), [providers, sortConfig]);
+  const { drag, indicatorY, makeHandleProps } = useCardDragSort({
+    ids: sortedCards.map((p) => p.provider_id),
+    onDrop: useCallback(
+      (order: string[]) => {
+        // 拖动即切 manual(契约 §1): 用户接管排序, 按拖动结果生效; order 持久化一次
+        const next: SortConfig = { key: "manual", dir: "asc", order };
+        setSortConfig(next);
+        void persistSortConfig(next);
+      },
+      [],
+    ),
+  });
+
   // 托盘联动: 全局最差状态 → 托盘色点 + tooltip(D-003)
   useEffect(() => {
     void updateTrayStatus(health, tooltip);
@@ -296,11 +312,18 @@ export default function App() {
           <EmptyState onAdd={openAddProvider} />
         ) : (
           <main className="card-list" data-testid="card-list">
-            {sortProviders(providers, sortConfig).map((p) => (
+            {/* D-039 落点指示线(拖动中显示): 绝对定位在插入边界 */}
+            {drag && indicatorY !== null && (
+              <div className="drop-line" data-testid="drop-line" style={{ top: indicatorY }} />
+            )}
+            {sortedCards.map((p) => (
               <ProviderCard
                 key={p.provider_id}
                 p={p}
                 onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
+                dragHandle={makeHandleProps(p.provider_id)}
+                dragging={drag?.id === p.provider_id}
+                dragDy={drag ? drag.dy : 0}
               />
             ))}
           </main>

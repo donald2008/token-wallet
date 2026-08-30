@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ProviderSnapshot } from "../types";
 import { providerHealth, statusBadge } from "../health";
 import { getTemplateFor } from "../templates/registry";
+import type { DragHandleProps } from "../useCardDragSort";
 
 /** 品牌色块(§6.1 第 4 条): 16px 平台识别色, 正式版替换为内置单色 SVG 品牌图标 */
 const BRAND_COLORS: Record<string, string> = {
@@ -65,24 +66,45 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
  * 点击弹既有 confirm-delete 气泡(含取消, 红调), 确认后走 onDelete → store.remove
  * (钥匙串 D-029 + DB 快照清理 t_2ac39613 契约, 全在 store 侧, 本组件不碰持久化)。
  * `onDelete` 未传(dev 场景 mock 预览卡)时不渲染删除钮 —— 不给用户可点但无效的按钮。
+ *
+ * D-039 拖动排序: head 左侧品牌色块(16px)即**拖动手柄** —— dragHandle 传入时
+ * 色块获得 pointer 事件绑定 + grab 光标; dragging 时整卡浮起(transform + shadow)。
  */
 export function ProviderCard({
   p,
   onDelete,
+  dragHandle,
+  dragging = false,
+  dragDy = 0,
 }: {
   p: ProviderSnapshot;
   /** 传入即渲染卡内删除钮(仅真实实例); 参数 = provider_id(= 实例 id) */
   onDelete?: (id: string) => void;
+  /** D-039 拖动手柄绑定(pointer 事件, 由 App useCardDragSort 提供); 传入即色块可拖 */
+  dragHandle?: DragHandleProps;
+  /** D-039 该卡正在被拖动(浮起视觉) */
+  dragging?: boolean;
+  /** D-039 拖动中浮起位移(px, 视觉 transform translateY) */
+  dragDy?: number;
 }) {
   const health = providerHealth(p);
   const Template = getTemplateFor(p).component;
   const [confirming, setConfirming] = useState(false);
   return (
-    <section className="card" data-testid="provider-card" data-provider={p.provider_id} data-health={health}>
+    <section
+      className={`card${dragging ? " card-dragging" : ""}`}
+      style={dragging ? { transform: `translateY(${dragDy}px)` } : undefined}
+      data-testid="provider-card"
+      data-provider={p.provider_id}
+      data-health={health}
+    >
       <div className="card-head">
         <span
-          className="brand-block"
+          className={`brand-block${dragHandle ? " drag-handle" : ""}`}
           style={{ background: BRAND_COLORS[p.provider_id] ?? "var(--unknown)" }}
+          title={dragHandle ? `拖动排序 ${p.display_name}` : p.provider_id}
+          data-testid={dragHandle ? `drag-handle-${p.provider_id}` : undefined}
+          {...dragHandle}
         />
         <span className="card-name" title={p.provider_id}>
           {p.display_name}

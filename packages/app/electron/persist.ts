@@ -17,22 +17,37 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-/** 卡间排序配置值(#829 R1): key(名称|紧要度) × dir(正排|倒排) 两正交参数 */
+/** 卡间排序配置值(#829 R1 + D-039): key(名称|紧要度|手动) × dir(正排|倒排) 两正交参数 + order(手动顺序) */
 export interface SortConfigValue {
-  key: "name" | "urgency";
+  key: "name" | "urgency" | "manual";
   dir: "asc" | "desc";
+  /** 手动排序顺序(providerId 数组, D-039): 仅 key=manual 时生效; 非 manual 也保留在盘上(切回可恢复) */
+  order?: string[];
 }
 
 /** 排序配置缺省 = 名称正排(#829 R1); 与 renderer 侧 health.ts DEFAULT_SORT_CONFIG 同值(双端各一份, 互不 import) */
 export const DEFAULT_SORT_CONFIG_VALUE: SortConfigValue = { key: "name", dir: "asc" };
 
-/** 排序配置归一化: 非对象/非法 key/非法 dir → 缺省, 不抛错(损坏配置不崩 UI) */
+/** 从未知值提取合法的 order 数组(非数组/含非字符串 → 过滤; 空/非法 → undefined) */
+function normalizeOrderValue(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const order = raw.filter((x): x is string => typeof x === "string");
+  return order.length > 0 ? order : undefined;
+}
+
+/** 排序配置归一化: 非对象/非法 key/非法 dir → 缺省, 不抛错(损坏配置不崩 UI)。
+ * key=manual 接受(D-039): dir 强制 asc; order 按字符串过滤保留。 */
 export function normalizeSortConfigValue(raw: unknown): SortConfigValue {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     const o = raw as Record<string, unknown>;
-    const key = o.key === "name" ? "name" : o.key === "urgency" ? "urgency" : null;
+    const key =
+      o.key === "name" ? "name" : o.key === "urgency" ? "urgency" : o.key === "manual" ? "manual" : null;
     const dir = o.dir === "asc" ? "asc" : o.dir === "desc" ? "desc" : null;
-    if (key && dir) return { key, dir };
+    if (key) {
+      const order = normalizeOrderValue(o.order);
+      if (key === "manual") return { key, dir: "asc", ...(order ? { order } : {}) };
+      if (dir) return { key, dir, ...(order ? { order } : {}) };
+    }
   }
   return DEFAULT_SORT_CONFIG_VALUE;
 }
@@ -191,9 +206,11 @@ export function recordAlwaysOnTop(filePath: string, enabled: boolean): void {
 }
 
 /**
- * sortConfig 落盘的 read-modify-write 核心(#829 R1, 与 autostart/alwaysOnTop 同款模式):
+ * sortConfig 落盘的 read-modify-write 核心(#829 R1 + D-039, 与 autostart/alwaysOnTop 同款模式):
  * 只改 sortConfig 字段, 既有/前瞻字段(consent/autostart/alwaysOnTop/theme 等)JSON 合并透传;
  * 损坏时保守回退仅含 sortConfig 的合法对象重写(不抛)。
+ * ⚠️ D-039: order(手动顺序)必须一并落盘 —— 非 manual 模式下切回 manual 要靠它恢复自定义顺序;
+ * 若在此丢弃 order, 用户切到名称/紧要度再切回手动, 自定义顺序就丢了。
  */
 export function sortConfigSettingsJson(existing: string | null, config: SortConfigValue): string {
   let base: Record<string, unknown> = {};
@@ -207,7 +224,15 @@ export function sortConfigSettingsJson(existing: string | null, config: SortConf
       base = {}; // 损坏 → 仅保留本次字段
     }
   }
-  const merged = { ...base, version: 1, sortConfig: { key: config.key, dir: config.dir } };
+  const merged = {
+    ...base,
+    version: 1,
+    sortConfig: {
+      key: config.key,
+      dir: config.dir,
+      ...(config.order && config.order.length > 0 ? { order: config.order } : {}),
+    },
+  };
   return JSON.stringify(merged, null, 2);
 }
 
