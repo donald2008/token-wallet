@@ -1,5 +1,5 @@
 import { expect as pwExpect } from "@playwright/test";
-import { test } from "./fixtures";
+import { test, getCapturedInvokes } from "./fixtures";
 
 /**
  * L2 徽章文案语义(t_553dcb5a, D-005 status 一等公民):
@@ -93,4 +93,53 @@ test("徽章: auth_expired(401) → 「待授权」(非「偏低」), 颜色仍�
   // 卡体长文案保持不变(STATUS_TEXT), 与徽章短文案不是一回事
   await pwExpect(card.getByTestId("abnormal-body")).toContainText("登录态过期, 请重新授权");
   await pwExpect(badge).not.toHaveText("偏低");
+});
+
+/** 预置一个 opencode 实例, key 含 "low" 哨兵 → mock 返回 weekly 95%(remaining 5%) */
+async function seedOpencodeLowInstance(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    localStorage.setItem("token-wallet.mock.consent.v1", "1");
+    localStorage.setItem(
+      "token-wallet.mock.instances.v1",
+      JSON.stringify({
+        version: 1,
+        instances: [
+          {
+            id: "inst-oc-low",
+            channel: "opencode/go",
+            name: "opencode Go #low",
+            params: { api_key: { source: "store", key: "inst-oc-low:api_key" } },
+          },
+        ],
+      }),
+    );
+    localStorage.setItem(
+      "token-wallet.mock.keyring.token-wallet:inst-oc-low:api_key",
+      "sk-oc-low",
+    );
+  });
+  await page.reload();
+}
+
+test("徽章: remaining=5%(0<r≤10%) → 「即将耗尽」(非「已耗尽」), 颜色仍红(bad)", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await seedOpencodeLowInstance(page);
+
+  const card = page.getByTestId("provider-card").first();
+  await pwExpect(card).toBeVisible({ timeout: 10_000 });
+  // 颜色不变: 即将耗尽仍属 bad 红带(D-022), 只拆文案
+  await pwExpect(card).toHaveAttribute("data-health", "bad");
+  const badge = card.locator(".card-status-text").first();
+  await pwExpect(badge).toHaveText("即将耗尽");
+  await pwExpect(badge).toHaveClass(/text-bad/);
+  await pwExpect(badge).not.toHaveText("已耗尽");
+
+  // 托盘 tooltipSummary 同步分级(BADGE_ORDER 独立分组)
+  const calls = await getCapturedInvokes(page);
+  const tray = [...calls].reverse().find((c) => c.cmd === "update_tray_status");
+  pwExpect(tray).toBeTruthy();
+  pwExpect(String((tray!.args as { tooltip?: string }).tooltip)).toContain("即将耗尽");
 });

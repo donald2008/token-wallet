@@ -3,7 +3,15 @@ import type { ThemeMode } from "../theme";
 import { StatusDot } from "./StatusDot";
 import { winClose, winMinimize } from "../ipc";
 
+/** 按钮短文案(t_05271be0: system 缩为「自动」防 titlebar 换行撑高, 360px 宽度预算不足) */
 const THEME_LABEL: Record<ThemeMode, string> = {
+  system: "自动",
+  light: "浅色",
+  dark: "深色",
+};
+
+/** title 提示保留全语义(按钮文案缩短后, hover 仍见完整主题名) */
+const THEME_TITLE: Record<ThemeMode, string> = {
   system: "跟随系统",
   light: "浅色",
   dark: "深色",
@@ -72,7 +80,7 @@ export function TitleBar(props: Props) {
         type="button"
         className="btn toolbar-btn"
         data-testid="theme-toggle"
-        title={`主题: ${THEME_LABEL[props.themeMode]}(点击切换)`}
+        title={`主题: ${THEME_TITLE[props.themeMode]}(点击切换)`}
         onClick={props.onCycleTheme}
       >
         {THEME_LABEL[props.themeMode]}

@@ -36,11 +36,21 @@ const STATUS_BADGE: Record<Exclude<ProviderStatus, "ok">, string> = {
 
 export function statusBadge(p: ProviderSnapshot): string {
   if (p.status !== "ok") return STATUS_BADGE[p.status];
-  return HEALTH_LABEL[providerHealth(p)];
+  const h = providerHealth(p);
+  // 耗尽分级(t_05271be0): bad 带内按 metric 级判定取最差级拆文案 ——
+  // 任一窗口 remaining==0(used>=limit) → 「已耗尽」; 否则(0<remaining≤10%) → 「即将耗尽」。
+  // 颜色语义不动: 两级同属 bad 红(D-022), metricHealth 阈值判定不改。
+  if (h === "bad") return hasExhaustedMetric(p) ? HEALTH_LABEL.bad : "即将耗尽";
+  return HEALTH_LABEL[h];
 }
 
-/** tooltip 摘要分组的展示顺序: 严重度降序(采集失败 > 耗尽 > 待授权 > 偏低 > 已陈旧 > 未接入 > 健康) */
-const BADGE_ORDER = ["采集失败", "已耗尽", "待授权", "偏低", "已陈旧", "未接入", "健康"];
+/** metric 级耗尽判定: 任一窗口额度打满(used>=limit, remaining==0) */
+function hasExhaustedMetric(p: ProviderSnapshot): boolean {
+  return p.metrics.some((m) => m.limit !== undefined && m.limit > 0 && m.used >= m.limit);
+}
+
+/** tooltip 摘要分组的展示顺序: 严重度降序(采集失败 > 已耗尽 > 即将耗尽 > 待授权 > 偏低 > 已陈旧 > 未接入 > 健康) */
+const BADGE_ORDER = ["采集失败", "已耗尽", "即将耗尽", "待授权", "偏低", "已陈旧", "未接入", "健康"];
 
 /** 单条 metric 健康度(剩余百分比 vs 阈值) */
 export function metricHealth(m: Metric): HealthLevel {

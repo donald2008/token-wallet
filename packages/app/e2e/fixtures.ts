@@ -174,17 +174,31 @@ const ipcMocks: Record<string, IpcHandler> = {
         }),
       };
     } else if (String(args?.url ?? "").includes("opencode.ai/zen/go/v1/usage")) {
-      // opencode/go golden(2026-08-29 L3 实测脱敏): weekly 单窗 rate-limited 100%
-      result = {
-        status: 200,
-        body: JSON.stringify({
-          usage: {
-            rolling: { status: "ok", percent: 0, resetsAt: "2026-08-29T13:26:59.879Z" },
-            weekly: { status: "rate-limited", percent: 100, resetsAt: "2026-08-31T00:00:00.879Z" },
-            monthly: { status: "ok", percent: 48, resetsAt: "2026-09-25T06:07:28.879Z" },
-          },
-        }),
-      };
+      if (auth.includes("low")) {
+        // 即将耗尽变体(t_05271be0): weekly 95%(remaining 5%, 0<r≤10%)→ 徽章「即将耗尽」仍红(bad)
+        result = {
+          status: 200,
+          body: JSON.stringify({
+            usage: {
+              rolling: { status: "ok", percent: 0, resetsAt: "2026-09-04T13:26:59.879Z" },
+              weekly: { status: "ok", percent: 95, resetsAt: "2026-09-06T00:00:00.879Z" },
+              monthly: { status: "ok", percent: 48, resetsAt: "2026-09-25T06:07:28.879Z" },
+            },
+          }),
+        };
+      } else {
+        // opencode/go golden(2026-08-29 L3 实测脱敏): weekly 单窗 rate-limited 100%
+        result = {
+          status: 200,
+          body: JSON.stringify({
+            usage: {
+              rolling: { status: "ok", percent: 0, resetsAt: "2026-08-29T13:26:59.879Z" },
+              weekly: { status: "rate-limited", percent: 100, resetsAt: "2026-08-31T00:00:00.879Z" },
+              monthly: { status: "ok", percent: 48, resetsAt: "2026-09-25T06:07:28.879Z" },
+            },
+          }),
+        };
+      }
     } else if (String(args?.url ?? "").includes("api.kimi.com/coding/v1/usages")) {
       // kimi/coding golden(2026-08-29 L3 实测脱敏): 主窗 71/100, 5h 窗 100/100
       result = {

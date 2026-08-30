@@ -87,6 +87,8 @@ body {
   font-size: var(--font-size);
   cursor: pointer;
   line-height: 1.4;
+  /* 防按钮文字换行(t_05271be0): titlebar 宽度预算紧张, 换行会撑高整条栏 */
+  white-space: nowrap;
 }
 
 .btn:hover {
@@ -287,6 +289,12 @@ body {
   align-items: center;
   gap: var(--gap);
   margin-top: 6px;
+  /* 对齐占位(t_05271be0 嫌疑①坐实): 所有行恒有 2px 透明左缘 + 4px 左 padding,
+     tightest 行只换 border-color —— 否则 tightest 行内容整体右移, 进度条左缘逐行错位。
+     嫌疑②核查结论: box-sizing 全局 border-box(见文件头), .bar-label 定宽 72px +
+     flex:0 0 auto 各行一致, 无额外 padding/border 差异, label 侧无漂移源。 */
+  border-left: 2px solid transparent;
+  padding-left: 4px;
 }
 
 .bar-label {
@@ -343,10 +351,10 @@ body {
   text-align: right;
 }
 
-/* bars 模板: 最紧窗口标红(§6.3, P1 起只标不置顶) — 薄红左缘 + 标签加粗红字, 一眼定位最先耗尽的风险窗 */
+/* bars 模板: 最紧窗口标红(§6.3, P1 起只标不置顶) — 薄红左缘 + 标签加粗红字, 一眼定位最先耗尽的风险窗。
+ * 只换 border-color: 2px 左缘+4px padding 是所有 .bar-row 的恒定占位(见 .bar-row 注释), 保证对齐 */
 .bar-row[data-tightest] {
-  border-left: 2px solid var(--bad);
-  padding-left: 4px;
+  border-left-color: var(--bad);
 }
 .bar-row[data-tightest] .bar-label {
   font-weight: 700;

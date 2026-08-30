@@ -118,4 +118,48 @@ describe("tooltipSummary — 托盘摘要按原因分组", () => {
     const out = tooltipSummary([snap("stale"), snap("unsupported"), snap("error")]);
     expect(out).toBe("token-wallet — 1采集失败 1已陈旧 1未接入");
   });
+
+  it("「即将耗尽」独立分组, 排在「已耗尽」之后(BADGE_ORDER)", () => {
+    const out = tooltipSummary([
+      snap("ok", [windowMetric(95, 100)]), // remaining=5% → 即将耗尽
+      snap("ok", [windowMetric(100, 100)]), // remaining=0 → 已耗尽
+      snap("ok", [windowMetric(100, 1200)]), // 健康
+    ]);
+    expect(out).toBe("token-wallet — 1已耗尽 1即将耗尽 1健康");
+  });
+});
+
+describe("耗尽分级(t_05271be0) — 已耗尽 vs 即将耗尽, 只拆文案不动颜色", () => {
+  it("remaining=0(used>=limit) → 「已耗尽」", () => {
+    const p = snap("ok", [windowMetric(100, 100)]);
+    expect(statusBadge(p)).toBe("已耗尽");
+    expect(providerHealth(p)).toBe("bad"); // 颜色语义不变(D-022)
+  });
+
+  it("0<remaining≤10%(如 5%) → 「即将耗尽」, 不再误报已耗尽", () => {
+    const p = snap("ok", [windowMetric(95, 100)]);
+    expect(statusBadge(p)).toBe("即将耗尽");
+    expect(providerHealth(p)).toBe("bad"); // 仍红, 色带不变
+  });
+
+  it("remaining=15%(10%~30%) → 「偏低」, 不进耗尽分级", () => {
+    const p = snap("ok", [windowMetric(1020, 1200)]);
+    expect(statusBadge(p)).toBe("偏低");
+    expect(providerHealth(p)).toBe("warn");
+  });
+
+  it("整卡取最差级: 一窗打满+一窗 5% → 「已耗尽」", () => {
+    const p = snap("ok", [windowMetric(95, 100), windowMetric(100, 100)]);
+    expect(statusBadge(p)).toBe("已耗尽");
+  });
+
+  it("整卡取最差级(反向): 仅 5% 无打满窗 → 「即将耗尽」", () => {
+    const p = snap("ok", [windowMetric(100, 1200), windowMetric(95, 100)]);
+    expect(statusBadge(p)).toBe("即将耗尽");
+  });
+
+  it("两级文案均 ≤4 汉字(徽章位窄)", () => {
+    expect("即将耗尽".length).toBeLessThanOrEqual(4);
+    expect(statusBadge(snap("ok", [windowMetric(95, 100)])).length).toBeLessThanOrEqual(4);
+  });
 });
