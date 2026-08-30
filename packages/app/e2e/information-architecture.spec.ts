@@ -236,6 +236,12 @@ test("360px: 标题栏单行不换行 + 侧栏与内容区无横向溢出", asyn
   const h360 = Math.round((await titlebar.boundingBox())!.height);
   const titleH = Math.round((await page.locator(".app-title").boundingBox())!.height);
   pwExpect(titleH).toBeLessThanOrEqual(h360); // 单行(换两行必然高于标题栏内容行)
+  // 硬指标: inline 元素换行会产生多个 client rect —— 单行 ⇔ 恰好 1 个
+  // (比高度比较更不易恒真: 整体等比撑高时高度断言仍会通过, rect 数不会)
+  const titleRects = await page
+    .locator(".app-title")
+    .evaluate((el) => el.getClientRects().length);
+  pwExpect(titleRects).toBe(1);
 
   // 800px 视口下标题栏高度一致(t_2ac39613 断言口径)
   await page.setViewportSize({ width: 800, height: 600 });

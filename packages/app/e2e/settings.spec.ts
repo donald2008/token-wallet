@@ -105,7 +105,7 @@ test("测试连接: 失败显示具体错误(D-017)", async ({ hostPage, page })
   await pwExpect(page.getByTestId("test-err")).toContainText("401");
 });
 
-test("实例: 向导添加 → 面板出卡 → 卡内删除(D-029 同步清钥匙串, D-038)", async ({ hostPage, page }) => {
+test("实例: 向导添加 → 面板出卡 → 卡内删除 → 回空态(D-038; keyring_delete 直接断言见 information-architecture.spec)", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await openAddFlow(page);
