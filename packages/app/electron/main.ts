@@ -21,7 +21,7 @@ import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, Tray } fro
 import * as fs from "node:fs";
 import * as path from "node:path";
 import YAML from "yaml";
-import { atomicWrite, consentSettingsJson, readSettingsFile, recordAutostart } from "./persist";
+import { atomicWrite, consentSettingsJson, readSettingsFile, recordAlwaysOnTop, recordAutostart } from "./persist";
 import { hostHttpGetJson } from "./host-http";
 import { SafeStorageLike, deleteSecret, getSecret, setSecret } from "./keyring";
 import { deriveStoragePaths, type StoragePaths } from "./paths";
@@ -157,6 +157,10 @@ function createWindow(): void {
       sandbox: false,
     },
   });
+  // 置顶开关读回(P1, D-019 配置侧): 窗口创建后、内容加载前应用, 默认关(不擅改窗口行为)
+  if (readSettingsFile(settingsFilePath()).alwaysOnTop === true) {
+    mainWindow.setAlwaysOnTop(true);
+  }
   // 关闭按钮 = 隐藏到托盘(D-003), 真实退出走托盘菜单"退出"
   mainWindow.on("close", (event) => {
     if (!allowQuit) {
@@ -254,6 +258,23 @@ function registerIpc(): void {
   });
   ipcMain.handle("win_close", () => {
     mainWindow?.hide(); // 关闭 = 隐藏到托盘(D-003)
+  });
+
+  // 窗口置顶开关(P1): 用户可切换, 默认关; 切换即 RMW 落 settings.json(重启不丢)。
+  // ⚠️ setAlwaysOnTop 的 level 参数仅 macOS 完整支持(Windows 基本无效), 不做平台分支, 用默认。
+  ipcMain.handle("win_get_always_on_top", () =>
+    mainWindow
+      ? mainWindow.isAlwaysOnTop()
+      : readSettingsFile(settingsFilePath()).alwaysOnTop === true,
+  );
+  ipcMain.handle("win_set_always_on_top", (_event, payload: { enabled?: boolean }) => {
+    const enabled = Boolean(payload?.enabled);
+    mainWindow?.setAlwaysOnTop(enabled);
+    try {
+      recordAlwaysOnTop(settingsFilePath(), enabled);
+    } catch {
+      /* 写盘失败不阻断窗口行为(下次启动按旧值恢复; 与托盘自启开关同策略) */
+    }
   });
 
   // ---- E2: sqlite 三通道接真(D-020; node:sqlite 同步 API, D-034) ----

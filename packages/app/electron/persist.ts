@@ -25,12 +25,14 @@ export interface SettingsFile {
   consentAt: number | null;
   /** 开机自启开关(D-024, 默认关); 记录用户期望, 查询时以 OS 实际为准校正 */
   autostart?: boolean;
+  /** 窗口置顶开关(P1, 默认关); 用户可切换, createWindow 时读回应用 */
+  alwaysOnTop?: boolean;
   /** 前瞻字段(theme/轮询等)透传位 */
   [extra: string]: unknown;
 }
 
 export function defaultSettings(): SettingsFile {
-  return { version: 1, consentAgreed: false, consentAt: null, autostart: false };
+  return { version: 1, consentAgreed: false, consentAt: null, autostart: false, alwaysOnTop: false };
 }
 
 /**
@@ -132,4 +134,36 @@ export function recordAutostart(filePath: string, enabled: boolean): void {
     existing = null; // 不存在/读失败 → 首开态
   }
   atomicWrite(filePath, autostartSettingsJson(existing, enabled));
+}
+
+/**
+ * alwaysOnTop 落盘的 read-modify-write 核心(P1, 与 autostart 同款模式):
+ * 只改 alwaysOnTop 字段, 既有/前瞻字段(consent/autostart/theme 等)JSON 合并透传;
+ * 损坏时保守回退仅含 alwaysOnTop 的合法对象重写(不抛)。
+ */
+export function alwaysOnTopSettingsJson(existing: string | null, enabled: boolean): string {
+  let base: Record<string, unknown> = {};
+  if (existing) {
+    try {
+      const parsed: unknown = JSON.parse(existing);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        base = parsed as Record<string, unknown>;
+      }
+    } catch {
+      base = {}; // 损坏 → 仅保留本次字段
+    }
+  }
+  const merged = { ...base, version: 1, alwaysOnTop: enabled };
+  return JSON.stringify(merged, null, 2);
+}
+
+/** win_set_always_on_top 全链路: RMW + 原子写 */
+export function recordAlwaysOnTop(filePath: string, enabled: boolean): void {
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(filePath, "utf8");
+  } catch {
+    existing = null; // 不存在/读失败 → 首开态
+  }
+  atomicWrite(filePath, alwaysOnTopSettingsJson(existing, enabled));
 }

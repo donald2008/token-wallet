@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { atomicWrite, consentSettingsJson, readSettingsFile, recordConsent } from "./persist";
+import { atomicWrite, consentSettingsJson, readSettingsFile, recordAlwaysOnTop, recordConsent } from "./persist";
 
 let dir: string;
 
@@ -105,5 +105,45 @@ describe("readSettingsFile / recordConsent 全链路", () => {
     expect(settings.consentAgreed).toBe(true);
     expect(settings.theme).toBe("dark");
     expect(settings.pollInterval).toBe("5m");
+  });
+});
+
+describe("alwaysOnTop(P1 置顶开关, autostart 同款 RMW)", () => {
+  it("默认值 false: 文件不存在 / 旧文件无该字段 → false", () => {
+    const file = path.join(dir, "settings.json");
+    // 文件不存在(首开)
+    expect(readSettingsFile(file).alwaysOnTop).toBe(false);
+    // 旧版文件无 alwaysOnTop 字段 → defaultSettings 合并为 false
+    fs.writeFileSync(file, JSON.stringify({ version: 1, consentAgreed: true }), "utf8");
+    expect(readSettingsFile(file).alwaysOnTop).toBe(false);
+  });
+
+  it("写入 → 读回 → 应用: 往返 true/false, RMW 保留未知字段", () => {
+    const file = path.join(dir, "settings.json");
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ version: 1, consentAgreed: true, theme: "dark", pollInterval: "5m" }),
+      "utf8",
+    );
+    recordAlwaysOnTop(file, true);
+    let settings = readSettingsFile(file);
+    expect(settings.alwaysOnTop).toBe(true);
+    // RMW: 既有/未知字段不丢
+    expect(settings.consentAgreed).toBe(true);
+    expect(settings.theme).toBe("dark");
+    expect(settings.pollInterval).toBe("5m");
+    // 再关一次: 往返幂等, 字段仍保留
+    recordAlwaysOnTop(file, false);
+    settings = readSettingsFile(file);
+    expect(settings.alwaysOnTop).toBe(false);
+    expect(settings.theme).toBe("dark");
+  });
+
+  it("settings 损坏 → 保守回退重写, 不崩应用", () => {
+    const file = path.join(dir, "settings.json");
+    fs.writeFileSync(file, "{ not json", "utf8");
+    recordAlwaysOnTop(file, true);
+    const settings = readSettingsFile(file);
+    expect(settings.alwaysOnTop).toBe(true);
   });
 });
