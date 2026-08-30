@@ -121,9 +121,11 @@ export class MemoryInstanceStore {
       }
     }
     // DB 侧对称清理: snapshots + usage_records 全清(失败不阻断内存态, 由引擎
-    // hydrate 过滤兜底防复活; 与写盘失败同策略——不静默, 但不回滚)
-    void getSharedStorage().purgeProvider(id).catch(() => {
-      /* 清理失败不阻断删除; hydrate 过滤仍保证面板不复活 */
+    // hydrate 过滤兜底防复活; 失败记录 console.warn, 不静默——与写盘失败同策略)
+    void getSharedStorage().purgeProvider(id).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.warn(`[instances] purgeProvider 失败 ${id}(hydrate 过滤兜底):`, msg);
     });
     this.emit();
     this.persist();
