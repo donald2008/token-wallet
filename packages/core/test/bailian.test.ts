@@ -15,7 +15,7 @@ import {
   BL_USAGE_ARGS,
   BL_USAGE_CMD,
 } from "../src/channels/aliyun-bailian.js";
-import { buildSpawnPlan, SpawnError, type CommandRunResult } from "../src/adapters.js";
+import { buildSpawnPlan, isShellCommandNotFound, SpawnError, type CommandRunResult } from "../src/adapters.js";
 import { ALIYUN_BAILIAN_TOKEN_PLAN } from "../src/channels/presets.js";
 import type { AdapterContext, InstanceConfig } from "../src/generic-http.js";
 
@@ -41,9 +41,10 @@ function makeCtx(): AdapterContext {
   };
 }
 
-/** 注入 runner: 返回预设 {stdout, code} */
-function runnerReturning(res: CommandRunResult) {
-  return () => Promise.resolve(res);
+/** 注入 runner: 返回预设 {stdout, code} (stderr 缺省空串) */
+function runnerReturning(res: Omit<CommandRunResult, "stderr"> & { stderr?: string }) {
+  const full: CommandRunResult = { stderr: "", ...res };
+  return () => Promise.resolve(full);
 }
 
 /** 注入 runner: reject SpawnError(ENOENT=bl 不在 PATH) */
@@ -114,6 +115,52 @@ describe("aliyun-bailian/token-plan golden sample(D-041 三态)", () => {
     expect(snap.setup_hint).toContain("重启");
   });
 
+  it("win32 cmd /c 包装: bl 缺失(exit=9009 + stderr 中文) → error + 安装 hint", async () => {
+    // D-041 round2(#862): win32 下 spawn ENOENT 不可达, cmd 非零退出 + stderr 判别
+    const adapter = new BailianTokenPlanAdapter(
+      runnerReturning({
+        stdout: "",
+        code: 9009,
+        stderr: "'bl' 不是内部或外部命令，也不是可运行的程序或批处理文件。",
+      }),
+    );
+    const snap = await adapter.fetchSnapshot(ALIYUN_BAILIAN_TOKEN_PLAN, INSTANCE, makeCtx());
+
+    expect(snap.status).toBe("error");
+    expect(snap.setup_hint).toContain("安装");
+    expect(snap.setup_hint).toContain("重启");
+    // 脱敏纪律: stderr 全文不进 error_message
+    expect(snap.error_message).not.toContain("不是内部或外部命令");
+  });
+
+  it("win32 cmd /c 包装: bl 缺失(stderr 英文 'not recognized') → error + 安装 hint", async () => {
+    const adapter = new BailianTokenPlanAdapter(
+      runnerReturning({
+        stdout: "",
+        code: 9009,
+        stderr: "'bl' is not recognized as an internal or external command",
+      }),
+    );
+    const snap = await adapter.fetchSnapshot(ALIYUN_BAILIAN_TOKEN_PLAN, INSTANCE, makeCtx());
+
+    expect(snap.status).toBe("error");
+    expect(snap.setup_hint).toContain("安装");
+  });
+
+  it("win32 shell 缺失分类不依赖具体 exit code(非 9009 也判)", async () => {
+    // 契约: exit code 不可信; 分类以 stderr 判别串为准, 任意非零 code 均可命中
+    const adapter = new BailianTokenPlanAdapter(
+      runnerReturning({
+        stdout: "",
+        code: 1,
+        stderr: "'bl' is not recognized as an internal or external command",
+      }),
+    );
+    const snap = await adapter.fetchSnapshot(ALIYUN_BAILIAN_TOKEN_PLAN, INSTANCE, makeCtx());
+    expect(snap.status).toBe("error");
+    expect(snap.setup_hint).toContain("安装");
+  });
+
   it("usage 命令参数与 health_check 命令参数符合契约", () => {
     expect(ALIYUN_BAILIAN_TOKEN_PLAN.params_schema).toEqual([]); // 零录入(D-041)
     expect(ALIYUN_BAILIAN_TOKEN_PLAN.health_check?.command).toBe("bl auth status --output json");
@@ -144,6 +191,21 @@ describe("healthCheck: bl auth status 判从未配置(exit code 不可信, 解�
     expect(res.ok).toBe(false);
     expect(res.setupHint).toContain("安装");
   });
+
+  it("win32 cmd /c 包装: bl 缺失(exit=9009 + stderr) → ok=false + 安装提示", async () => {
+    // D-041 round2(#862): win32 下 healthCheck 同样吃不到 spawn ENOENT,
+    // 必须由 shell 包装分类兜住, 否则误报 ok=true
+    const adapter = new BailianTokenPlanAdapter(
+      runnerReturning({
+        stdout: "",
+        code: 9009,
+        stderr: "'bl' 不是内部或外部命令，也不是可运行的程序或批处理文件。",
+      }),
+    );
+    const res = await adapter.healthCheck(ALIYUN_BAILIAN_TOKEN_PLAN, INSTANCE, makeCtx());
+    expect(res.ok).toBe(false);
+    expect(res.setupHint).toContain("安装");
+  });
 });
 
 describe("Windows spawn 适配(D-041: .cmd shim / CVE-2024-27980 / 黑框)", () => {
@@ -159,5 +221,46 @@ describe("Windows spawn 适配(D-041: .cmd shim / CVE-2024-27980 / 黑框)", () 
     expect(plan.command).toBe("bl");
     expect(plan.args).toEqual(BL_USAGE_ARGS);
     expect(plan.windowsHide).toBe(false);
+  });
+});
+
+describe("isShellCommandNotFound(D-041 round2: win32 包壳下 CLI 缺失分类)", () => {
+  it("exit≠0 + stdout 空 + stderr 含判别串 → true(中/英)", () => {
+    expect(
+      isShellCommandNotFound({
+        stdout: "",
+        code: 9009,
+        stderr: "'bl' 不是内部或外部命令，也不是可运行的程序或批处理文件。",
+      }),
+    ).toBe(true);
+    expect(
+      isShellCommandNotFound({
+        stdout: "",
+        code: 9009,
+        stderr: "'bl' is not recognized as an internal or external command",
+      }),
+    ).toBe(true);
+  });
+
+  it("stdout 非空(命令真跑了但失败) → false, 不误判", () => {
+    expect(
+      isShellCommandNotFound({
+        stdout: "{\"per1WeekPercentage\": 0.5}",
+        code: 3,
+        stderr: "not recognized",
+      }),
+    ).toBe(false);
+  });
+
+  it("code=0(成功) → false, 无论 stderr 内容", () => {
+    expect(
+      isShellCommandNotFound({ stdout: "", code: 0, stderr: "not recognized" }),
+    ).toBe(false);
+  });
+
+  it("stderr 无判别串(其他非零失败) → false", () => {
+    expect(
+      isShellCommandNotFound({ stdout: "", code: 1, stderr: "some other error" }),
+    ).toBe(false);
   });
 });

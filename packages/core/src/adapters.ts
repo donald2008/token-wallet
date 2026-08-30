@@ -45,11 +45,36 @@ export interface ProviderAdapter {
   ): Promise<{ ok: boolean; setupHint?: string }>;
 }
 
-/** 子进程 spawn 结果: stdout 原文 + exit code(判定依赖 exit code 的通道用) */
+/** 子进程 spawn 结果: stdout/stderr 原文 + exit code(判定依赖 exit code 的通道用) */
 export interface CommandRunResult {
   stdout: string;
   /** exit code; null 表示被信号终止 */
   code: number | null;
+  /** stderr 原文。脱敏纪律: 仅供"命令未找到"等分类判定, 全文不进 error_message */
+  stderr: string;
+}
+
+/**
+ * shell 包装下"命令未找到"(CLI 缺失)判定 — D-041 round2(t_198b1330 #862):
+ *
+ * win32 下 buildSpawnPlan 一律包 `cmd /c <command>`, cmd.exe 恒存在 →
+ * spawn 层**永不**触发 ENOENT error 事件; 目标 CLI 缺失时 cmd 以非零码
+ * 退出(Windows 实测 9009; POSIX sh 类比 127)、stdout 空、stderr 提示
+ * "not recognized" / "不是内部或外部命令"。
+ *
+ * 与 spawn 层 ENOENT 同判 CLI 缺失 → 调用方转安装 setup_hint。
+ * 注意: 分类**不依赖具体 exit code**(9009/127 因 shell 与 locale 而异,
+ * 且契约说 exit code 不可信), 以 stderr 判别串为准。
+ */
+const SHELL_NOT_FOUND_STDERR_PATTERNS = [
+  "not recognized",
+  "不是内部或外部命令",
+] as const;
+
+export function isShellCommandNotFound(res: CommandRunResult): boolean {
+  if (res.code === 0 || res.code === null) return false;
+  if (res.stdout.trim() !== "") return false;
+  return SHELL_NOT_FOUND_STDERR_PATTERNS.some((p) => res.stderr.includes(p));
 }
 
 /**
@@ -148,6 +173,7 @@ export abstract class ScriptedAdapter implements ProviderAdapter {
         resolvePromise({
           stdout: Buffer.concat(chunks).toString("utf8"),
           code,
+          stderr: Buffer.concat(errChunks).toString("utf8"),
         });
       });
     });

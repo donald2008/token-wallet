@@ -20,7 +20,12 @@
  *   - console access_token 过期是服务端黑盒, 不做本地过期预测, 采集失败即健康信号
  */
 import type { ChannelDescriptor } from "./descriptor.js";
-import { ScriptedAdapter, SpawnError, type CommandRunResult } from "../adapters.js";
+import {
+  ScriptedAdapter,
+  SpawnError,
+  isShellCommandNotFound,
+  type CommandRunResult,
+} from "../adapters.js";
 import type { ProviderSnapshot } from "../schema.js";
 import type { FetchContext } from "../scheduler.js";
 import type { AdapterContext, InstanceConfig } from "../generic-http.js";
@@ -114,6 +119,16 @@ export class BailianTokenPlanAdapter extends ScriptedAdapter {
       };
     }
     if (res.code !== 0) {
+      // win32 下 cmd /c 包装使 spawn ENOENT 不可达: bl 缺失时 cmd 非零退出
+      // + stdout 空 + stderr "not recognized/不是内部或外部命令" → 与 ENOENT 同判
+      if (isShellCommandNotFound(res)) {
+        return {
+          ...base,
+          status: "error",
+          error_message: "bl CLI 不在 PATH, 请安装后重启应用",
+          setup_hint: INSTALL_HINT,
+        };
+      }
       return {
         ...base,
         status: "error",
@@ -187,6 +202,10 @@ export class BailianTokenPlanAdapter extends ScriptedAdapter {
     }
     if (isAuthExpiredBody(res.stdout)) {
       return { ok: false, setupHint: SETUP_HINT };
+    }
+    // win32 cmd /c 包装: bl 缺失 → 非零退出 + stderr 未找到 → 安装提示
+    if (isShellCommandNotFound(res)) {
+      return { ok: false, setupHint: INSTALL_HINT };
     }
     return { ok: true };
   }
