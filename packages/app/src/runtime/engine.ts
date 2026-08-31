@@ -91,6 +91,7 @@ export function unsupportedSnapshot(inst: InstanceConfig): ProviderSnapshot {
     status: "unsupported",
     metrics: [],
     alerts: [{ level: "info", message: `通道 ${inst.channel} 暂未接入, 等待适配器(P2 多通道)` }],
+    logo: ch?.logo,
   };
 }
 

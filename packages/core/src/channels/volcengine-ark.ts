@@ -123,6 +123,7 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
       fetched_at: ctx.fetchedAt,
       metrics: [],
       alerts: [],
+      logo: descriptor.logo,
     };
 
     let res: CommandRunResult;

@@ -307,6 +307,112 @@ body {
   height: 16px;
   border-radius: 4px;
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* 品牌卡片网格(方案 A, P1 t_696ec820) —— 360px 2 列 / 800px 3 列 auto-fit */
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.brand-grid-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  overflow: hidden;
+}
+.brand-grid-card.collapsed {
+  /* 收起态 = 紧凑卡片, 参与网格列 */
+  grid-column: auto;
+}
+/* 展开态 = 该格跨满整行, chips 平铺(grid-column: 1 / -1), 再点收起 */
+.brand-grid-card:not(.collapsed) {
+  grid-column: 1 / -1;
+}
+.brand-grid-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font-size: var(--font-size);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.brand-grid-head:hover {
+  background: var(--bg-hover);
+}
+.brand-grid-logo {
+  flex: 0 0 auto;
+  color: var(--fg);
+}
+.brand-grid-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brand-grid-count {
+  flex: 0 0 auto;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  color: var(--fg-dim);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+.brand-grid-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+.brand-grid-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-hover);
+  color: var(--fg);
+  font-size: var(--font-size);
+  cursor: pointer;
+}
+.brand-grid-chip:hover {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+.chip-name {
+  font-weight: 500;
+}
+.chip-type {
+  font-size: 11px;
+  padding: 0 5px;
+  border-radius: 4px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.chip-balance {
+  background: var(--accent);
+  color: #fff;
+}
+.chip-window {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
 }
 
 .card-name {
@@ -766,6 +872,24 @@ body {
 }
 .settings-section .btn {
   margin-top: 8px;
+}
+
+/* P1(t_696ec820): 设置页关于区 — token-wallet 自身品牌 */
+.settings-about .about-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.about-logo {
+  color: var(--fg);
+  flex: 0 0 auto;
+}
+.about-name {
+  font-weight: 600;
+}
+.about-tag {
+  color: var(--fg-dim);
+  font-size: 12px;
 }
 
 /* 树形通道选择器(D-025) */

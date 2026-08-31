@@ -86,6 +86,8 @@ export const ProviderSnapshotSchema = z.object({
   status: SnapshotStatusSchema,
   metrics: z.array(MetricSchema),
   alerts: z.array(AlertSchema),
+  /** 品牌 logo 注册表 key(descriptor.logo, P1 t_696ec820): ProviderCard 品牌块据此渲染内置单色 SVG */
+  logo: z.string().optional(),
   setup_hint: z.string().optional(),
   error_message: z.string().optional(),
 });

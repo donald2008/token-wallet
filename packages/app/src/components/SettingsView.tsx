@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ThemeMode } from "../theme";
 import type { SortConfig, SortDir, SortKey } from "../health";
 import { getStoragePaths, getLaunchAtLogin, setLaunchAtLogin, type StoragePaths } from "../ipc";
+import { BrandLogo } from "./brand-logos";
 
 const THEME_OPTIONS: { id: ThemeMode; label: string }[] = [
   { id: "system", label: "跟随系统" },
@@ -175,6 +176,16 @@ export function SettingsView({
             <p className="hint">配置与数据分家(D-019), 运行时解析的真实路径。</p>
           </section>
         )}
+
+        {/* P1(t_696ec820): 关于区 — token-wallet 自身品牌 logo(内置 SVG 消费点) */}
+        <section className="settings-section settings-about" data-testid="about-section">
+          <div className="about-row">
+            <BrandLogo platform="token-wallet" size={20} className="about-logo" />
+            <span className="about-name">token-wallet</span>
+            <span className="about-tag">AI 套餐/额度桌面仪表盘</span>
+          </div>
+          <p className="hint">内置单色品牌图标, 离线可渲染(currentColor 随主题自适应)。</p>
+        </section>
       </div>
     </div>
   );

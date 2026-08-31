@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ProviderSnapshot } from "../types";
 import { providerHealth, statusBadge } from "../health";
 import { getTemplateFor } from "../templates/registry";
+import { BrandLogo } from "./brand-logos";
 import type { DragHandleProps } from "../useCardDragSort";
 
 /**
@@ -63,14 +64,7 @@ function HintCopyButton({ hint }: { hint: string }) {
   );
 }
 
-/** 品牌色块(§6.1 第 4 条): 16px 平台识别色, 正式版替换为内置单色 SVG 品牌图标 */
-const BRAND_COLORS: Record<string, string> = {
-  deepseek: "#4d6bfe",
-  "kimi-code": "#7c3aed",
-  aliyun: "#ff6a00",
-  ark: "#1668dc",
-  "opencode-go": "#0ea5e9",
-};
+/** 品牌色块(§6.1 第 4 条): 16px 平台识别色 — P1(t_696ec820)起由内置单色 SVG 品牌图标(BrandLogo)取代 */
 
 const STATUS_TEXT: Record<string, string> = {
   stale: "数据过期(超 2 个轮询周期未更新)",
@@ -162,11 +156,13 @@ export function ProviderCard({
       <div className="card-head">
         <span
           className={`brand-block${dragHandle ? " drag-handle" : ""}`}
-          style={{ background: BRAND_COLORS[p.provider_id] ?? "var(--unknown)" }}
           title={dragHandle ? `拖动排序 ${p.display_name}` : p.provider_id}
           data-testid={dragHandle ? `drag-handle-${p.provider_id}` : undefined}
           {...dragHandle}
-        />
+        >
+          {/* P1(t_696ec820): 内置单色 SVG 品牌图标; descriptor.logo 生效(未收录回退品牌色块) */}
+          <BrandLogo platform={p.logo ?? p.provider_id} size={16} />
+        </span>
         <span className="card-name" title={p.provider_id}>
           {p.display_name}
         </span>

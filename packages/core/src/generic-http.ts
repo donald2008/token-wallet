@@ -139,6 +139,7 @@ export class GenericHttpAdapter {
       plan_type: descriptor.plan_type,
       fetched_at: ctx.fetchedAt,
       alerts: [] as ProviderSnapshot["alerts"],
+      logo: descriptor.logo,
     };
 
     // 凭据只活在请求构造瞬间(D-029): 替换完 header 即弃
