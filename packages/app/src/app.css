@@ -211,7 +211,10 @@ body {
   position: relative; /* D-039: drop-line 指示线定位容器 */
   flex: 1;
   overflow-y: auto;
-  padding: 10px 12px;
+  /* P1 t_9639078b round2: 顶部预留 34px 带 —— 让过滤 icon 钮组(position:absolute top:4px, 高 24px
+   * 距顶 4px → 占 y4-28)浮在预留带内, 与第一张卡片(padding-top 起 y>=34)零重叠(修 round1 BLOCKING:
+   * 钮组骑跨首卡头行/状态字)。滚动手不动, 吸顶遮挡已由「随内容滚动不吸顶」解决。 */
+  padding: 34px 12px 10px;
   display: flex;
   flex-direction: column;
   gap: var(--gap);

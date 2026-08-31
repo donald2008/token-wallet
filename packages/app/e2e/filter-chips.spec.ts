@@ -120,3 +120,40 @@ test("默认态三枚钮半透明、选中态描边高亮(computed-style 客观�
   await pwExpect(page.getByTestId("filter-all")).toHaveCSS("opacity", "0.4");
   await pwExpect(page.getByTestId("filter-all")).toHaveCSS("border-color", "rgba(0, 0, 0, 0)");
 });
+
+/** 两矩形交集面积 px²(负数/无交集返回 0)。 */
+function intersectArea(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): number {
+  const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+test("钮组与首卡零重叠(360px 最窄档几何断言, round2 BLOCKING 回归)", async ({ hostPage, page }) => {
+  void hostPage;
+  // 验收第 1 条「钮组不与任何滚动内容重叠(360px 最窄档实拍)」: 真实产品视口下
+  // 钮组必须与首卡头行/状态字交集面积==0 —— round1 BLOCKING(q: 钮组骑跨首卡顶框盖状态字)。
+  await page.setViewportSize({ width: 360, height: 800 });
+  await agree(page);
+  await page.getByTestId("scenario-mixed").click();
+  await pwExpect(page.getByTestId("provider-card")).toHaveCount(4);
+
+  const icons = await page.getByTestId("filter-icons").boundingBox();
+  pwExpect(icons).not.toBeNull();
+  pwExpect(icons!.width).toBeGreaterThan(0);
+  pwExpect(icons!.height).toBeGreaterThan(0);
+
+  const firstCard = page.locator('[data-testid="provider-card"]').first();
+  const head = await firstCard.locator(".card-head").boundingBox();
+  const status = await firstCard.locator(".card-head .card-status-text").boundingBox();
+  pwExpect(head).not.toBeNull();
+  pwExpect(status).not.toBeNull();
+
+  // 交集面积 0 = 钮组与首卡内容零重叠(验收硬指标)
+  pwExpect(intersectArea(icons!, head!)).toBe(0);
+  pwExpect(intersectArea(icons!, status!)).toBe(0);
+  // 兜底: 纵向上也要求首卡头行起点在钮组底边之下(预留带清空)
+  pwExpect(head!.y).toBeGreaterThanOrEqual(icons!.y + icons!.height);
+});
