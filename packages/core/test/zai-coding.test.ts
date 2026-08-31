@@ -88,7 +88,7 @@ describe("zai/coding golden sample(§5.2 双窗绝对值制)", () => {
   });
 });
 
-describe("zai/coding body_code 判态(HTTP 恒 200, 状态在 body.code, D-0xx)", () => {
+describe("zai/coding body_code 判态(HTTP 恒 200, 状态在 body.code, D-045)", () => {
   it("body.code=401(坏 key) → auth_expired + setup_hint(复制钮语义), metrics 空", async () => {
     const snap = await mkAdapter(AUTH_EXPIRED).fetchSnapshot(ZAI_CODING, INSTANCE, makeCtx());
 

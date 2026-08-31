@@ -1,5 +1,5 @@
 /**
- * zai/coding 真实通道 — 智谱 GLM Coding Plan(D-0xx, 2026-08-30 L3 实测)
+ * zai/coding 真实通道 — 智谱 GLM Coding Plan(D-045, 2026-08-30 L3 实测)
  *
  * T `GET https://open.bigmodel.cn/api/monitor/usage/quota/limit` 已实测,
  * Bearer 套餐 key(与 coding 推理 key 同一个, Consul ai-hermes/security/providers/zai-key):
