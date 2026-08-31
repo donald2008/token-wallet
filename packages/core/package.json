@@ -32,6 +32,10 @@
       "types": "./dist/channels/aliyun-bailian.d.ts",
       "import": "./dist/channels/aliyun-bailian.js"
     },
+    "./channels/volcengine-ark": {
+      "types": "./dist/channels/volcengine-ark.d.ts",
+      "import": "./dist/channels/volcengine-ark.js"
+    },
     "./mapping/jsonpath": {
       "types": "./dist/mapping/jsonpath.d.ts",
       "import": "./dist/mapping/jsonpath.js"

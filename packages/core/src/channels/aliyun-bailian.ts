@@ -30,6 +30,7 @@ import type { ProviderSnapshot } from "../schema.js";
 import type { FetchContext } from "../scheduler.js";
 import type { AdapterContext, InstanceConfig } from "../generic-http.js";
 import { ALIYUN_BAILIAN_TOKEN_PLAN } from "./presets.js";
+import { volcengineArkCodingPlanAdapter } from "./volcengine-ark.js";
 
 /** bl usage 命令(固定: 采集固定 token-plan 单产品) */
 export const BL_USAGE_CMD = "bl";
@@ -226,6 +227,7 @@ export function bailianTokenPlanAdapter(): BailianTokenPlanAdapter {
  */
 export const COMMAND_ADAPTERS: Readonly<Record<string, () => ScriptedAdapter>> = {
   "aliyun-bailian/token-plan": bailianTokenPlanAdapter,
+  "volcengine-ark/coding-plan": volcengineArkCodingPlanAdapter,
 };
 
 export { ALIYUN_BAILIAN_TOKEN_PLAN };

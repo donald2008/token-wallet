@@ -96,11 +96,36 @@ export const ALIYUN_BAILIAN_TOKEN_PLAN: ChannelDescriptor = {
   },
 };
 
+/**
+ * 火山方舟 Coding Plan(个人版): command 类第二实例(D-041 之后的 D-043, 2026-08-31)
+ * arkcli 官方 CLI(@volcengine/ark-cli)包装, SSO 会话由 CLI 自管(volc-sso),
+ * app 零凭据 → params_schema=[]。health_check 只判"从未配置"(auth status logged_in),
+ * 会话死活由采集失败信号判定(D-041 源码结论同款)。
+ */
+export const VOLCENGINE_ARK_CODING_PLAN: ChannelDescriptor = {
+  platform: "volcengine-ark",
+  product: "coding-plan",
+  channel: "volcengine-ark/coding-plan",
+  display_name: "火山方舟 / Coding Plan",
+  product_display_name: "Coding Plan",
+  platform_display_name: "火山方舟",
+  plan_type: "window",
+  adapter: "command",
+  logo: "volcengine-ark",
+  // 零录入(D-041 决策): SSO 会话由 CLI 自管, app 不碰凭据文件
+  params_schema: [],
+  health_check: {
+    command: "arkcli auth status --format json",
+    setup_hint: "运行 `arkcli auth login volc-sso --no-browser` 重新授权(SSO 会话由 CLI 管理)",
+  },
+};
+
 export const PRESET_CHANNELS: readonly ChannelDescriptor[] = [
   DEEPSEEK_BALANCE,
   OPENCODE_GO,
   KIMI_CODING,
   ALIYUN_BAILIAN_TOKEN_PLAN,
+  VOLCENGINE_ARK_CODING_PLAN,
 ];
 
 /** 按全路径 "platform/product" 查预置通道(通道树/引擎/测试连接共用) */

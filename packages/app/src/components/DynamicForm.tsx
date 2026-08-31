@@ -20,6 +20,13 @@ interface Props {
   onBack?: () => void;
 }
 
+/** 从 health_check.command 取 CLI 可执行名(如 "arkcli auth status …" → "arkcli") */
+function cliCommandName(channel: ChannelDescriptor): string {
+  const cmd = channel.health_check?.command?.trim();
+  if (!cmd) return "官方 CLI";
+  return cmd.split(/\s+/)[0] ?? "官方 CLI";
+}
+
 /** 迷你余额/窗口快照展示(测试连接成功)(D-017) */
 function SnapshotPreview({ snapshot }: { snapshot: ProviderSnapshot }) {
   return (
@@ -153,6 +160,17 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
     >
       <h3 className="form-channel-title">{channel.display_name}</h3>
       <p className="hint">{channel.plan_type === "balance" ? "余额制" : "窗口制"} · {channel.adapter === "command" ? "command(官方 CLI)" : "http"}</p>
+
+      {channel.adapter === "command" && channel.health_check?.setup_hint && (
+        <div className="command-help" data-testid="command-help">
+          <span className="command-help-title">两段式授权</span>
+          <span className="command-help-text">
+            ① 先安装官方 CLI(<code>{cliCommandName(channel)}</code>, 见通道说明)
+            <br />
+            ② 再完成一次登录:{channel.health_check.setup_hint}
+          </span>
+        </div>
+      )}
 
       <label className="field">
         <span className="field-label">实例名称</span>

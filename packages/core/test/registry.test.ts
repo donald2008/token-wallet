@@ -95,8 +95,8 @@ describe("ChannelRegistry", () => {
     expect(reg.size).toBe(3);
   });
 
-  it("预置通道含 deepseek/balance + opencode/go + kimi/coding + aliyun-bailian/token-plan", () => {
-    expect(PRESET_CHANNELS).toHaveLength(4);
+  it("预置通道含 deepseek/balance + opencode/go + kimi/coding + aliyun-bailian/token-plan + volcengine-ark/coding-plan", () => {
+    expect(PRESET_CHANNELS).toHaveLength(5);
     const d = DEEPSEEK_BALANCE;
     expect(d.channel).toBe("deepseek/balance");
     expect(d.plan_type).toBe("balance");
@@ -119,6 +119,20 @@ describe("ChannelRegistry", () => {
     expect(bailian.params_schema).toEqual([]);
     expect(bailian.health_check?.command).toContain("bl auth status");
     expect(ChannelDescriptorSchema.safeParse(bailian).success).toBe(true);
+  });
+
+  it("预置通道: volcengine-ark/coding-plan 是 command 类第二实例, 零录入(D-043)", () => {
+    const ark = PRESET_CHANNELS.find((c) => c.channel === "volcengine-ark/coding-plan")!;
+    expect(ark).toBeDefined();
+    expect(ark.adapter).toBe("command");
+    expect(ark.plan_type).toBe("window");
+    expect(ark.platform_display_name).toBe("火山方舟");
+    expect(ark.product_display_name).toBe("Coding Plan");
+    // D-041/D-043 决策: SSO 会话由 CLI 自管, app 零凭据 → params_schema=[]
+    expect(ark.params_schema).toEqual([]);
+    expect(ark.health_check?.command).toContain("arkcli auth status");
+    expect(ark.health_check?.setup_hint).toContain("arkcli auth login volc-sso");
+    expect(ChannelDescriptorSchema.safeParse(ark).success).toBe(true);
   });
 
   it("预置通道: opencode/go 与 kimi/coding 是 window 制, 描述符自身通过 schema", () => {

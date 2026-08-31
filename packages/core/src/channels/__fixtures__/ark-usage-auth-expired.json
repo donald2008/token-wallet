@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "type": "error",
+    "message": "not configured, run `arkcli config init --profile default` or `arkcli auth login`"
+  }
+}

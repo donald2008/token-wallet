@@ -1,0 +1,5 @@
+{
+  "auth_method": "none",
+  "hint": "run `arkcli auth login` or `arkcli auth login volc-sso`",
+  "logged_in": false
+}
