@@ -15,12 +15,14 @@ import {
   EmptyState,
   LoadingState,
   CollectingState,
+  NoMatchState,
   PersistErrorBar,
 } from "./components/States";
 import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { AddProviderWizard } from "./components/AddProviderWizard";
 import { LocalAgentSection } from "./components/LocalAgentSection";
+import { FilterChips, DEFAULT_FILTER, matchesFilter, type FilterSel } from "./components/FilterChips";
 import {
   getSharedKeyring,
   getSharedStore,
@@ -84,6 +86,8 @@ export default function App() {
   const [pinned, setPinned] = useState(false);
   // P1(#829 R1): 卡间排序配置(key×dir, 缺省名称正排); 启动读回, 切换即持久化
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", dir: "asc" });
+  // P1(t_6484ecc6): 主页过滤 chips 选中态(单选, 默认「全部」= 现状零变化; 重启回「全部」)
+  const [filter, setFilter] = useState<FilterSel>(DEFAULT_FILTER);
   // 页内导航仅留给首开向导(D-021 一次性引导): view="add" = 添加向导页内形态
   const [view, setView] = useState<"panel" | "add">("panel");
   // D-038: 设置弹窗(纯偏好) 与 添加向导弹窗(侧栏 ＋) 是两个独立模态
@@ -176,8 +180,14 @@ export default function App() {
     void persistSortConfig(next);
   }, []);
 
+  // P1(t_6484ecc6): 一层 filter(chips 选中态 → 命中子集), 排序仍走 sortProviders 原排序器。
+  //   过滤在排序之前(先缩小视角再按配置排), 不改变排序器语义; 默认「全部」= 原 providers 全集。
+  const filteredProviders = useMemo(
+    () => (providers ?? []).filter((p) => matchesFilter(p, filter)),
+    [providers, filter],
+  );
   // D-039 拖动排序: 渲染顺序 = sortProviders 输出; drop 才切 manual + 持久化一次
-  const sortedCards = useMemo(() => sortProviders(providers ?? [], sortConfig), [providers, sortConfig]);
+  const sortedCards = useMemo(() => sortProviders(filteredProviders, sortConfig), [filteredProviders, sortConfig]);
   const { drag, indicatorY, makeHandleProps } = useCardDragSort({
     ids: sortedCards.map((p) => p.provider_id),
     onDrop: useCallback(
@@ -323,22 +333,31 @@ export default function App() {
           ) : providers.length === 0 ? (
             <EmptyState onAdd={openAddProvider} />
           ) : (
-            <main className="card-list" data-testid="card-list">
-              {/* D-039 落点指示线(拖动中显示): 绝对定位在插入边界 */}
-              {drag && indicatorY !== null && (
-                <div className="drop-line" data-testid="drop-line" style={{ top: indicatorY }} />
+            // P1(t_6484ecc6): 卡片列表顶部、主区第一行 = 过滤 chips(动态, 全实例视角)。
+            // 过滤后命中为空(如仅剩异常/单平台全删) → 居中「无匹配实例」, 不渲染卡片列表。
+            <>
+              <FilterChips providers={providers} value={filter} onChange={setFilter} />
+              {filteredProviders.length === 0 ? (
+                <NoMatchState />
+              ) : (
+                <main className="card-list" data-testid="card-list">
+                  {/* D-039 落点指示线(拖动中显示): 绝对定位在插入边界 */}
+                  {drag && indicatorY !== null && (
+                    <div className="drop-line" data-testid="drop-line" style={{ top: indicatorY }} />
+                  )}
+                  {sortedCards.map((p) => (
+                    <ProviderCard
+                      key={p.provider_id}
+                      p={p}
+                      onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
+                      dragHandle={makeHandleProps(p.provider_id)}
+                      dragging={drag?.id === p.provider_id}
+                      dragDy={drag ? drag.dy : 0}
+                    />
+                  ))}
+                </main>
               )}
-              {sortedCards.map((p) => (
-                <ProviderCard
-                  key={p.provider_id}
-                  p={p}
-                  onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
-                  dragHandle={makeHandleProps(p.provider_id)}
-                  dragging={drag?.id === p.provider_id}
-                  dragDy={drag ? drag.dy : 0}
-                />
-              ))}
-            </main>
+            </>
           )}
           <LocalAgentSection />
           {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}

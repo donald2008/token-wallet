@@ -217,6 +217,62 @@ body {
   gap: var(--gap);
 }
 
+/* ---- 主页过滤 chips(P1 t_6484ecc6) ---- */
+.filter-chips {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  height: 24px; /* 常驻低调, 不与卡片争注意力 */
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid transparent; /* 常态无框, 选中/聚焦才 accent */
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-chip:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.filter-chip:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.filter-chip.active {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.filter-chip .filter-chip-count {
+  font-size: 11px;
+  color: var(--fg-dim);
+  min-width: 14px;
+  text-align: center;
+}
+.filter-chip.active .filter-chip-count {
+  color: var(--accent);
+}
+.filter-chips-sep {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
 .card {
   position: relative; /* 卡内删除确认气泡(D-038)的定位容器 */
   background: var(--bg-elev);

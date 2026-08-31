@@ -52,6 +52,16 @@ export function CollectingState() {
   );
 }
 
+/** 过滤无匹配(P1 t_6484ecc6): chips 过滤后 providers 非空但命中为空 → 居中「无匹配实例」。 */
+export function NoMatchState() {
+  return (
+    <div className="placeholder" data-testid="no-match">
+      <h2>无匹配实例</h2>
+      <p>当前过滤条件下没有 Provider, 切换其他过滤视角查看。</p>
+    </div>
+  );
+}
+
 /** 配置损坏 fail-fast(§5.0.1/P0-7): instances.yaml 解析/校验失败时停在此页, 不静默丢配置 */
 export function ConfigErrorState({
   error,
