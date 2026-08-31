@@ -177,11 +177,33 @@ export class RuntimeEngine {
             resolveCredential,
             fetchedAt: Math.floor(Date.now() / 1000),
           };
-          return adapter.fetchSnapshot(descriptor, coreInstance, adapterCtx);
+          // t_5b52b633 兜底: 凭据解析/适配器意外抛错 → 显式 error 快照(不静默蒸发)
+          try {
+            return await adapter.fetchSnapshot(descriptor, coreInstance, adapterCtx);
+          } catch (err) {
+            return RuntimeEngine.errorSnapshot(inst, descriptor.plan_type, err);
+          }
         },
         onResult: (snap) => void this.onResult(inst.id, snap),
       });
     }
+  }
+
+  /** 装配层兜底(t_5b52b633): 适配器/凭据解析意外抛错 → 显式 error 快照。
+   *  抛异常会被调度器当作「无结果」静默蒸发 → 面板整卡缺失(本卡根因链最后一环);
+   *  P0-8 纪律「不允许静默跳过」的运行时保险丝。 */
+  private static errorSnapshot(inst: InstanceConfig, planType: ProviderSnapshot["plan_type"], err: unknown): ProviderSnapshot {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      provider_id: inst.id,
+      display_name: inst.name,
+      plan_type: planType,
+      fetched_at: Math.floor(Date.now() / 1000),
+      status: "error",
+      metrics: [],
+      alerts: [{ level: "critical", message, code: "adapter_threw" }],
+      error_message: message,
+    };
   }
 
   /**
@@ -195,18 +217,24 @@ export class RuntimeEngine {
       kind: "command",
       intervalMs: parsePollIntervalMs(inst.poll_interval),
       fetch: async (ctx) => {
-        const snap = await commandRun({
-          channel: inst.channel,
-          descriptor,
-          instance: {
-            id: inst.id,
+        // t_5b52b633 兜底: command 桥/适配器意外抛错 → 显式 error 快照(不静默蒸发)
+        let snap: Awaited<ReturnType<typeof commandRun>>;
+        try {
+          snap = await commandRun({
             channel: inst.channel,
-            name: inst.name,
-            params: inst.params as Record<string, unknown>,
-          },
-          fetchedAt: Math.floor(Date.now() / 1000),
-          timeoutMs: ctx.timeoutMs,
-        });
+            descriptor,
+            instance: {
+              id: inst.id,
+              channel: inst.channel,
+              name: inst.name,
+              params: inst.params as Record<string, unknown>,
+            },
+            fetchedAt: Math.floor(Date.now() / 1000),
+            timeoutMs: ctx.timeoutMs,
+          });
+        } catch (err) {
+          return RuntimeEngine.errorSnapshot(inst, descriptor.plan_type, err);
+        }
         if (snap === null) {
           return {
             provider_id: inst.id,

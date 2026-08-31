@@ -170,7 +170,19 @@ export class GenericHttpAdapter {
       };
     }
 
-    const json: unknown = await resp.json();
+    // 响应体解析失败(如上游回 HTML/截断体)也必须落显式快照 —— 抛异常会走
+    // 调度器静默路径(快照蒸发 → 整卡缺失, t_5b52b633 根因之一)。
+    let json: unknown;
+    try {
+      json = await resp.json();
+    } catch (err) {
+      return {
+        ...base,
+        status: "error",
+        metrics: [],
+        error_message: `响应体解析失败: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
     if (this.mapping.ok_assertions?.some((a) => !evalAssertion(json, a))) {
       return {
         ...base,
@@ -180,45 +192,74 @@ export class GenericHttpAdapter {
       };
     }
 
-    const metrics = this.mapping.metrics.map((mm) => {
-      const usedRaw = fieldValue(json, mm.used);
-      const used = Number(applyPipe(usedRaw, mm.used.pipes ?? ["number"]));
-      const limitRaw = mm.limit ? fieldValue(json, mm.limit) : undefined;
-      const limit =
-        limitRaw !== undefined
-          ? Number(applyPipe(limitRaw, mm.limit!.pipes ?? ["number"]))
-          : undefined;
-      let reset_at: number | undefined;
-      if (mm.reset_at) {
-        const raw = fieldValue(json, mm.reset_at);
-        const n = Number(applyPipe(raw, mm.reset_at.pipes ?? ["number"]));
-        reset_at = mm.reset_at.relative ? ctx.fetchedAt + n : n;
+    // 单指标映射失败(字段缺失/管道炸)只跳过该指标 + warn alert, 不炸整卡:
+    // 「单窗口数据缺失是数据, 不是故障」(D-036 opencode 单窗 status 协议同源)。
+    // 实证(t_5b52b633): kimi 限流态响应 limits[0].detail 缺 used 字段, 旧逻辑
+    // MappingError 直接抛出 → 调度器静默 → 整卡消失。
+    const metrics: ProviderSnapshot["metrics"] = [];
+    const skipped: string[] = [];
+    for (const mm of this.mapping.metrics) {
+      try {
+        const usedRaw = fieldValue(json, mm.used);
+        const used = Number(applyPipe(usedRaw, mm.used.pipes ?? ["number"]));
+        const limitRaw = mm.limit ? fieldValue(json, mm.limit) : undefined;
+        const limit =
+          limitRaw !== undefined
+            ? Number(applyPipe(limitRaw, mm.limit!.pipes ?? ["number"]))
+            : undefined;
+        let reset_at: number | undefined;
+        if (mm.reset_at) {
+          const raw = fieldValue(json, mm.reset_at);
+          const n = Number(applyPipe(raw, mm.reset_at.pipes ?? ["number"]));
+          reset_at = mm.reset_at.relative ? ctx.fetchedAt + n : n;
+        }
+        const optional = <T>(fm: FieldMapping | undefined): T | undefined => {
+          if (!fm) return undefined;
+          const raw = fieldValue(json, fm);
+          if (raw === undefined) return undefined;
+          return applyPipe(raw, fm.pipes ?? []) as T;
+        };
+        const metric: Record<string, unknown> = {
+          key: mm.key,
+          kind: mm.kind,
+          unit: mm.unit,
+          used,
+          limit,
+          reset_at,
+        };
+        const remaining = optional<number>(mm.remaining);
+        if (remaining !== undefined) metric.remaining = remaining;
+        const currency = optional<string>(mm.currency);
+        if (currency !== undefined) metric.currency = currency;
+        const granted = optional<number>(mm.granted);
+        if (granted !== undefined) metric.granted = granted;
+        const topped_up = optional<number>(mm.topped_up);
+        if (topped_up !== undefined) metric.topped_up = topped_up;
+        metrics.push(metric as ProviderSnapshot["metrics"][number]);
+      } catch (err) {
+        skipped.push(`${mm.key}: ${err instanceof Error ? err.message : String(err)}`);
       }
-      const optional = <T>(fm: FieldMapping | undefined): T | undefined => {
-        if (!fm) return undefined;
-        const raw = fieldValue(json, fm);
-        if (raw === undefined) return undefined;
-        return applyPipe(raw, fm.pipes ?? []) as T;
-      };
-      const metric: Record<string, unknown> = {
-        key: mm.key,
-        kind: mm.kind,
-        unit: mm.unit,
-        used,
-        limit,
-        reset_at,
-      };
-      const remaining = optional<number>(mm.remaining);
-      if (remaining !== undefined) metric.remaining = remaining;
-      const currency = optional<string>(mm.currency);
-      if (currency !== undefined) metric.currency = currency;
-      const granted = optional<number>(mm.granted);
-      if (granted !== undefined) metric.granted = granted;
-      const topped_up = optional<number>(mm.topped_up);
-      if (topped_up !== undefined) metric.topped_up = topped_up;
-      return metric;
-    }) as ProviderSnapshot["metrics"];
+    }
 
-    return { ...base, status: "ok", metrics };
+    // 全部指标都映射失败 = 响应形态与 mapping 约定不符 → 显式 error 快照
+    if (metrics.length === 0 && this.mapping.metrics.length > 0) {
+      return {
+        ...base,
+        status: "error",
+        metrics: [],
+        error_message: `指标映射失败: ${skipped.join("; ")}`,
+      };
+    }
+
+    const alerts = [...base.alerts];
+    if (skipped.length > 0) {
+      alerts.push({
+        level: "warn",
+        message: `部分窗口数据缺失, 已跳过: ${skipped.join("; ")}`,
+        code: "metric_skipped",
+      });
+    }
+
+    return { ...base, status: "ok", metrics, alerts };
   }
 }

@@ -351,6 +351,23 @@ export class Scheduler {
         timedOut,
         consecutiveFailures: rt.stats.consecutiveFailures,
       });
+    } else {
+      // fetch 抛异常(无快照): 必须落一条显式 error 快照, 绝不静默蒸发 ——
+      // 无快照 = 该实例本周期零产出 = 面板整卡缺失(t_5b52b633 实锤:
+      // kimi 限流态映射异常走旧静默路径, 用户连错误卡都看不到)。
+      rt.def.onResult?.(
+        {
+          provider_id: rt.def.id,
+          display_name: rt.def.id,
+          plan_type: "window",
+          fetched_at: Math.floor(this.opts.now() / 1000),
+          status: "error",
+          metrics: [],
+          alerts: [{ level: "critical", message: failure?.message ?? "采集失败", code: "fetch_failed" }],
+          error_message: failure?.message ?? "采集失败",
+        },
+        { durationMs, timedOut, consecutiveFailures: rt.stats.consecutiveFailures },
+      );
     }
     rt.state = "idle";
     rt.stats.state = "idle";
