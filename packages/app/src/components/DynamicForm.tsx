@@ -7,8 +7,8 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChannelDescriptor } from "@token-wallet/core/channels";
-import { defaultInstanceName } from "../instances/schema";
-import { existingNames, getSharedKeyring, saveInstance } from "../instances/store";
+import { defaultInstanceName, findKeyDuplicate, keyFingerprint } from "../instances/schema";
+import { existingInstances, existingNames, getSharedKeyring, saveInstance } from "../instances/store";
 import { testConnection } from "../connection/testConnection";
 import type { TestConnectionResult } from "../connection/testConnection";
 import type { ProviderSnapshot } from "../types";
@@ -44,6 +44,8 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
   const [name, setName] = useState<string>(() => defaultInstanceName(channel, existingNames()));
   const [pollInterval, setPollInterval] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
+  // D-043: key 判重内联错误(null=无冲突可通过); 命中时阻断提交, 不弹窗
+  const [keyError, setKeyError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
   const [testing, setTesting] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
@@ -58,13 +60,19 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
   useEffect(() => {
     setName(defaultInstanceName(channel, existingNames()));
     setNameError(null);
+    setKeyError(null);
     setParams({});
     setTestResult(null);
     setSavedMsg(null);
     nameTouched.current = false;
   }, [channel]);
 
-  const setParam = (key: string, v: string | number | boolean) => setParams((prev) => ({ ...prev, [key]: v }));
+  const setParam = (key: string, v: string | number | boolean) => {
+    setParams((prev) => ({ ...prev, [key]: v }));
+    // D-043: 任一 secret 字段变更 → 清除 key 判重错误(用户改了 key 就该重新判定)
+    if (secretFields.includes(key) && v)
+      setKeyError(null);
+  };
 
   // 名称即时唯一校验(D-026 第 1 道: 表单保存前)
   const currentNameError = (() => {
@@ -99,6 +107,21 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
     if (existingNames().has(name.trim())) {
       setNameError(`实例名已存在: ${name.trim()}`);
       return;
+    }
+    // D-043 key 判重(DynamicForm 提交时, 添加向导提交前): 同 channel 下 key 已存在 → 内联阻断。
+    // 计算本次提交的 secret 明文指纹(与 saveInstance 同规: 非空 secret 按字段 key 排序拼接),
+    // 比对既有实例同 channel 的 key_fingerprint。命中 → 内联报错, 不落 store、不弹窗。
+    const fpSecretPairs = secretFields
+      .map((k) => [k, params[k]] as const)
+      .filter(([, v]) => v !== undefined && v !== null && v !== "")
+      .sort(([a], [b]) => a.localeCompare(b));
+    if (fpSecretPairs.length) {
+      const fp = await keyFingerprint(fpSecretPairs.map(([, v]) => String(v)).join("\n"));
+      const dup = findKeyDuplicate(existingInstances(), channel.channel, fp);
+      if (dup) {
+        setKeyError(`该 key 已存在于实例「${dup.name}」`);
+        return;
+      }
     }
     setPending(true);
     try {
@@ -186,6 +209,13 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
           </label>
         );
       })}
+
+      {/* D-043: key 判重内联错误 —— 命中同 channel 同 key, 阻断提交, 不弹窗 */}
+      {keyError && (
+        <div className="field-error" data-testid="key-error" role="alert">
+          {keyError}
+        </div>
+      )}
 
       <label className="field">
         <span className="field-label">轮询间隔</span>

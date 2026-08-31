@@ -9,6 +9,8 @@ import {
   validateFormName,
   defaultInstanceName,
   makeCredentialRef,
+  keyFingerprint,
+  findKeyDuplicate,
 } from "./schema";
 import { MemoryKeyring, MemoryInstanceStore, KEYRING_SERVICE } from "./store";
 import { getPresetChannel } from "@token-wallet/core/channels";
@@ -107,5 +109,53 @@ describe("MemoryKeyring + MemoryInstanceStore (D-029 删实例清钥匙串)", ()
     expect(store.list()).toHaveLength(0);
     // 删除实例 → 钥匙串条目被清(D-029)
     expect(await keyring.get(KEYRING_SERVICE, key)).toBeNull();
+  });
+});
+
+describe("D-043 key 去重(keyFingerprint + findKeyDuplicate)", () => {
+  const inst = (
+    id: string,
+    channel: string,
+    fp: string,
+    name = `实例 ${id}`,
+  ) => ({
+    id,
+    channel,
+    name,
+    key_fingerprint: fp,
+    params: {},
+  });
+
+  it("keyFingerprint: SHA-256 短摘要(前 32 位 hex), 确定性可复现", async () => {
+    const a = await keyFingerprint("sk-abc123");
+    const b = await keyFingerprint("sk-abc123");
+    expect(a).toBe(b); // 同 key 同指纹(可复现)
+    expect(a).toMatch(/^[0-9a-f]{32}$/); // 32 位 hex
+    const c = await keyFingerprint("sk-abc124"); // 一字符差异 → 指纹不同
+    expect(a).not.toBe(c);
+  });
+
+  it("同 channel 同 key → 命中重复实例", () => {
+    const fp = "f" + "0".repeat(31);
+    const existing = [inst("a", "deepseek/balance", fp), inst("b", "deepseek/balance", "g" + "0".repeat(31))];
+    const hit = findKeyDuplicate(existing, "deepseek/balance", fp);
+    expect(hit?.id).toBe("a"); // 只有 fp 相同的命中
+  });
+
+  it("同 key 接不同 channel → 放行(契约: 判重维度含 channel)", () => {
+    const fp = "f" + "0".repeat(31);
+    const existing = [inst("a", "deepseek/balance", fp)];
+    // 同 key 但不同 channel → 找不到(允许)
+    expect(findKeyDuplicate(existing, "opencode/go", fp)).toBeNull();
+  });
+
+  it("编辑场景: ignoreId 排除自身(未改 key 不误伤自己)", () => {
+    const fp = "f" + "0".repeat(31);
+    const existing = [inst("self", "deepseek/balance", fp)];
+    // 编辑自己、key 未变 → 排除自身 → 不命中(不触发)
+    expect(findKeyDuplicate(existing, "deepseek/balance", fp, "self")).toBeNull();
+    // 但同 channel 另有他人用同 key → 仍命中
+    const withOther = [...existing, inst("other", "deepseek/balance", fp)];
+    expect(findKeyDuplicate(withOther, "deepseek/balance", fp, "self")?.id).toBe("other");
   });
 });

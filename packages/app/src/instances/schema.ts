@@ -38,6 +38,14 @@ export const InstanceSchema = z.object({
   /** 可选, 覆盖全局默认轮询(如 "3m") */
   poll_interval: z.string().optional(),
   /**
+   * D-043 key 去重: key 明文(解密后)的 SHA-256 短摘要, 与 channel 共同判重。
+   * - 判重维度 = key 明文 + channel: 同 channel 下 key 已存在于任一实例 → 重复; 同 key 接不同 channel 允许。
+   * - 存的是短指纹(非明文 key), 比对不碰明文(D-029 凭据纪律)。
+   * - ⚠️ 指纹不是安全机制(仅防重复用), 别当散列凭据/校验用 —— 前 32 位 hex(128bit)足够判重。
+   * - 生命周期跟随实例: 删除实例即删指纹(字段随配置一起消失)。
+   */
+  key_fingerprint: z.string().optional(),
+  /**
    * 参数: secret 字段存 CredentialRef(值进钥匙串 store, 配置只存引用);
    * 非 secret 字段(text/number/boolean)直接以字面值存配置。
    * mock 阶段允许 union, P0-5 收紧为纯 CredentialRef 语义。
@@ -144,4 +152,46 @@ export function parseInstances(input: unknown): {
     return { ok: false, error: `${first?.message ?? "未知错误"}` };
   }
   return { ok: true, instances: parsed.data.instances };
+}
+
+/**
+ * D-043 key 去重: 对 key 明文做 SHA-256 短摘要(前 32 位 hex / 128bit)。
+ *
+ * ⚠️ 指纹不是安全机制(仅防重复用), 别当散列凭据/校验和用 —— 判重维度是「同 channel 下同 key」,
+ * 浏览器/dev 环境都能复现, 不承担任何保密/验证职责。刻意只取前 32 位 hex:
+ * 128bit 的碰撞概率在人工输入的 key 集合规模下可忽略, 又能让指纹字段足够短。
+ *
+ * 用 WebCrypto(globalThis.crypto.subtle): 浏览器(vite 前端)与 node(vitest)两宿主都可用,
+ * 不引入 node:crypto 依赖(D-002 core 依赖纪律)+ 避免把 node 模块拖进 browser bundle。
+ */
+export async function keyFingerprint(value: string): Promise<string> {
+  const data = new TextEncoder().encode(value);
+  // globalThis.crypto.subtle: 浏览器/Node≥15/webworker 全局可用; 测试环境见 schema.test keyFingerprint 探针
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", data);
+  const bytes = new Uint8Array(digest);
+  let hex = "";
+  for (let i = 0; i < 16; i++) hex += bytes[i]!.toString(16).padStart(2, "0");
+  return hex;
+}
+
+/**
+ * D-043 查重查询(同 channel 同 key → 返回已占用实例, 供表单内联报错)。
+ *
+ * - 判重维度 = key 明文 + channel: 只在同 channel 内比对指纹; 同 key 接不同 channel 放行(契约)。
+ * - 纯函数, 输入既有实例列表即可复现(store/表单共用)。
+ * - 返回命中实例 → 表单应阻止提交; 返回 null → 可提交。
+ * - ignoreId: 编辑场景传自己 id, 改自己的 key 时不算命中自身(契约「仅 key 变更时比对」由调用方保证,
+ *   见 DynamicForm 注释; 这里只负责排除自身, 避免编辑自指死锁)。
+ */
+export function findKeyDuplicate(
+  instances: readonly InstanceConfig[],
+  channel: string,
+  fingerprint: string,
+  ignoreId?: string,
+): InstanceConfig | null {
+  return (
+    instances.find(
+      (i) => i.channel === channel && i.key_fingerprint === fingerprint && i.id !== ignoreId,
+    ) ?? null
+  );
 }

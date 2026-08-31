@@ -6,11 +6,20 @@ vi.mock("../ipc", () => ({
     throw new Error("不应调用: 未接入通道不进调度器");
   }),
   commandRun: vi.fn(async () => null),
+  // D-043 存量补写走 shared keyring/store → 补全 ipc 表面(store.ts 依赖), 防 ReferenceError
+  isDesktopHost: () => false,
+  instancesLoad: vi.fn(async () => null),
+  instancesSave: vi.fn(async () => {}),
+  keyringGet: vi.fn(async () => null),
+  keyringSet: vi.fn(async () => {}),
+  keyringDelete: vi.fn(async () => {}),
 }));
 
 import { RuntimeEngine, unsupportedSnapshot, type EngineOutput } from "./engine";
 import type { SnapshotStorage } from "./storage";
 import type { InstanceConfig } from "../instances/schema";
+import { keyFingerprint } from "../instances/schema";
+import { KEYRING_SERVICE, getSharedKeyring, getSharedStore, MemoryKeyring } from "../instances/store";
 import type { ProviderSnapshot } from "../types";
 
 const fakeStorage: SnapshotStorage = {
@@ -348,5 +357,93 @@ describe("D-042 command 通道引擎接线(command_run IPC 桥)", () => {
     engine.start();
     expect(engine.snapshots.map((s) => s.status)).toEqual(["unsupported"]);
     engine.stop();
+  });
+});
+
+/**
+ * D-043 存量补写: 无 key_fingerprint 的存量实例 → 首次采集成功(ok)时回填指纹。
+ * 用共享 singleton keyring/store 驱动, 验证 backfillKeyFingerprint 确实把指纹写回实例配置。
+ */
+describe("D-043 存量补写(首次采集成功回填 key_fingerprint)", () => {
+  const okSnapFor = (providerId: string): ProviderSnapshot => ({
+    provider_id: providerId,
+    display_name: `卡 ${providerId}`,
+    plan_type: "balance",
+    fetched_at: 1_700_000_000,
+    status: "ok",
+    metrics: [{ key: "remaining", kind: "balance", unit: "cny", used: 42.5 }],
+    alerts: [],
+  });
+
+  const instNoFp = (id: string): InstanceConfig => ({
+    id,
+    channel: "deepseek/balance",
+    name: `存量实例 ${id}`,
+    // 存量实例配置只存 CredentialRef(明文在钥匙串), 无 key_fingerprint(D-043 待补写)
+    params: { api_key: { source: "store", key: `${id}:api_key` } },
+  });
+
+  it("ok 采集后为无指纹存量实例补写 key_fingerprint(且与同 key 指纹一致)", async () => {
+    const secret = "sk-legacy-999";
+    // 在共享内存钥匙串注入存量 secret; store 预置同 id 的存量实例(无指纹)
+    const keyring = getSharedKeyring() as MemoryKeyring;
+    await keyring.set(KEYRING_SERVICE, "inst-legacy:api_key", secret);
+    getSharedStore().hydrate([instNoFp("inst-legacy")]);
+
+    const engine = new RuntimeEngine([instNoFp("inst-legacy")], fakeStorage);
+    engine.subscribe(() => {});
+    engine.start();
+    // 直接驱动 onResult(模拟首次采集成功), 触发存量补写
+    await (engine as unknown as { onResult(id: string, s: ProviderSnapshot): Promise<void> }).onResult(
+      "inst-legacy",
+      okSnapFor("inst-legacy"),
+    );
+    await new Promise((r) => setTimeout(r, 0)); // 等补写链路(异步 keyring 读 + sha256)落定
+
+    const updated = getSharedStore().list().find((i) => i.id === "inst-legacy");
+    expect(updated?.key_fingerprint).toBeTruthy();
+    // 补写指纹 == keyFingerprint("sk-legacy-999") —— 与添加时同规, 后续同 key 添加会被命中
+    expect(updated?.key_fingerprint).toBe(await keyFingerprint(secret));
+    engine.stop();
+    // 清空共享 store, 防污染其他用例
+    getSharedStore().hydrate([]);
+    await keyring.delete(KEYRING_SERVICE, "inst-legacy:api_key");
+  });
+
+  it("已有指纹的实例不被重复补写(幂等)", async () => {
+    const fp = "f" + "0".repeat(31);
+    getSharedStore().hydrate([{ ...instNoFp("inst-fp"), key_fingerprint: fp }]);
+    const engine = new RuntimeEngine([{ ...instNoFp("inst-fp"), key_fingerprint: fp }], fakeStorage);
+    engine.subscribe(() => {});
+    engine.start();
+    await (engine as unknown as { onResult(id: string, s: ProviderSnapshot): Promise<void> }).onResult(
+      "inst-fp",
+      okSnapFor("inst-fp"),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    const updated = getSharedStore().list().find((i) => i.id === "inst-fp");
+    expect(updated?.key_fingerprint).toBe(fp); // 保持原指纹, 不被覆盖
+    engine.stop();
+    getSharedStore().hydrate([]);
+  });
+
+  it("非 ok 采集(采集失败)不补写 —— 只有成功才回填", async () => {
+    const secret = "sk-legacy-err";
+    const keyring = getSharedKeyring() as MemoryKeyring;
+    await keyring.set(KEYRING_SERVICE, "inst-err:api_key", secret);
+    getSharedStore().hydrate([instNoFp("inst-err")]);
+    const engine = new RuntimeEngine([instNoFp("inst-err")], fakeStorage);
+    engine.subscribe(() => {});
+    engine.start();
+    await (engine as unknown as { onResult(id: string, s: ProviderSnapshot): Promise<void> }).onResult(
+      "inst-err",
+      { ...okSnapFor("inst-err"), status: "error", alerts: [{ level: "critical", message: "x" }] },
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    const updated = getSharedStore().list().find((i) => i.id === "inst-err");
+    expect(updated?.key_fingerprint).toBeUndefined(); // 失败不补写
+    engine.stop();
+    getSharedStore().hydrate([]);
+    await keyring.delete(KEYRING_SERVICE, "inst-err:api_key");
   });
 });

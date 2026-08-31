@@ -18,7 +18,8 @@ import { Scheduler } from "@token-wallet/core/scheduler";
 import { dailyRateFromHistory } from "@token-wallet/core/rate";
 import type { ProviderSnapshot } from "../types";
 import type { InstanceConfig, CredentialRef } from "../instances/schema";
-import { KEYRING_SERVICE, getSharedKeyring } from "../instances/store";
+import { keyFingerprint } from "../instances/schema";
+import { KEYRING_SERVICE, getSharedKeyring, getSharedStore } from "../instances/store";
 import { getSharedStorage, type SnapshotStorage } from "./storage";
 import { commandRun, httpGetJson } from "../ipc";
 
@@ -261,6 +262,12 @@ export class RuntimeEngine {
     // 保证 purge 之后不会有该 id 的新行落库, 面板也不会闪回旧帧。
     if (!this.started || !this.liveIds.has(providerId) || snap.provider_id !== providerId) return;
 
+    // D-043 存量补写: 首次采集成功(ok)时给无指纹的存量实例回填 key_fingerprint。
+    // 不影响本轮结果展示, 失败仅记日志(下次成功再补写)。
+    if (snap.status === "ok") {
+      void this.backfillKeyFingerprint(providerId);
+    }
+
     // 落库(cache-first 的写侧; 面板永远读内存 latest, 启动时从库恢复)
     try {
       await this.storage.init();
@@ -329,6 +336,38 @@ export class RuntimeEngine {
   /** 手动刷新 = 触发所有实例立即同步(§3.1) */
   refreshAll(): Promise<void> {
     return this.scheduler.refreshAll();
+  }
+
+  /**
+   * D-043 存量补写: 为无 key_fingerprint 的实例回填指纹 —— 首次采集成功(ok)时调用。
+   *
+   * fingerprint 是纯函数(keyFingerprint(SHA-256 短摘要), schema.ts), 与添加时 DynamicForm/SaveInstance
+   * 所写指纹同规(非空 secret 按字段 key 排序拼接再散列)。因此补写出来的指纹与"当初添加时"一致,
+   * 后续添加同 channel 同 key 能被 findKeyDuplicate 正确命中。
+   *
+   * 这里需从钥匙串解密拿到真实 key(合法场景: 实例配置只存 CredentialRef, 明文在钥匙串 D-029)。
+   * 失败不抛出(仅 console.warn), 本引擎本次采集结果照常展示, 下次成功再补写。
+   */
+  private async backfillKeyFingerprint(providerId: string): Promise<void> {
+    const inst = this.instances.find((i) => i.id === providerId);
+    // 已有指纹(新实例入库即写过)或非 store 源凭据 → 无需补写
+    if (!inst || inst.key_fingerprint) return;
+    const secretPairs: Array<[string, string]> = [];
+    for (const [k, ref] of Object.entries(inst.params)) {
+      const r = ref as CredentialRef | undefined;
+      if (r?.source === "store" && r.key) {
+        try {
+          const value = await getSharedKeyring().get(KEYRING_SERVICE, r.key);
+          if (value) secretPairs.push([k, value]);
+        } catch {
+          /* 钥匙串读取失败: 跳过该凭据, 不回填(下次成功再试) */
+        }
+      }
+    }
+    secretPairs.sort(([a], [b]) => a.localeCompare(b));
+    if (!secretPairs.length) return;
+    const fp = await keyFingerprint(secretPairs.map(([, v]) => v).join("\n"));
+    getSharedStore().updateKeyFingerprint(providerId, fp);
   }
 
   get snapshots(): ProviderSnapshot[] {

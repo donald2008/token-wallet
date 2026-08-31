@@ -10,7 +10,12 @@
  */
 import { useEffect, useRef, useState } from "react";
 import type { InstanceConfig, CredentialRef } from "./schema";
-import { InstancesFileSchema, makeCredentialRef, parseInstances } from "./schema";
+import {
+  InstancesFileSchema,
+  keyFingerprint,
+  makeCredentialRef,
+  parseInstances,
+} from "./schema";
 import { instancesLoad, instancesSave, isDesktopHost, keyringDelete, keyringGet, keyringSet } from "../ipc";
 import { getSharedStorage } from "../runtime/storage";
 import { addLiveProvider, removeLiveProvider, setLiveProviders } from "../runtime/liveProviders";
@@ -156,6 +161,19 @@ export class MemoryInstanceStore {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
   }
+  /**
+   * D-043 存量补写: 为实例写入 key 指纹(首次采集成功后回填, 存量实例无指纹时)。
+   * 只在实例尚无指纹时写一次; 已有指纹则跳过(幂等)。触发 persist 落盘。
+   */
+  updateKeyFingerprint(id: string, fingerprint: string): void {
+    const existing = this.items.find((i) => i.id === id);
+    if (!existing || existing.key_fingerprint === fingerprint) return;
+    this.items = this.items.map((i) =>
+      i.id === id ? { ...i, key_fingerprint: fingerprint } : i,
+    );
+    this.emit();
+    this.persist();
+  }
   private emit(): void {
     for (const fn of this.listeners) fn();
   }
@@ -264,6 +282,11 @@ export function existingNames(): Set<string> {
   return new Set(getSharedStore().list().map((i) => i.name));
 }
 
+/** 当前实例列表(供表单 key 查重 D-043) */
+export function existingInstances(): InstanceConfig[] {
+  return getSharedStore().list();
+}
+
 /** 便捷: 把表单 secret 值写入钥匙串, 构造 instance.params 的 CredentialRef 并加 store */
 export interface DraftInput {
   id: string;
@@ -280,6 +303,16 @@ export interface DraftInput {
 /** 保存一个实例: secret 值写入钥匙串, 配置只存引用(§5.0.1, D-029) */
 export async function saveInstance(draft: DraftInput): Promise<InstanceConfig> {
   const params: InstanceConfig["params"] = {};
+  // D-043: 收集本次提交的 secret 明文值(按字段 key 排序拼接), 计算验指纹 —— 新实例入库即写指纹。
+  // 指纹维度 = key 明文 + channel: 只对 secret 字段取指纹(非 secret 不参与判重)。
+  const secretPairs = draft.secretFields
+    .map((k) => [k, draft.params[k]] as const)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .sort(([a], [b]) => a.localeCompare(b));
+  const fingerprint = secretPairs.length
+    ? await keyFingerprint(secretPairs.map(([, v]) => String(v)).join("\n"))
+    : undefined;
+
   for (const [k, v] of Object.entries(draft.params)) {
     if (draft.secretFields.includes(k)) {
       const ref = makeCredentialRef(draft.id, k);
@@ -294,6 +327,7 @@ export async function saveInstance(draft: DraftInput): Promise<InstanceConfig> {
     channel: draft.channel,
     name: draft.name,
     ...(draft.poll_interval ? { poll_interval: draft.poll_interval } : {}),
+    ...(fingerprint ? { key_fingerprint: fingerprint } : {}),
     params,
   };
   getSharedStore().add(inst);
