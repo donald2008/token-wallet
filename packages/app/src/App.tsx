@@ -22,7 +22,7 @@ import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { AddProviderWizard } from "./components/AddProviderWizard";
 import { LocalAgentSection } from "./components/LocalAgentSection";
-import { FilterChips, DEFAULT_FILTER, matchesFilter, type FilterSel } from "./components/FilterChips";
+import { FilterIcons, DEFAULT_FILTER, matchesFilter, type FilterSel } from "./components/FilterChips";
 import {
   getSharedKeyring,
   getSharedStore,
@@ -333,14 +333,15 @@ export default function App() {
           ) : providers.length === 0 ? (
             <EmptyState onAdd={openAddProvider} />
           ) : (
-            // P1(t_6484ecc6): 卡片列表顶部、主区第一行 = 过滤 chips(动态, 全实例视角)。
-            // 过滤后命中为空(如仅剩异常/单平台全删) → 居中「无匹配实例」, 不渲染卡片列表。
-            <>
-              <FilterChips providers={providers} value={filter} onChange={setFilter} />
+            // P1(t_9639078b): 过滤三枚 icon 钮浮在卡片列表右上角 —— 与卡片列表同容器(绝对定位),
+            // 随内容滚动运动(不吸顶), 因此滚动内容不会与钮组重叠(修 v0.1.2 平台 chips 被卡片盖住)。
+            // 过滤后命中为空(如仅剩异常) → 居中「无匹配实例」(钮组仍在, 可点回其他视角)。
+            <main className="card-list" data-testid="card-list">
+              <FilterIcons value={filter} onChange={setFilter} />
               {filteredProviders.length === 0 ? (
                 <NoMatchState />
               ) : (
-                <main className="card-list" data-testid="card-list">
+                <>
                   {/* D-039 落点指示线(拖动中显示): 绝对定位在插入边界 */}
                   {drag && indicatorY !== null && (
                     <div className="drop-line" data-testid="drop-line" style={{ top: indicatorY }} />
@@ -355,9 +356,9 @@ export default function App() {
                       dragDy={drag ? drag.dy : 0}
                     />
                   ))}
-                </main>
+                </>
               )}
-            </>
+            </main>
           )}
           <LocalAgentSection />
           {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}

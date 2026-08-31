@@ -2,128 +2,121 @@ import { expect as pwExpect } from "@playwright/test";
 import { test } from "./fixtures";
 
 /**
- * L2(P1 t_6484ecc6): 主页过滤 chips。
+ * L2(P1 t_9639078b): 主页过滤三枚 icon 钮(chips 收敛重设计)。
  *
- * 覆盖验收:
- *   - 卡片列表顶部、主区第一行出现 (filter-chips 在 card-list 上方)
- *   - 固定三态: 全部(n)/✓可用(n)/⚠异常(n), 数量角标正确(数据驱动不硬编码)
- *   - 平台 chips 动态生成(有实例的平台才出, 带 BrandLogo), 单选语义
- *   - 点击已选 chip → 取消回「全部」
- *   - 过滤后空态 → 居中「无匹配实例」
- *   - 增删实例/采集状态变化 → 数量角标实时联动(scenario 切换驱动)
- *   - 键盘可达(radiogroup role + Tab/Enter)
+ * 覆盖验收(t_9639078b 契约):
+ *   - 三枚 24px icon 钮(全部◇ / 可用✓ / 异常⚠)浮在卡片列表右上角, 与卡片列表同容器(绝对定位)
+ *   - 无计数角标 / 无文字 / 无平台 chips —— 颜色即信息
+ *   - 单选语义: 点选切换视角, 再点当前选中 = 回「全部」; 过滤行为与 v0.1.2 一致
+ *   - 过滤后空态 → 居中「无匹配实例」(钮组仍在, 可点回其他视角)
+ *   - 钮组不与滚动内容重叠(在卡片列表容器内、随内容滚动运动, 非吸顶独立行)
  *
- * 驱动方式: dev scenario 场景切换器(mixed=4 卡 → expired=1 异常卡 → error), 无真实实例,
- * 与 dev 预览卡共用, chip 过滤作用于当前 providers 视角。
+ * 驱动方式: dev scenario 场景切换器(mixed=4 卡 → expired=1 异常卡 → error), 与 dev 预览卡共用。
  */
-
-/** 读某个 chip 的数量角标文本。 */
-async function chipCount(page: import("@playwright/test").Page, testid: string): Promise<string> {
-  return (await page.getByTestId(testid).locator(".filter-chip-count").textContent()) ?? "";
-}
 
 async function agree(page: import("@playwright/test").Page) {
   await page.getByTestId("consent-agree").click();
   await pwExpect(page.getByTestId("empty-state")).toBeVisible();
 }
 
-test("chips 在卡片列表顶部主区第一行(常驻低调), 固定三态 + 平台动态生成", async ({ hostPage, page }) => {
+test("三枚 icon 钮在卡片列表内右上角: 3 个 radio, 无计数角标/无文字/无平台 chips", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await page.getByTestId("scenario-mixed").click(); // 4 卡
 
-  // chips 在 panel-main 内、card-list 之上
-  const chips = page.getByTestId("filter-chips");
-  await pwExpect(chips).toBeVisible();
-  const chipsBox = (await chips.boundingBox())!;
+  // 钮组在卡片列表容器内(同容器), 非上方独立行
+  const icons = page.getByTestId("filter-icons");
+  await pwExpect(icons).toBeVisible();
+  const iconsBox = (await icons.boundingBox())!;
   const listBox = (await page.getByTestId("card-list").boundingBox())!;
-  pwExpect(chipsBox.y).toBeLessThan(listBox.y); // chips 在主区第一行, 卡片在其下
+  // 三者 y 都在卡片列表容器纵向范围内(非独立行) → 与容器同高带, 不吸顶盖不住滚动内容
+  pwExpect(iconsBox.y).toBeGreaterThanOrEqual(listBox.y);
+  pwExpect(iconsBox.y + iconsBox.height).toBeLessThanOrEqual(listBox.y + listBox.height);
+  // 关键: 绝对定位在卡片列表容器内(非 fixed/sticky 独立层) → 随内容滚动运动, 不吸顶不重叠
+  await pwExpect(icons).toHaveCSS("position", "absolute");
+  const offsetParent = await icons.evaluate(
+    (el) => ((el as HTMLElement).offsetParent as HTMLElement)?.getAttribute("class"),
+  );
+  pwExpect(offsetParent).toContain("card-list");
 
-  // 固定三态角标(数据驱动): mixed = deepseek(ok) kimi-code(即将耗尽warn) aliyun(auth_expired) ark(ok)
-  // all=4, available=2(deepseek/ark ok), abnormal=1(aliyun auth_expired)。
-  // (kimi-code remaining 18%≈warn, 非异常桶 only≤10% 已耗尽, 故 available 不计数)
-  await pwExpect(page.getByTestId("filter-all")).toContainText("全部");
-  pwExpect(await chipCount(page, "filter-all")).toBe("4");
-  pwExpect(await chipCount(page, "filter-available")).toBe("2");
-  pwExpect(await chipCount(page, "filter-abnormal")).toBe("1");
-
-  // 平台 chips 动态生成(alias 归一: aliyun→aliyun-bailian, ark→volcengine-ark)
-  await pwExpect(page.getByTestId("filter-platform-deepseek")).toBeVisible();
-  await pwExpect(page.getByTestId("filter-platform-kimi")).toBeVisible();
-  await pwExpect(page.getByTestId("filter-platform-aliyun-bailian")).toBeVisible();
-  await pwExpect(page.getByTestId("filter-platform-volcengine-ark")).toBeVisible();
-  pwExpect(await chipCount(page, "filter-platform-deepseek")).toBe("1");
+  // 恰好三枚钮(全部/可用/异常), role=radio
+  await pwExpect(icons.locator('[role="radio"]')).toHaveCount(3);
+  await pwExpect(page.getByTestId("filter-all")).toHaveAttribute("aria-checked", "true"); // 默认「全部」
+  // 收敛: 无计数角标、无文字 label、无平台 chips
+  await pwExpect(page.locator(".filter-chip-count")).toHaveCount(0);
+  await pwExpect(page.locator('[data-testid^="filter-platform-"]')).toHaveCount(0);
+  await pwExpect(page.getByTestId("provider-card")).toHaveCount(4);
 });
 
-test("单选语义: 点可用→3卡, 点已选→取消回全部(4卡); radiogroup 键盘可达", async ({ hostPage, page }) => {
+test("单选切换: 点可用→2卡, 点已选→回全部(4卡)", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await page.getByTestId("scenario-mixed").click();
 
-  // 默认「全部」选中
-  await pwExpect(page.getByTestId("filter-all")).toHaveAttribute("aria-checked", "true");
-
-  // 点「可用」→ 只剩 2 卡(deepseek + ark; kimi w旧耗尽/aliyun auth_expired 隐藏)
+  // 点「可用」→ 只剩 2 卡(deepseek ok + ark ok; kimi-code 即将耗尽/aliyun auth_expired 隐藏)
   await page.getByTestId("filter-available").click();
   await pwExpect(page.getByTestId("filter-available")).toHaveAttribute("aria-checked", "true");
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(2);
-  await pwExpect(
-    page.locator('[data-testid="provider-card"][data-provider="aliyun"]'),
-  ).toHaveCount(0);
+  await pwExpect(page.locator('[data-testid="provider-card"][data-provider="aliyun"]')).toHaveCount(0);
 
-  // 点已选「可用」→ 回「全部」4 卡
+  // 点已选「可用」→ 取消回「全部」4 卡
   await page.getByTestId("filter-available").click();
   await pwExpect(page.getByTestId("filter-all")).toHaveAttribute("aria-checked", "true");
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(4);
 });
 
-test("平台 chip 单选: 点 DeepSeek → 仅 1 卡; 点已选 → 回全部", async ({ hostPage, page }) => {
+test("单选切换: 点异常→1卡(aliyun), 点已选→回全部", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await page.getByTestId("scenario-mixed").click();
 
-  await page.getByTestId("filter-platform-deepseek").click();
-  await pwExpect(page.getByTestId("filter-platform-deepseek")).toHaveAttribute("aria-checked", "true");
+  await page.getByTestId("filter-abnormal").click();
+  await pwExpect(page.getByTestId("filter-abnormal")).toHaveAttribute("aria-checked", "true");
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(1);
-  await pwExpect(page.locator(".card-name")).toContainText("DeepSeek-按量 #1");
+  await pwExpect(page.locator('[data-testid="provider-card"][data-provider="aliyun"]')).toHaveCount(1);
 
-  // 点已选平台 → 取消回「全部」
-  await page.getByTestId("filter-platform-deepseek").click();
+  // 点已选「异常」→ 取消回「全部」
+  await page.getByTestId("filter-abnormal").click();
   await pwExpect(page.getByTestId("filter-all")).toHaveAttribute("aria-checked", "true");
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(4);
 });
 
-test("过滤后空态 → 居中文案「无匹配实例」", async ({ hostPage, page }) => {
+test("过滤后空态 → 居中文案「无匹配实例」; 钮组仍在可切回", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   // expired 场景只有 1 张异常卡(auth_expired), 点「可用」→ 0 命中 → 无匹配实例
   await page.getByTestId("scenario-expired").click();
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(1);
+
   await page.getByTestId("filter-available").click();
   await pwExpect(page.getByTestId("no-match")).toBeVisible();
   await pwExpect(page.getByTestId("no-match")).toContainText("无匹配实例");
-  await pwExpect(page.getByTestId("card-list")).toHaveCount(0);
+  await pwExpect(page.getByTestId("provider-card")).toHaveCount(0);
+  // 钮组仍在(卡片列表容器内), 用户可切回异常视角
+  await pwExpect(page.getByTestId("filter-icons")).toBeVisible();
+
+  // 切回「异常」→ 恢复 1 卡(空态消失)
+  await page.getByTestId("filter-abnormal").click();
+  await pwExpect(page.getByTestId("provider-card")).toHaveCount(1);
+  await pwExpect(page.getByTestId("no-match")).toHaveCount(0);
 });
 
-test("数量角标随采集/增删实例实时联动(scenario 切换)", async ({ hostPage, page }) => {
+test("默认态三枚钮半透明、选中态描边高亮(computed-style 客观核验, 主题无关)", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await page.getByTestId("scenario-mixed").click();
-  pwExpect(await chipCount(page, "filter-all")).toBe("4");
-  pwExpect(await chipCount(page, "filter-abnormal")).toBe("1");
 
-  // 切 expired(仅 aliyun auth_expired) → 计数联动
-  await page.getByTestId("scenario-expired").click();
-  pwExpect(await chipCount(page, "filter-all")).toBe("1");
-  pwExpect(await chipCount(page, "filter-available")).toBe("0");
-  pwExpect(await chipCount(page, "filter-abnormal")).toBe("1");
-  // 平台 chip 只剩 aliyun-bailian
-  await pwExpect(page.getByTestId("filter-platform-deepseek")).toHaveCount(0);
-  await pwExpect(page.getByTestId("filter-platform-aliyun-bailian")).toBeVisible();
+  // 默认「全部」选中: 全不透明 + 描边非透明(accent 生效); 未选中「可用」半透明 + 描边透明
+  // (toHaveCSS 自动重试, 跨过 opacity 0.15s 过渡期, 稳定断言最终 computed 态)
+  await pwExpect(page.getByTestId("filter-all")).toHaveCSS("opacity", "1");
+  await pwExpect(page.getByTestId("filter-all")).toHaveCSS("border-color", /^rgb/);
+  await pwExpect(page.getByTestId("filter-available")).toHaveCSS("opacity", "0.4");
+  await pwExpect(page.getByTestId("filter-available")).toHaveCSS("border-color", "rgba(0, 0, 0, 0)");
 
-  // 切 error(1 异常卡) → 计数再联动
-  await page.getByTestId("scenario-error").click();
-  pwExpect(await chipCount(page, "filter-all")).toBe("1");
-  pwExpect(await chipCount(page, "filter-available")).toBe("0");
-  pwExpect(await chipCount(page, "filter-abnormal")).toBe("1");
+  // 选「可用」→ 其描边变非透明(accent 高亮), 原「全部」回落半透明 + 描边透明
+  await page.getByTestId("filter-available").click();
+  await pwExpect(page.getByTestId("filter-available")).toHaveCSS("opacity", "1");
+  await pwExpect(page.getByTestId("filter-available")).toHaveCSS("border-color", /^rgb/);
+  await pwExpect(page.getByTestId("filter-all")).toHaveCSS("opacity", "0.4");
+  await pwExpect(page.getByTestId("filter-all")).toHaveCSS("border-color", "rgba(0, 0, 0, 0)");
 });
