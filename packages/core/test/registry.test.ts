@@ -95,8 +95,8 @@ describe("ChannelRegistry", () => {
     expect(reg.size).toBe(3);
   });
 
-  it("预置通道含 deepseek/balance + opencode/go + kimi/coding + aliyun-bailian/token-plan + volcengine-ark/coding-plan", () => {
-    expect(PRESET_CHANNELS).toHaveLength(5);
+it("预置通道含 deepseek/balance + opencode/go + kimi/coding + aliyun-bailian/token-plan + volcengine-ark/coding-plan + zai/coding", () => {
+    expect(PRESET_CHANNELS).toHaveLength(6);
     const d = DEEPSEEK_BALANCE;
     expect(d.channel).toBe("deepseek/balance");
     expect(d.plan_type).toBe("balance");

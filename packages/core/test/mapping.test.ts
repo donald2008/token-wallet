@@ -53,6 +53,19 @@ describe("iso_epoch pipe(ISO 8601 → unix 秒)", () => {
   });
 });
 
+describe("ms_epoch pipe(毫秒 epoch → unix 秒, zai nextResetTime D-0xx)", () => {
+  it("毫秒 epoch 除以 1000 取整", () => {
+    expect(applyPipe(1_788_192_250_348, ["ms_epoch"])).toBe(1_788_192_250);
+    expect(applyPipe(1_788_578_665_998, ["ms_epoch"])).toBe(1_788_578_665);
+  });
+
+  it("数字字符串同样处理; 非法输入抛 MappingError", () => {
+    expect(applyPipe("1788192250348", ["ms_epoch"])).toBe(1_788_192_250);
+    expect(() => applyPipe("not-a-number", ["ms_epoch"])).toThrow(MappingError);
+    expect(() => applyPipe(undefined, ["ms_epoch"])).toThrow(MappingError);
+  });
+});
+
 describe("FieldMapping.const + percent + iso_epoch 组合(GenericHttpAdapter 全链路)", () => {
   const MAPPING: GenericHttpMapping = {
     url: "https://example.test/usage",

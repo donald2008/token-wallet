@@ -54,6 +54,18 @@ export interface GenericHttpMapping {
   headers?: Record<string, string>;
   /** 非 2xx 时判定 auth_expired 的状态码(默认 [401, 403]) */
   auth_expired_status?: number[];
+  /**
+   * 业务码判态(HTTP 恒 2xx、auth 状态在响应体业务码的通道, 如 zai:\n * HTTP 恒 200, body.code=401 key 坏 / 1001 缺头)。\n * 解析响应体 `$.code`(可指定 path), 命中 auth_expired → auth_expired + setup_hint;\n * 命中 ok → 正常采集; 其余 → error。与 auth_expired_status 互斥(HTTP 判不了时才用)。\n */
+  body_code?: {
+    /** 业务码 JSONPath, 默认 $.code */
+    path?: string;
+    /** 视为 ok 的码(如 [200]) */
+    ok: number[];
+    /** 视为 auth_expired 的码(如 [401]) */
+    auth_expired: number[];
+  };
+  /** auth_expired 快照的修复指引(卡片复制钮语义, §5.0) */
+  setup_hint?: string;
   /** 可选状态断言(受限表达式); 全部通过才视为 ok */
   ok_assertions?: string[];
   metrics: MetricMapping[];
@@ -190,6 +202,32 @@ export class GenericHttpAdapter {
         metrics: [],
         error_message: "状态断言未通过",
       };
+    }
+
+    // body_code 判态(HTTP 恒 2xx 的通道, 如 zai): auth 状态在响应体业务码。
+    // 不能看 HTTP 状态码(恒 200), 只能解析 body.code 分类:
+    //   ok → 继续采集; auth_expired → auth_expired + setup_hint; 其他 → error。
+    const bc = this.mapping.body_code;
+    if (bc) {
+      const codeVal = evalJsonPathFirst(json, bc.path ?? "$.code");
+      const code = typeof codeVal === "number" ? codeVal : Number(codeVal);
+      if (bc.auth_expired.includes(code)) {
+        return {
+          ...base,
+          status: "auth_expired",
+          metrics: [],
+          setup_hint: this.mapping.setup_hint,
+        };
+      }
+      if (!bc.ok.includes(code)) {
+        return {
+          ...base,
+          status: "error",
+          metrics: [],
+          error_message: `业务码 ${code}`,
+        };
+      }
+      // ok → 落到下方正常指标映射
     }
 
     // 单指标映射失败(字段缺失/管道炸)只跳过该指标 + warn alert, 不炸整卡:

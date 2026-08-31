@@ -9,9 +9,11 @@ import type { GenericHttpMapping } from "../generic-http.js";
 import { DEEPSEEK_BALANCE_MAPPING } from "./deepseek.js";
 import { OPENCODE_GO_MAPPING } from "./opencode.js";
 import { KIMI_CODING_MAPPING } from "./kimi.js";
+import { ZAI_CODING_MAPPING } from "./zai-coding.js";
 
 export const CHANNEL_MAPPINGS: Readonly<Record<string, GenericHttpMapping>> = {
   "deepseek/balance": DEEPSEEK_BALANCE_MAPPING,
   "opencode/go": OPENCODE_GO_MAPPING,
   "kimi/coding": KIMI_CODING_MAPPING,
+  "zai/coding": ZAI_CODING_MAPPING,
 };

@@ -120,12 +120,38 @@ export const VOLCENGINE_ARK_CODING_PLAN: ChannelDescriptor = {
   },
 };
 
+/**
+ * 智谱 zai Coding Plan 窗口制: http, GET /api/monitor/usage/quota/limit 双窗已实测(2026-08-30 L3)。
+ * ⚠️ HTTP 恒 200, auth 状态在 body.code —— 走 body_code 判态, 非 HTTP 状态码。
+ */
+export const ZAI_CODING: ChannelDescriptor = {
+  platform: "zai",
+  product: "coding",
+  channel: "zai/coding",
+  display_name: "智谱 GLM Coding Plan",
+  product_display_name: "Coding Plan",
+  platform_display_name: "智谱 bigmodel",
+  plan_type: "window",
+  adapter: "http",
+  logo: "zai",
+  params_schema: [
+    {
+      key: "api_key",
+      label: "API Key",
+      type: "secret",
+      required: true,
+      help: "bigmodel.cn → API Keys(Coding Plan 套餐 key, 与 coding 推理 key 同一个)",
+    },
+  ],
+};
+
 export const PRESET_CHANNELS: readonly ChannelDescriptor[] = [
   DEEPSEEK_BALANCE,
   OPENCODE_GO,
   KIMI_CODING,
   ALIYUN_BAILIAN_TOKEN_PLAN,
   VOLCENGINE_ARK_CODING_PLAN,
+  ZAI_CODING,
 ];
 
 /** 按全路径 "platform/product" 查预置通道(通道树/引擎/测试连接共用) */

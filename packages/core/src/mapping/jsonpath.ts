@@ -33,7 +33,7 @@ export function evalJsonPathFirst(json: unknown, path: string): unknown {
 
 // ---- 管道过滤器白名单(§5.1: number/string/round/duration/iso_epoch) ----
 
-export type PipeFilter = "number" | "string" | "round" | "duration" | "iso_epoch";
+export type PipeFilter = "number" | "string" | "round" | "duration" | "iso_epoch" | "ms_epoch";
 
 /** ISO 8601(YYYY-MM-DDTHH:mm:ss[.fff…][Z|±HH[:]MM]) — 容忍任意毫秒小数精度与 Z/偏移时区 */
 const ISO_8601_RE =
@@ -74,6 +74,12 @@ const FILTERS: Record<PipeFilter, (v: unknown) => unknown> = {
     return Math.floor(
       Date.UTC(Number(Y), Number(Mo) - 1, Number(D), Number(H), Number(Mi) - offsetMin, Number(S), ms) / 1000,
     );
+  },
+  /** 毫秒 epoch(如 zai nextResetTime=1788092761239) → unix 秒; 数字直接 /1000 */
+  ms_epoch: (v) => {
+    const n = Number(v);
+    if (Number.isNaN(n)) throw new MappingError(`无法转 ms_epoch: ${typeof v}`);
+    return Math.floor(n / 1000);
   },
 };
 
