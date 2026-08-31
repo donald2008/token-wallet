@@ -1,5 +1,5 @@
 /**
- * L1 golden sample — volcengine-ark/coding-plan command 类第二实例 (D-043, 2026-08-31)
+ * L1 golden sample — volcengine-ark/coding-plan command 类第二实例 (D-044, 2026-08-31)
  *
  * fixture = 官方 arkcli(binary 内嵌 skill 文档 + pi-ark-quota 双源证实, 1.0.23):
  *   健康态: {"ok":true,"items":[{"product":"coding-plan","subscribed":true,
@@ -58,7 +58,7 @@ function runnerEnOent() {
     );
 }
 
-describe("volcengine-ark/coding-plan golden sample(D-043 三态)", () => {
+describe("volcengine-ark/coding-plan golden sample(D-044 三态)", () => {
   it("健康态: CodingPlan percent 已是 0-100, session/weekly/monthly 三窗, reset_at RFC3339 字符串 → 秒", async () => {
     const adapter = new VolcengineArkCodingPlanAdapter(runnerReturning({ stdout: HEALTHY, code: 0 }));
     const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
@@ -174,6 +174,16 @@ describe("healthCheck: arkcli auth status 判从未配置", () => {
     const adapter = new VolcengineArkCodingPlanAdapter(
       runnerReturning({ stdout: NEVER_CONFIGURED, code: 0 }),
     );
+    const res = await adapter.healthCheck(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+    expect(res.ok).toBe(false);
+    expect(res.setupHint).toContain("arkcli auth login volc-sso");
+  });
+
+  it("auth status body 无判别串但 logged_in=false → 走 logged_in 分支 ok=false + setup_hint", async () => {
+    // 钉死 REAL 判别字段 logged_in: body 不含 \"auth login\"/\"not configured\" 等判别串,
+    // 确保先命中的是解析 logged_in 分支而非 isAuthExpiredBody(对应 D-044 修后的真实字段判别)
+    const body = JSON.stringify({ auth_method: "none", hint: "SSO not set up on this machine", logged_in: false });
+    const adapter = new VolcengineArkCodingPlanAdapter(runnerReturning({ stdout: body, code: 0 }));
     const res = await adapter.healthCheck(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
     expect(res.ok).toBe(false);
     expect(res.setupHint).toContain("arkcli auth login volc-sso");

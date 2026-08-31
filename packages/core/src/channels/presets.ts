@@ -97,7 +97,7 @@ export const ALIYUN_BAILIAN_TOKEN_PLAN: ChannelDescriptor = {
 };
 
 /**
- * 火山方舟 Coding Plan(个人版): command 类第二实例(D-041 之后的 D-043, 2026-08-31)
+ * 火山方舟 Coding Plan(个人版): command 类第二实例(D-041 之后的 D-044, 2026-08-31)
  * arkcli 官方 CLI(@volcengine/ark-cli)包装, SSO 会话由 CLI 自管(volc-sso),
  * app 零凭据 → params_schema=[]。health_check 只判"从未配置"(auth status logged_in),
  * 会话死活由采集失败信号判定(D-041 源码结论同款)。

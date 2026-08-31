@@ -1,5 +1,5 @@
 /**
- * volcengine-ark/coding-plan 真实通道 — command 类(D-041 之后的第二实例, 2026-08-31)
+ * volcengine-ark/coding-plan 真实通道 — command 类第二实例(D-044, D-041 之后, 2026-08-31)
  *
  * arkcli(火山方舟官方, `npm i -g @volcengine/ark-cli`, 1.0.23 实测)包装。控制面
  * 会话由 CLI 自管(volc-sso SSO), app 不碰凭据文件 → params_schema=[]。
