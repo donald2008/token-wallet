@@ -4,7 +4,7 @@ import { globalHealth, sortProviders, tooltipSummary, type SortConfig } from "./
 import { getBootstrap, getSortConfig, getStoragePaths, persistConsent, setSortConfig as persistSortConfig, updateTrayStatus, winGetAlwaysOnTop, winSetAlwaysOnTop } from "./ipc";
 import { selectPanelProviders } from "./panelProviders";
 import type { ScenarioId } from "./mockData";
-import { useTheme } from "./theme";
+import { useTheme, THEME_CYCLE } from "./theme";
 import { TitleBar } from "./components/TitleBar";
 import { SideBar } from "./components/SideBar";
 import { ProviderCard } from "./components/ProviderCard";
@@ -231,6 +231,13 @@ export default function App() {
     setSettingsOpen(true);
   }, []);
 
+  // t_66b67453 契约2: 侧栏主题快切 = 沿 THEME_CYCLE 循环(system→light→dark→system);
+  // 与设置弹窗三态分段控件走同一 themeMode state(一处切换两处同步)
+  const onCycleTheme = useCallback(() => {
+    const idx = THEME_CYCLE.indexOf(themeMode);
+    setThemeMode(THEME_CYCLE[(idx + 1) % THEME_CYCLE.length]!);
+  }, [themeMode, setThemeMode]);
+
   const closeSettings = useCallback(() => {
     setSettingsOpen(false);
   }, []);
@@ -290,46 +297,52 @@ export default function App() {
 
   return (
     <div className="panel">
-      {/* D-038 左侧窄功能侧栏(全局动作: 添加/刷新/设置), 与面板同高常驻 */}
-      <SideBar
-        onAdd={openAddModal}
-        onRefresh={onRefresh}
-        onOpenSettings={openSettings}
-        refreshing={refreshing}
-      />
-      <div className="panel-main" data-testid="panel-main">
-        {visiblePersistError && (
-          // W3: 写盘失败顶部错误条(内存态仍可用, 可关闭; 恢复后同消息再失败会重弹)
-          <PersistErrorBar error={visiblePersistError} onDismiss={dismissPersistError} />
-        )}
-        <TitleBar health={health} tooltip={tooltip} pinned={pinned} onTogglePin={onTogglePin} />
-        {providers === null ? (
-          <LoadingState />
-        ) : collecting ? (
-          // P0-8: 已配置实例但快照未到 → "数据采集中", 不显示 EmptyState 误导
-          <CollectingState />
-        ) : providers.length === 0 ? (
-          <EmptyState onAdd={openAddProvider} />
-        ) : (
-          <main className="card-list" data-testid="card-list">
-            {/* D-039 落点指示线(拖动中显示): 绝对定位在插入边界 */}
-            {drag && indicatorY !== null && (
-              <div className="drop-line" data-testid="drop-line" style={{ top: indicatorY }} />
-            )}
-            {sortedCards.map((p) => (
-              <ProviderCard
-                key={p.provider_id}
-                p={p}
-                onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
-                dragHandle={makeHandleProps(p.provider_id)}
-                dragging={drag?.id === p.provider_id}
-                dragDy={drag ? drag.dy : 0}
-              />
-            ))}
-          </main>
-        )}
-        <LocalAgentSection />
-        {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}
+      {/* t_66b67453 契约1: 标题栏独占第一行(全宽) —— 用户原始诉求「侧栏从窗口最上沿
+          开始, 观感=侧栏把标题栏切短了」; 重排后侧栏从第二行左缘开始 */}
+      <TitleBar health={health} tooltip={tooltip} pinned={pinned} onTogglePin={onTogglePin} />
+      <div className="panel-body">
+        {/* D-038 左侧窄功能侧栏(全局动作), t_66b67453 契约2 增主题快切钮 */}
+        <SideBar
+          onAdd={openAddModal}
+          onRefresh={onRefresh}
+          onOpenSettings={openSettings}
+          refreshing={refreshing}
+          themeMode={themeMode}
+          onCycleTheme={onCycleTheme}
+        />
+        <div className="panel-main" data-testid="panel-main">
+          {visiblePersistError && (
+            // W3: 写盘失败顶部错误条(内存态仍可用, 可关闭; 恢复后同消息再失败会重弹)
+            <PersistErrorBar error={visiblePersistError} onDismiss={dismissPersistError} />
+          )}
+          {providers === null ? (
+            <LoadingState />
+          ) : collecting ? (
+            // P0-8: 已配置实例但快照未到 → "数据采集中", 不显示 EmptyState 误导
+            <CollectingState />
+          ) : providers.length === 0 ? (
+            <EmptyState onAdd={openAddProvider} />
+          ) : (
+            <main className="card-list" data-testid="card-list">
+              {/* D-039 落点指示线(拖动中显示): 绝对定位在插入边界 */}
+              {drag && indicatorY !== null && (
+                <div className="drop-line" data-testid="drop-line" style={{ top: indicatorY }} />
+              )}
+              {sortedCards.map((p) => (
+                <ProviderCard
+                  key={p.provider_id}
+                  p={p}
+                  onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
+                  dragHandle={makeHandleProps(p.provider_id)}
+                  dragging={drag?.id === p.provider_id}
+                  dragDy={drag ? drag.dy : 0}
+                />
+              ))}
+            </main>
+          )}
+          <LocalAgentSection />
+          {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}
+        </div>
       </div>
       {settingsOpen && (
         // 设置模态弹窗(P0-6): 半透明遮罩叠在面板上方, 点遮罩关闭; 弹层自身圆角+阴影(D-031 无边框窗口)

@@ -183,10 +183,24 @@ export class Scheduler {
    * 手动刷新 = 触发对应适配器立即同步(§3.1)。
    * 立即跑一次采集并走 onResult; 不改变既定节拍(下个周期仍按 interval 排)。
    * 与周期 tick 天然防重叠(run 内 state=running, 并发 tick 记 skipped)。
+   *
+   * t_66b67453 契约5: halted(auth_expired 停摆)不得拦截手动刷新 —— 用户在壳外
+   * 重新授权(如 `bl auth login --console`)后点 ⟳, 必须立即重探而不是 no-op。
+   * 此前 halted 直接 return: 卡片永远停在「待授权」, 只能重启 app 才恢复
+   * (重启重建调度器恰好绕过了这扇单程门)。停摆解除与 resume() 同语义
+   * (清 haltReason + 连败计数归零), 重探仍 auth_expired 会自然再次停摆 ——
+   * 代价一次受 timeout 约束的探针, 换取「外部凭据变更后手动刷新即生效」;
+   * 周期节拍不受影响(下一次周期仍由 run() 收尾按 interval/退避排)。
    */
   async refresh(id: string): Promise<void> {
     const rt = this.mustGet(id);
-    if (rt.state === "running" || rt.state === "halted") return;
+    if (rt.state === "running") return; // 在途: 防重叠(§3.2)
+    if (rt.state === "halted") {
+      rt.state = "idle";
+      rt.stats.state = "idle";
+      rt.stats.haltReason = undefined;
+      rt.stats.consecutiveFailures = 0;
+    }
     await this.run(rt);
   }
 

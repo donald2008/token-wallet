@@ -10,6 +10,16 @@ import type { AppSettings } from "./types";
 export type ThemeMode = AppSettings["theme"];
 export type EffectiveTheme = "light" | "dark";
 
+/** 主题快切循环(t_66b67453 契约2): 自动 → 浅色 → 深色 → 自动; 设置弹窗三态与快切同走此序 */
+export const THEME_CYCLE: readonly ThemeMode[] = ["system", "light", "dark"] as const;
+
+/** ThemeMode 中文标签(侧栏快切钮 title / aria-label 用, 与设置页文案同源) */
+export const THEME_LABEL: Record<ThemeMode, string> = {
+  system: "跟随系统",
+  light: "浅色",
+  dark: "深色",
+};
+
 const THEME_KEY = "token-wallet.theme.v1";
 
 function systemTheme(): EffectiveTheme {

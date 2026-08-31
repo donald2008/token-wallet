@@ -64,11 +64,11 @@ test("侧栏常驻三钮: ＋添加开向导弹窗 / ⚙设置开设置弹窗(�
 
   const sidebar = page.getByTestId("sidebar");
   await pwExpect(sidebar).toBeVisible();
-  // 顺序 上→下: 添加 / 刷新 / 设置(设置被弹性空隙推到底部)
+  // 顺序 上→下: 添加 / 刷新 / 主题快切 / 设置(t_66b67453 契约2; 快切+设置被弹性空隙推到底部)
   const ids = await sidebar.locator("button").evaluateAll((els) =>
     els.map((el) => (el as HTMLElement).dataset.testid),
   );
-  pwExpect(ids).toEqual(["sidebar-add", "refresh-btn", "settings-btn"]);
+  pwExpect(ids).toEqual(["sidebar-add", "refresh-btn", "theme-cycle-btn", "settings-btn"]);
   // 常驻: 鼠标在面板外也全显(与标题栏同口径, 无 hover 显隐)
   await page.mouse.move(2, 2);
   for (const id of ids) {
@@ -261,8 +261,73 @@ test("360px: 标题栏单行不换行 + 侧栏与内容区无横向溢出", asyn
       sidebarWidth: Math.round(sidebar.getBoundingClientRect().width),
     };
   });
+  // 360px: 标题栏单行不换行 + 侧栏与内容区无横向溢出 + 标题栏全宽(契约1)
   pwExpect(overflow.docOverflow).toBeLessThanOrEqual(0);
   pwExpect(overflow.mainOverflow).toBeLessThanOrEqual(0);
   pwExpect(overflow.listOverflow).toBeLessThanOrEqual(0);
   pwExpect(overflow.sidebarWidth).toBe(44);
+});
+
+test("t_66b67453 契约1: 标题栏横贯整行(全宽), 侧栏从第二行左缘开始", async ({ hostPage, page }) => {
+  void hostPage;
+  await page.setViewportSize({ width: 360, height: 600 });
+  await agree(page);
+
+  const geo = await page.evaluate(() => {
+    const panel = document.querySelector(".panel") as HTMLElement;
+    const titlebar = document.querySelector(".titlebar") as HTMLElement;
+    const sidebar = document.querySelector('[data-testid="sidebar"]') as HTMLElement;
+    const pr = panel.getBoundingClientRect();
+    const tr = titlebar.getBoundingClientRect();
+    const sr = sidebar.getBoundingClientRect();
+    return {
+      panelRight: pr.right,
+      titlebarRight: tr.right,
+      titlebarTop: tr.top,
+      sidebarTop: sr.top,
+      sidebarLeft: sr.left,
+      panelLeft: pr.left,
+    };
+  });
+
+  // 标题栏横贯整行: 右缘 = 面板右缘(不被 44px 侧栏切短)
+  pwExpect(Math.round(geo.titlebarRight)).toBe(Math.round(geo.panelRight));
+  // 标题栏第一行, 侧栏第二行: titlebar.top < sidebar.top(垂直堆叠生效)
+  pwExpect(geo.titlebarTop).toBeLessThan(geo.sidebarTop);
+  // 侧栏从面板左缘开始(第二行左缘)
+  pwExpect(Math.round(geo.sidebarLeft)).toBe(Math.round(geo.panelLeft));
+});
+
+test("t_66b67453 契约4: auth_expired 卡 setup_hint 复制钮 → 剪贴板 = 反引号内命令原文", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  await page.getByTestId("scenario-mixed").click();
+
+  const hintBtn = page.getByTestId("setup-hint").getByTestId("hint-copy-btn");
+  await pwExpect(hintBtn).toBeVisible();
+
+  await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__COPIED__ = null;
+    // navigator.clipboard 是只读 getter → defineProperty 覆盖原型属性
+    const nav = navigator as unknown as { clipboard: unknown };
+    Object.defineProperty(nav, "clipboard", {
+      value: {
+        writeText: async (t: string) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).__COPIED__ = t;
+        },
+      },
+      configurable: true,
+    });
+  });
+  await hintBtn.click();
+  await pwExpect(hintBtn).toHaveText("已复制");
+  const copied = await page.evaluate(() => (window as unknown as { __COPIED__: string }).__COPIED__);
+  pwExpect(copied).toBe("bl auth login --console");
+  // 1.5s 后还原
+  await pwExpect(hintBtn).toHaveText("复制", { timeout: 3000 });
 });

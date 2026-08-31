@@ -99,7 +99,8 @@ export function SettingsView({
             ))}
           </div>
           <p className="hint">
-            默认追随系统(prefers-color-scheme), 可在此覆盖(D-010)。标题栏不再放主题入口(D-038)。
+            默认追随系统(prefers-color-scheme), 可在此覆盖(D-010)。侧栏底部 ☀ 钮可快切循环
+            (t_66b67453 契约2), 与此处三档同走一个主题状态。
           </p>
         </section>
 

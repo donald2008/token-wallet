@@ -17,6 +17,24 @@ export function resetText(resetAt?: number, nowSec: number = Math.floor(Date.now
   return `${Math.round(s / 60)}分`;
 }
 
+/** 数字格式化: ≤1 位小数 + 去尾 .0(37.9415→"37.9", 40→"40"); 整数原样不进小数 */
+function fmt1(n: number): string {
+  const rounded = Math.round(n * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+/**
+ * 进度条压字文案(t_66b67453 契约6): percent 单位 used 走 fmt1 ——
+ * alyun 适配器 0-1 小数×100 引入浮点尾差(37.941548…%原样上屏), 显示层修,
+ * 数据层不动(原始 used 保留供 7 天速率计算); 非 percent 单位(48/100 计数制)不动。
+ */
+export function progressText(metric: Metric): string {
+  if (metric.unit === "percent") {
+    return `${fmt1(metric.used)}/${metric.limit ?? "—"}`;
+  }
+  return `${metric.used}/${metric.limit ?? "—"}`;
+}
+
 /** bars 模板微部件: 手写进度条 + 压字(D-002, 不引组件库/Chart.js)。
  * tightest: 该窗口是"最紧窗口"(bars 模板标红不置顶, §6.3)。 */
 export function ProgressBar({ metric, tightest = false }: { metric: Metric; tightest?: boolean }) {
@@ -38,9 +56,7 @@ export function ProgressBar({ metric, tightest = false }: { metric: Metric; tigh
         aria-valuemax={100}
       >
         <div className="progress-fill" data-health={health} style={{ width: `${pct}%` }} />
-        <div className="progress-text">
-          {metric.used}/{metric.limit ?? "—"}
-        </div>
+        <div className="progress-text">{progressText(metric)}</div>
       </div>
       <span className="bar-reset">{resetText(metric.reset_at)}</span>
     </div>

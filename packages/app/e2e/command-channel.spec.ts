@@ -87,6 +87,34 @@ test("command 通道: bl 缺失(真实语义) → 面板出 error 卡 + 安装 s
   await pwExpect(card).toContainText("安装");
 });
 
+test("command 通道: CLI 重新授权后点 ⟳ → 15s 内恢复(不重启 app)(t_66b67453 契约5)", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  // 1) 停摆制造: commandfail=1 → 前置一遍 CLI 安装失败(该 mock 只影响采集),
+  //    真停摆走 auth_expired: mock 桥无此态, 用 expired 场景卡替代验证 UI 侧 ⟳ 可达性;
+  //    调度器 halted 解除逻辑由 core scheduler.test.ts 双用例取证(本用例证 UI 链路)。
+  await agree(page);
+  await addBailianInstance(page);
+
+  const card = page.locator('[data-testid="provider-card"]').filter({ hasText: "阿里云百炼-Token Plan #1" });
+  await pwExpect(card).toBeVisible({ timeout: 10_000 });
+  // 等首轮采集稳态 ok(引擎 start 自带 refreshAll, 在途 run 会让 ⟳ 防重叠跳过)
+  await pwExpect(card).toHaveAttribute("data-health", "ok", { timeout: 10_000 });
+
+  // 2) 采集失败 → error 卡
+  await page.evaluate(() => localStorage.setItem("token-wallet.mock.commandfail", "1"));
+  await page.getByTestId("sidebar").getByTestId("refresh-btn").click();
+  await pwExpect(card).toContainText("采集失败", { timeout: 15_000 });
+
+  // 3) 用户在 CLI 完成修复(模拟: 撤掉失败标记) → 点 ⟳ 不重启 → 卡片恢复 ok
+  await page.evaluate(() => localStorage.removeItem("token-wallet.mock.commandfail"));
+  await page.getByTestId("sidebar").getByTestId("refresh-btn").click();
+  await pwExpect(card).toHaveAttribute("data-health", "ok", { timeout: 15_000 });
+  await pwExpect(card).toContainText("37.9"); // 健康 mock 值(37.9% → 文案一位小数)
+});
+
 test("command 通道: testConnection 走真实桥(成功态预览快照)", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);

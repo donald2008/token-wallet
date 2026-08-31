@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { providerHealth, statusBadge } from "../health";
 import type { HealthLevel, Metric, ProviderSnapshot, ProviderStatus } from "../types";
 import { ProviderCard } from "./ProviderCard";
@@ -145,6 +145,89 @@ describe("卡内删除钮(D-038)", () => {
     click(card.querySelector('[data-testid="card-del-kimi-code"]'));
     click(card.querySelector('[data-testid="card-confirm-del-kimi-code"]'));
     expect(removed).toEqual(["kimi-code"]);
+  });
+});
+
+// ---- t_66b67453 契约4: setup_hint 一键复制(反引号提取 + clipboard 降级 + 1.5s 反馈) ----
+describe("setup_hint 复制钮(契约4)", () => {
+  const hint = "请运行 `bl auth login --console` 重新授权";
+
+  function renderExpiredCard(p: ProviderSnapshot): HTMLElement {
+    return renderCard(p);
+  }
+
+  function clickCopy(card: HTMLElement): void {
+    click(card.querySelector('[data-testid="hint-copy-btn"]'));
+  }
+
+  it("auth_expired + setup_hint 卡渲染复制钮, 无 hint 不渲染", () => {
+    const withHint = renderCard({ ...snap("auth_expired"), setup_hint: hint });
+    expect(withHint.querySelector('[data-testid="hint-copy-btn"]')).toBeTruthy();
+    const noHint = renderCard(snap("auth_expired"));
+    expect(noHint.querySelector('[data-testid="hint-copy-btn"]')).toBeNull();
+  });
+
+  it("点击复制 = 反引号内完整命令原文(navigator.clipboard mock)", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const card = renderExpiredCard({ ...snap("auth_expired"), setup_hint: hint });
+    clickCopy(card);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith("bl auth login --console"); // 完整命令原文, 不带反引号/前后缀
+  });
+
+  it("成功反馈「已复制」1.5s 后还原(注入定时器)", async () => {
+    vi.useFakeTimers();
+    try {
+      const writeText = vi.fn(async () => undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+      const card = renderExpiredCard({ ...snap("auth_expired"), setup_hint: hint });
+      const btn = card.querySelector<HTMLButtonElement>('[data-testid="hint-copy-btn"]')!;
+      clickCopy(card);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(btn.textContent).toBe("已复制");
+      expect(btn.dataset.copied).toBe("true");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+      expect(btn.textContent).toBe("复制");
+      expect(btn.dataset.copied).toBe("false");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clipboard API 不可用 → 降级 execCommand('copy') 也能复制原文", async () => {
+    // 剪贴板写入直接拒绝(打包壳 file:// 常见) → 走 execCommand 降级
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn(async () => Promise.reject(new Error("denied"))) },
+    });
+    const exec = vi.fn(() => true);
+    document.execCommand = exec as unknown as typeof document.execCommand;
+    const card = renderExpiredCard({ ...snap("auth_expired"), setup_hint: hint });
+    clickCopy(card);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(exec).toHaveBeenCalledWith("copy");
+    expect(card.querySelector('[data-testid="hint-copy-btn"]')!.textContent).toBe("已复制");
+  });
+
+  it("hint 无反引号 → 复制整个 hint(有得复制好过没得复制)", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const card = renderExpiredCard({ ...snap("auth_expired"), setup_hint: "去控制台重新登录" });
+    clickCopy(card);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(writeText).toHaveBeenCalledWith("去控制台重新登录");
   });
 });
 

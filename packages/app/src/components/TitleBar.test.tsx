@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-// L1(D-038 信息架构 + t_05271be0/t_2ac39613 回归): 标题栏瘦身后只剩 图钉/最小化/关闭,
-// hover 显隐逻辑整体移除(CSS 无 toolbar-btn 淡出规则); 标题不断词换行 + 进度条对齐占位
-// 等既有 CSS 契约继续锁定(布局行为由 e2e boundingBox 兜底)。
+// L1(t_05271be0/t_2ac39613 回归 + t_66b67453 契约1): 标题栏瘦身后只剩 图钉/最小化/关闭,
+// hover 显隐逻辑整体移除(CSS 无 toolbar-btn 淡出规则); t_66b67453 契约1 起标题栏
+// .panel 内独占第一行(全宽), .panel 重排 column + panel-body 行布局锁定;
+// 标题不断词换行 + 进度条对齐占位等既有 CSS 契约继续锁定(布局行为由 e2e boundingBox 兜底)。
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { act } from "react";
@@ -102,10 +103,20 @@ describe("CSS 契约(D-038 + t_05271be0 #1/#2 回归)", () => {
   });
 
   it(".panel 横向布局 + .panel-main 可收缩(侧栏定宽, 内容区不横向溢出)", () => {
-    expect(ruleBlock(".panel")).toContain("flex-direction: row");
+    // t_66b67453 契约1: .panel 重排 column(标题栏全宽第一行) + .panel-body 行(侧栏|内容)
+    expect(ruleBlock(".panel")).toContain("flex-direction: column");
+    expect(ruleBlock(".panel-body")).toContain("flex-direction: row");
     const main = ruleBlock(".panel-main");
     expect(main).toContain("min-width: 0");
     expect(main).toContain("overflow: hidden");
+  });
+
+  it("标题栏全宽(t_66b67453 契约1): .panel 无 row 布局, 侧栏从第二行开始", () => {
+    // 旧布局的判别特征: .panel flex-direction: row(侧栏与标题栏同行)必须消失
+    expect(ruleBlock(".panel")).not.toContain("flex-direction: row");
+    // 拖拽区仍在标题栏整行(现 = 全宽), 侧栏保持 no-drag
+    expect(ruleBlock(".titlebar")).toContain("-webkit-app-region: drag");
+    expect(ruleBlock(".sidebar")).toContain("-webkit-app-region: no-drag");
   });
 
   it(".bar-row 恒有 2px 透明左缘 + 4px 左 padding(对齐占位)", () => {

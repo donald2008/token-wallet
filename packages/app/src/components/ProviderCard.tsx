@@ -4,6 +4,65 @@ import { providerHealth, statusBadge } from "../health";
 import { getTemplateFor } from "../templates/registry";
 import type { DragHandleProps } from "../useCardDragSort";
 
+/**
+ * 从 setup_hint 提取可复制的完整命令原文(契约4): 提取首个 `…` 反引号包裹段;
+ * 无反引号时退回整个 hint(hint 全文也可复制, 比没得复制强)。
+ * core 侧既有形态: "运行 `bl auth login --console` 重新授权(控制台会话由 CLI 管理)"。
+ */
+export function extractCommandFromHint(hint: string): string {
+  const m = /`([^`]+)`/.exec(hint);
+  return m?.[1]?.trim() || hint.trim();
+}
+
+/** 复制到剪贴板: navigator.clipboard 优先, Electron 壳内失败(file:// 等)降级 execCommand */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/** setup_hint 复制小钮(契约4): 成功反馈「已复制」1.5s 后还原 */
+function HintCopyButton({ hint }: { hint: string }) {
+  const [copied, setCopied] = useState(false);
+  const command = extractCommandFromHint(hint);
+  const onCopy = () => {
+    void copyText(command).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <button
+      type="button"
+      className="btn btn-sm hint-copy-btn"
+      data-testid="hint-copy-btn"
+      data-copied={copied}
+      title={`复制命令: ${command}`}
+      aria-label={copied ? "已复制" : `复制命令 ${command}`}
+      onClick={onCopy}
+    >
+      {copied ? "已复制" : "复制"}
+    </button>
+  );
+}
+
 /** 品牌色块(§6.1 第 4 条): 16px 平台识别色, 正式版替换为内置单色 SVG 品牌图标 */
 const BRAND_COLORS: Record<string, string> = {
   deepseek: "#4d6bfe",
@@ -48,7 +107,9 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
       </div>
       {p.status === "auth_expired" && p.setup_hint && (
         <div className="setup-hint" data-testid="setup-hint">
-          ⚑ {p.setup_hint}
+          <span className="setup-hint-text">⚑ {p.setup_hint}</span>
+          {/* t_66b67453 契约4: 一键复制授权命令(反引号内完整原文), 免手抄易错 */}
+          <HintCopyButton hint={p.setup_hint} />
         </div>
       )}
       <div className="card-error-note">

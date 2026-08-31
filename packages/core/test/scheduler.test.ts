@@ -226,6 +226,65 @@ describe("调度器 — auth_expired 停摆", () => {
     expect(sch.stats("a").haltReason).toBe("re-login");
     sch.stopAll();
   });
+
+  // t_66b67453 契约5: 用户真机复验 — command 通道 auth_expired 停摆后, 用户在 CLI
+  // 重新授权(bl auth login --console), 点 ⟳ 必须立即重探而非 no-op。
+  // 修复前 refresh() 对 halted 直接 return, 卡片永远「待授权」只能重启 app。
+  it("手动刷新解除停摆: halted 后 refresh() 立即重探, 凭据已恢复则成功并回正常节拍", async () => {
+    const sch = makeScheduler();
+    let expired = true;
+    const fn = vi.fn(() =>
+      expired
+        ? Promise.resolve<ProviderSnapshot>({
+            ...okSnap(),
+            status: "auth_expired",
+            setup_hint: "bl auth login --console",
+            metrics: [],
+          })
+        : Promise.resolve(okSnap()),
+    );
+    sch.add({ id: "a", fetch: fn, intervalMs: 1_000, kind: "command" });
+    sch.start("a");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sch.stats("a").state).toBe("halted");
+
+    // 用户在 CLI 完成重新授权(壳外凭据落盘, 调度器无感知) → 点 ⟳
+    expired = false;
+    await sch.refresh("a");
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(sch.stats("a").state).toBe("idle");
+    expect(sch.stats("a").haltReason).toBeUndefined();
+    expect(sch.stats("a").successes).toBe(1);
+    expect(sch.stats("a").nextRunAt).toBe(Date.now() + 1_000); // 回正常周期
+
+    // 时间流逝后周期采集正常运转(不是一次性救回)
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fn).toHaveBeenCalledTimes(3);
+    sch.stopAll();
+  });
+
+  it("手动刷新重探仍 auth_expired → 自然回到停摆(带最新 hint)", async () => {
+    const sch = makeScheduler();
+    const fn = vi.fn(() =>
+      Promise.resolve<ProviderSnapshot>({
+        ...okSnap(),
+        status: "auth_expired",
+        setup_hint: "bl auth login --console",
+        metrics: [],
+      }),
+    );
+    sch.add({ id: "a", fetch: fn, kind: "command" });
+    sch.start("a");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sch.stats("a").state).toBe("halted");
+
+    // 凭据未真正恢复, 用户点 ⟳ → 重探一次, 仍停摆(不静默装好)
+    await sch.refresh("a");
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(sch.stats("a").state).toBe("halted");
+    expect(sch.stats("a").haltReason).toBe("bl auth login --console");
+    sch.stopAll();
+  });
 });
 
 describe("调度器 — 全异步并发/故障隔离", () => {

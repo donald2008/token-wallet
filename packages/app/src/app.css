@@ -26,8 +26,10 @@ body {
 .panel {
   position: relative; /* 设置弹窗 overlay 的定位容器(P0-6) */
   display: flex;
-  /* D-038: 横向布局 = 左侧窄功能侧栏 + 内容区(标题栏/卡片区/本地 Agent) */
-  flex-direction: row;
+  /* t_66b67453 契约1: 纵向布局 = 标题栏独占第一行(全宽) + panel-body(侧栏|内容区)。
+     用户原始诉求「侧栏 44px 列从窗口最上沿开始, 观感=侧栏把标题栏切短了」——
+     重排后侧栏从第二行左缘开始, 标题栏横贯整行 */
+  flex-direction: column;
   height: calc(100% - 16px);
   width: calc(100% - 16px);
   margin: 8px;
@@ -37,7 +39,17 @@ body {
   overflow: hidden;
 }
 
-/* D-038 内容区: 面板除侧栏外的纵向主区(标题栏 + 卡片区 + 本地 Agent + dev 场景条) */
+/* t_66b67453 契约1: 标题栏之下的主体行 = 左侧窄功能侧栏 + 内容区(横向) */
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+/* D-038 内容区: panel-body 除侧栏外的纵向主区(卡片区/本地 Agent/dev 场景条);
+   标题栏已上移独立成行(契约1) */
 .panel-main {
   flex: 1;
   /* 允许内容区收缩 = 标题栏截断/卡片区不横向溢出的前提(侧栏定宽 44px 优先) */
@@ -350,7 +362,27 @@ body {
   padding: 4px 8px;
   margin-top: 4px;
   line-height: 1.5;
+  /* t_66b67453 契约4: 提示文字 + 复制小钮同行(文字可折行, 钮不被挤压) */
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.setup-hint-text {
+  flex: 1;
   word-break: break-all;
+}
+
+/* 复制小钮: 紧凑、可折行区右侧; 成功态绿调反馈(复用 D-016 双 token, 不新增色) */
+.hint-copy-btn {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  line-height: 1.4;
+}
+
+.hint-copy-btn[data-copied="true"] {
+  color: var(--ok-fg);
+  border-color: var(--ok);
 }
 
 /* ---- 本地 Agent 区(§6.5): 默认折叠占位(P3) ---- */
