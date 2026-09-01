@@ -109,13 +109,14 @@ pnpm build:win    # = pnpm -r build + electron-builder NSIS
 
 **Q：百炼（bl）怎么授权？为什么要装 CLI？**
 百炼的用量查询只认控制台登录会话（官方 CLI `bl` 自管），不接受 API Key。
-app 添加百炼实例时会检测 `bl` 是否在 PATH，缺失可点「一键安装」按钮（跑官方安装脚本，
-无需 Node）；装好后执行 `bl auth login --console` 完成浏览器登录。
+app 添加百炼实例时会检测 `bl` 是否在 PATH，缺失时卡片会显示安装指引，
+按指引安装官方 CLI 并重启应用；装好后执行 `bl auth login --console` 完成浏览器登录。
 控制台会话由服务端控制时效（经验数天），过期后卡片转黄并提示重新登录。
 
 **Q：火山方舟（arkcli）怎么授权？**
 方舟用官方 CLI 的 SSO 设备码两段式登录：`arkcli auth login volc-sso --no-browser`，
-按提示在浏览器完成验证。会话过期后卡片转黄并提示重新登录。CLI 由 app 检测并支持一键安装。
+按提示在浏览器完成验证。CLI 缺失时卡片会给出 `npm i -g @volcengine/ark-cli` 安装指引，
+手动安装并重启应用即可。会话过期后卡片转黄并提示重新登录。
 
 **Q：面板显示黄色/红色卡片？**
 黄 = 需要关注（额度偏低或凭据过期，卡片上有具体修复命令可一键复制）；
