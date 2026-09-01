@@ -978,6 +978,30 @@ body {
   font-size: 12px;
 }
 
+/* D-046: 关于区更新行 — 版本号 + 状态/按钮, 低调一行不占显眼位 */
+.about-update {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.about-version {
+  color: var(--fg-dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.updater-state {
+  color: var(--fg-dim);
+  font-size: 12px;
+}
+.updater-state[data-updater-status="downloading"] {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.updater-error {
+  color: var(--bad-fg);
+}
+
 /* 树形通道选择器(D-025) */
 .channel-tree {
   display: flex;

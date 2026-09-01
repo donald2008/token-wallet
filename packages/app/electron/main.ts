@@ -18,6 +18,7 @@
  *   返回 {status, body 脱敏}, 非 2xx 不抛由引擎分类 — 对齐旧 Rust 实现)
  */
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, Tray } from "electron";
+import { autoUpdater } from "electron-updater";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import YAML from "yaml";
@@ -27,6 +28,7 @@ import { SafeStorageLike, deleteSecret, getSecret, setSecret } from "./keyring";
 import { deriveStoragePaths, type StoragePaths } from "./paths";
 import { batch, closeAll, exec, query } from "./sqlite";
 import { runCommandFetch, type CommandRunPayload } from "./command-run";
+import { AppUpdaterController } from "./updater";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
@@ -357,6 +359,32 @@ function registerIpc(): void {
   ipcMain.handle("command_run", (_event, payload: CommandRunPayload | undefined) =>
     runCommandFetch(payload ?? {}),
   );
+
+  // ---- D-046: 自动更新三通道(状态机在 updater.ts, node vitest 直测) ----
+  // updater_check: 查当前态+触发检查; updater_download: 用户显式下载(进度走 updater_event);
+  // updater_install: quitAndInstall(仅 ready 态生效)。dev 下三通道恒 unavailable。
+  ipcMain.handle("updater_check", () => appUpdater.check());
+  ipcMain.handle("updater_download", () => appUpdater.download());
+  ipcMain.handle("updater_install", () => {
+    appUpdater.install();
+  });
+}
+
+/** D-046: updater 控制器(ready 前创建; 事件推当前窗口渲染层) */
+let appUpdater: AppUpdaterController;
+
+function setupUpdater(): void {
+  appUpdater = new AppUpdaterController({
+    updater: autoUpdater,
+    isPackaged: app.isPackaged,
+    emit: (event) => {
+      mainWindow?.webContents.send("updater_event", event);
+    },
+  });
+  // 启动静默 CHECK ONLY(D-046): 只发现不下载, 下载/安装永远用户显式触发
+  if (app.isPackaged) {
+    void appUpdater.check();
+  }
 }
 
 // ---------------- 生命周期 ----------------
@@ -368,6 +396,7 @@ if (!gotLock) {
 } else {
   app.on("second-instance", () => showMainWindow());
   app.whenReady().then(() => {
+    setupUpdater();
     registerIpc();
     createWindow();
     createTray();

@@ -311,3 +311,62 @@ export async function winSetAlwaysOnTop(enabled: boolean): Promise<void> {
     /* ignore */
   }
 }
+
+// ---------------- D-046: 自动更新(三 IPC + 主进程推送事件) ----------------
+
+/** updater 状态(SettingsView 关于区四态渲染的契约类型, 与主进程 UpdaterEvent 对齐) */
+export interface UpdaterState {
+  status: "unavailable" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error";
+  /** available/ready: 目标版本号 */
+  version?: string;
+  /** downloading: 0~100 */
+  percent?: number;
+  /** error: 主进程脱敏消息 */
+  message?: string;
+}
+
+/** 扩展桥形态: preload D-046 起带 onUpdaterEvent; e2e mock 同形态注入 */
+interface TokenWalletBridgeV2 {
+  tokenWallet?: {
+    invoke?: <T>(channel: string, payload?: Record<string, unknown>) => Promise<T>;
+    onUpdaterEvent?: (callback: (event: UpdaterState) => void) => void;
+  };
+}
+
+function bridgeV2(): TokenWalletBridgeV2 | null {
+  if (typeof window === "undefined") return null;
+  return window as unknown as TokenWalletBridgeV2;
+}
+
+/** 订阅主进程 updater_event 推送(下载进度等); 无桥/mock 未实现 → no-op */
+export function onUpdaterEvent(callback: (event: UpdaterState) => void): () => void {
+  const bridge = bridgeV2()?.tokenWallet;
+  if (typeof bridge?.onUpdaterEvent === "function") {
+    bridge.onUpdaterEvent(callback);
+    return () => {
+      // ipcRenderer.on 无配对 off 暴露(preload 未透出), 订阅生命周期=页面级;
+      // SettingsView 挂载一次不重挂, 泄漏面为零
+    };
+  }
+  return () => {};
+}
+
+/** 查 updater 状态并触发检查(dev/未打包 → unavailable) */
+export async function updaterCheck(): Promise<UpdaterState> {
+  const viaHost = await hostInvoke<UpdaterState>("updater_check");
+  if (viaHost) return viaHost;
+  return { status: "unavailable" };
+}
+
+/** 用户显式下载(进度走 onUpdaterEvent 推送; 完成态 ready 由事件或本返回值落地) */
+export async function updaterDownload(): Promise<UpdaterState> {
+  const viaHost = await hostInvoke<UpdaterState>("updater_download");
+  if (viaHost) return viaHost;
+  return { status: "unavailable" };
+}
+
+/** 重启安装(仅 ready 态; 浏览器降级 no-op) */
+export async function updaterInstall(): Promise<void> {
+  const viaHost = hostInvoke<void>("updater_install");
+  if (viaHost) await viaHost;
+}

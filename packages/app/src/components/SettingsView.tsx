@@ -1,7 +1,18 @@
 import { useEffect, useState } from "react";
 import type { ThemeMode } from "../theme";
 import type { SortConfig, SortDir, SortKey } from "../health";
-import { getStoragePaths, getLaunchAtLogin, setLaunchAtLogin, type StoragePaths } from "../ipc";
+import {
+  getBootstrap,
+  getStoragePaths,
+  getLaunchAtLogin,
+  setLaunchAtLogin,
+  onUpdaterEvent,
+  updaterCheck,
+  updaterDownload,
+  updaterInstall,
+  type StoragePaths,
+  type UpdaterState,
+} from "../ipc";
 import { BrandLogo } from "./brand-logos";
 
 const THEME_OPTIONS: { id: ThemeMode; label: string }[] = [
@@ -53,11 +64,31 @@ export function SettingsView({
 }: Props) {
   const [storagePaths, setStoragePaths] = useState<StoragePaths | null>(null);
   const [autoStart, setAutoStart] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [updater, setUpdater] = useState<UpdaterState | null>(null);
 
   // 存储路径(D-019) + 开机自启(D-024), 默认关
   useEffect(() => {
     void getStoragePaths().then(setStoragePaths);
     void getLaunchAtLogin().then(setAutoStart);
+  }, []);
+
+  // D-046: 当前版本(get_bootstrap) + updater 状态初始化 + 主进程事件订阅
+  useEffect(() => {
+    let disposed = false;
+    void getBootstrap().then((b) => {
+      if (!disposed) setAppVersion(b.version);
+    });
+    void updaterCheck().then((state) => {
+      if (!disposed) setUpdater(state);
+    });
+    const off = onUpdaterEvent((event) => {
+      if (!disposed) setUpdater(event);
+    });
+    return () => {
+      disposed = true;
+      off();
+    };
   }, []);
 
   return (
@@ -184,9 +215,88 @@ export function SettingsView({
             <span className="about-name">token-wallet</span>
             <span className="about-tag">AI 套餐/额度桌面仪表盘</span>
           </div>
+          <div className="about-update" data-testid="updater-area">
+            <span className="about-version" data-testid="about-version">
+              {appVersion ? `v${appVersion}` : "…"}
+            </span>
+            <UpdaterControl state={updater} />
+          </div>
           <p className="hint">内置单色品牌图标, 离线可渲染(currentColor 随主题自适应)。</p>
         </section>
       </div>
     </div>
   );
+}
+
+/**
+ * D-046: 更新控件 — 按钮文案由状态机驱动, 零内部状态;
+ * 主进程默认 autoDownload=false, 下载与安装永远由这里的点击显式触发。
+ */
+function UpdaterControl({ state }: { state: UpdaterState | null }) {
+  if (!state || state.status === "unavailable") {
+    // dev / 更新源不可用: 低调展示, 不给不可用的按钮
+    return (
+      <span className="updater-state" data-testid="updater-state" data-updater-status={state?.status ?? "unavailable"}>
+        更新功能仅安装版可用
+      </span>
+    );
+  }
+  switch (state.status) {
+    case "checking":
+      return (
+        <span className="updater-state" data-testid="updater-state" data-updater-status="checking">
+          正在检查更新…
+        </span>
+      );
+    case "up-to-date":
+      return (
+        <button
+          type="button"
+          className="btn"
+          data-testid="updater-check-btn"
+          onClick={() => void updaterCheck()}
+        >
+          检查更新
+        </button>
+      );
+    case "available":
+      return (
+        <button
+          type="button"
+          className="btn btn-primary"
+          data-testid="updater-download-btn"
+          onClick={() => void updaterDownload()}
+        >
+          更新到 v{state.version ?? "?"}
+        </button>
+      );
+    case "downloading":
+      return (
+        <span
+          className="updater-state"
+          data-testid="updater-state"
+          data-updater-status="downloading"
+          aria-live="polite"
+        >
+          正在下载 {state.percent ?? 0}%
+        </span>
+      );
+    case "ready":
+      return (
+        <button
+          type="button"
+          className="btn btn-primary"
+          data-testid="updater-install-btn"
+          onClick={() => void updaterInstall()}
+        >
+          重启安装 v{state.version ?? "?"}
+        </button>
+      );
+    case "error":
+      return (
+        <span className="updater-state updater-error" data-testid="updater-state" data-updater-status="error">
+          更新失败, 稍后重试
+        </span>
+      );
+  }
 }

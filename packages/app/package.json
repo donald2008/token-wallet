@@ -1,7 +1,7 @@
 {
   "name": "@token-wallet/app",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "token-wallet 桌面部件壳 — Electron + React 19 (托盘 + 弹出面板 + 主题)",
   "type": "module",
   "main": "dist-electron/main.cjs",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@token-wallet/core": "workspace:*",
+    "electron-updater": "^6.6.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "yaml": "^2.8.0",
@@ -69,6 +70,10 @@
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
       "artifactName": "token-wallet_${version}_setup.${ext}"
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "http://10.200.1.88:8889/token-wallet/"
     }
   }
 }

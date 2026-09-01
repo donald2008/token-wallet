@@ -157,7 +157,7 @@ command 类健康检查: 跑通道定义的 health_check 命令(如 `bl auth sta
 | `command` | `COMMAND_ADAPTERS[channel]`(core channels/aliyun-bailian.ts) | **主进程 command_run 桥**: renderer 经 `window.tokenWallet.invoke("command_run", {channel, descriptor, instance})`, 主进程 handler 内 `COMMAND_ADAPTERS[channel]()`(缺省 runner=**真实 spawn**) 执行 fetchSnapshot, 返回 ProviderSnapshot |
 | 两者都缺 | 显式 `unsupported` 卡(P0-8, 不静默) | — |
 
-**IPC 名单登记(D-033 搬迁不变量, 新增必须登记)**: `get_bootstrap` / `instances_load` / `instances_save` / `record_consent` / `keyring_get|set|delete` / `http_get_json` / `sqlite_batch|exec|query` / `get_storage_paths` / `update_tray_status` / `win_minimize` / `win_close` / `win_get_always_on_top` / `win_set_always_on_top` / `get_sort_config` / `set_sort_config` / **`command_run`(D-042 新增)**。
+**IPC 名单登记(D-033 搬迁不变量, 新增必须登记)**: `get_bootstrap` / `instances_load` / `instances_save` / `record_consent` / `keyring_get|set|delete` / `http_get_json` / `sqlite_batch|exec|query` / `get_storage_paths` / `update_tray_status` / `win_minimize` / `win_close` / `win_get_always_on_top` / `win_set_always_on_top` / `get_sort_config` / `set_sort_config` / **`command_run`(D-042 新增)** / **`updater_check` / `updater_download` / `updater_install`(D-046 新增; 下载进度走 `updater_event` 单向推送 + preload `onUpdaterEvent` 事件桥, 不占 invoke 名单)**。
 
 **spawn 为什么必须走主进程**: renderer 是 vite bundle, 静态 import `node:child_process` 不可行(P0-4 同族); core `adapters.ts` 的 spawn 逻辑在 Node 侧, 主进程 handler 内调用零风险。renderer 侧只读 `COMMAND_ADAPTERS` 判断通道是否注册(vite 可打包, node:child_process 动态 import 被 externalize), 不执行 spawn。浏览器 dev 无桌面桥时 commandRun 返回 null → 引擎转显式 error 快照(「需桌面壳执行」, 非 unsupported 语义)。
 

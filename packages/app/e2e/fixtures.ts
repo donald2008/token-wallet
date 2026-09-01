@@ -113,6 +113,26 @@ const ipcMocks: Record<string, IpcHandler> = {
   },
   get_launch_at_login: () => false,
   set_launch_at_login: () => null,
+  // ---- D-046: updater 三通道 + 事件桥(localStorage token-wallet.mock.updater 存状态;
+  // 测试用 seedUpdaterState() 注入目标态, 覆盖四态渲染断言) ----
+  updater_check: () => {
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.updater");
+      if (raw) return JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return { status: "up-to-date" };
+  },
+  updater_download: () => {
+    try {
+      localStorage.setItem("token-wallet.mock.updater", JSON.stringify({ status: "downloading", percent: 10 }));
+    } catch {
+      /* ignore */
+    }
+    return { status: "downloading", percent: 10 };
+  },
+  updater_install: () => null,
   // ---- P0-5 真实链路(状态存浏览器全局, 见文件头警告) ----
   // ⚠️ keyring 用 localStorage(P0-7 起): 真 OS 钥匙串跨重启存活, reload 后实例
   //    resolveCredential 仍要能拿到 secret, 才能验证"重启后实例仍在且出数"。
@@ -388,11 +408,18 @@ export const test = base.extend<{ hostPage: Page }>({
     await page.addInitScript(`(() => {
       const handlers = {\n${entries}\n};
       window.__capturedInvokes = [];
+      window.__updaterListeners = [];
+      window.__pushUpdaterEvent = (event) => {
+        for (const cb of window.__updaterListeners) cb(event);
+      };
       window.tokenWallet = {
         invoke: (channel, payload) => {
           window.__capturedInvokes.push({ cmd: channel, args: payload });
           const h = handlers[channel];
           return Promise.resolve(h ? h(payload) : null);
+        },
+        onUpdaterEvent: (callback) => {
+          window.__updaterListeners.push(callback);
         },
       };
     })()`);
@@ -421,6 +448,19 @@ export async function getCapturedInvokes(
       (window as unknown as { __capturedInvokes?: { cmd: string; args?: Record<string, unknown> }[] })
         .__capturedInvokes ?? [],
   );
+}
+
+/**
+ * D-046: 注入 updater 状态(渲染层走 ipc.ts updaterCheck 读 mock)。
+ * state = UpdaterState 子集({status, version?, percent?}); 用 page.reload() 后重新挂载生效。
+ */
+export async function seedUpdaterState(
+  page: import("@playwright/test").Page,
+  state: Record<string, unknown>,
+): Promise<void> {
+  await page.evaluate((s) => {
+    localStorage.setItem("token-wallet.mock.updater", JSON.stringify(s));
+  }, state);
 }
 
 /**
