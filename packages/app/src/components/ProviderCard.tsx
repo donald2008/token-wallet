@@ -111,6 +111,7 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
       <div className="card-error-note">
         {t("card.lastUpdate", { ago: agoText(p.fetched_at) })}
         {p.alerts.length > 0 ? ` — ${p.alerts.map((a) => a.message).join("; ")}` : ""}
+        {p.error_message && p.error_message !== p.alerts.map((a) => a.message).join("; ") ? ` · ${p.error_message}` : ""}
       </div>
     </div>
   );
