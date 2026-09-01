@@ -327,6 +327,33 @@ describe("Windows spawn 适配(D-041: .cmd shim / CVE-2024-27980 / 黑框)", () 
     expect(plan.args).toEqual(ARK_USAGE_ARGS);
     expect(plan.windowsHide).toBe(false);
   });
+
+  it("win32 + %APPDATA%\\npm 命中 → cmd /c 绝对路径 .cmd(绕 explorer PATH 快照, 2026-09-01 真机)", () => {
+    const env = { APPDATA: "C:\\Users\\Donald\\AppData\\Roaming", USERPROFILE: "C:\\Users\\Donald" };
+    const exists = (p: string) => p === "C:\\Users\\Donald\\AppData\\Roaming\\npm\\arkcli.cmd";
+    const plan = buildSpawnPlan(ARK_USAGE_CMD, ARK_USAGE_ARGS, "win32", env, exists);
+    expect(plan.args[1]).toBe("C:\\Users\\Donald\\AppData\\Roaming\\npm\\arkcli.cmd");
+    expect(plan.command).toBe("cmd");
+  });
+
+  it("win32 + 第一候选缺失但 npm-global 命中 → 用第二候选", () => {
+    const env = { APPDATA: "C:\\Users\\X\\AppData\\Roaming", USERPROFILE: "C:\\Users\\X" };
+    const exists = (p: string) => p === "C:\\Users\\X\\npm-global\\arkcli.cmd";
+    const plan = buildSpawnPlan(ARK_USAGE_CMD, ARK_USAGE_ARGS, "win32", env, exists);
+    expect(plan.args[1]).toBe("C:\\Users\\X\\npm-global\\arkcli.cmd");
+  });
+
+  it("win32 + 两候选都缺 → 回退原命令(PATH 解析, bl 等系统 PATH 场景不回归)", () => {
+    const env = { APPDATA: "C:\\Users\\X\\AppData\\Roaming", USERPROFILE: "C:\\Users\\X" };
+    const plan = buildSpawnPlan(ARK_USAGE_CMD, ARK_USAGE_ARGS, "win32", env, () => false);
+    expect(plan.args[1]).toBe("arkcli");
+  });
+
+  it("非 win32 绝不探测(linux 直接原命令)", () => {
+    const env = { APPDATA: "C:\\x\\AppData\\Roaming", USERPROFILE: "C:\\x" };
+    const plan = buildSpawnPlan(ARK_USAGE_CMD, ARK_USAGE_ARGS, "linux", env, () => true);
+    expect(plan.command).toBe("arkcli");
+  });
 });
 
 describe("isShellCommandNotFound(win32 包壳下 CLI 缺失分类, D-041 round2)", () => {

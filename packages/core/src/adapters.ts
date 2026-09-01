@@ -16,6 +16,7 @@ import type { ProviderSnapshot } from "./schema.js";
 import type { FetchContext } from "./scheduler.js";
 import type { AdapterContext, GenericHttpMapping, InstanceConfig } from "./generic-http.js";
 import { GenericHttpAdapter } from "./generic-http.js";
+import { existsSync } from "node:fs";
 export { GenericHttpAdapter } from "./generic-http.js";
 export type {
   AdapterContext,
@@ -85,15 +86,43 @@ export function isShellCommandNotFound(res: CommandRunResult): boolean {
  * - windowsHide: true 防命令窗口黑框闪烁
  * - 非 Windows 直接 spawn 原命令
  */
+/**
+ * win32 npm 全局命令探测(2026-09-01 真机实锤): token-wallet 从 explorer 启动时进程 PATH
+ * 是登录快照, 不含 `%APPDATA%\npm`(npm 全局 prefix 默认位) → `cmd /c arkcli` 找不到。
+ * 此处按 npm 全局两默认位探测 `.cmd` shim, 命中即用绝对路径 spawn, 不依赖进程 PATH。
+ * 顺序: `%APPDATA%\npm`(npm 默认 prefix) → `%USERPROFILE%\npm-global`(D-023/nvm 习惯位)。
+ * 全未命中返回原命令(cmd /c 走 PATH 解析, 兼容 bl 等装在系统 PATH 的 CLI)。
+ */
+export function resolveCommandAbsPath(
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (p: string) => boolean = existsSync,
+): string {
+  if (platform !== "win32") return command;
+  // win32 路径显式反斜杠拼接(不用 path.join: Linux CI 上 join 会用正斜杠, 与 Windows 候选路径不符)
+  const candidates = [
+    env.APPDATA ? `${env.APPDATA}\\npm\\${command}.cmd` : "",
+    env.USERPROFILE ? `${env.USERPROFILE}\\npm-global\\${command}.cmd` : "",
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (exists(candidate)) return candidate;
+  }
+  return command;
+}
+
 export function buildSpawnPlan(
   command: string,
   args: string[],
   platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (p: string) => boolean = existsSync,
 ): { command: string; args: string[]; windowsHide: boolean } {
   if (platform === "win32") {
     return {
       command: "cmd",
-      args: ["/c", command, ...args],
+      // win32 命中 npm 全局探测 → 绝对路径 .cmd, 绕开 PATH 快照缺失
+      args: ["/c", resolveCommandAbsPath(command, platform, env, exists), ...args],
       windowsHide: true,
     };
   }
