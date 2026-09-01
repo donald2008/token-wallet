@@ -1,3 +1,5 @@
+<div align="center">
+
 # token-wallet
 
 把各家 AI Coding Plan 的窗口配额与按量余额，收进一个一瞥可读的 Windows 桌面部件。
@@ -13,6 +15,8 @@ token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Elec
 | Dark | Light |
 |------|-------|
 | ![dark](docs/screenshots/panel-dark.png) | ![light](docs/screenshots/panel-light.png) |
+
+</div>
 
 ## 解决什么问题
 
@@ -72,6 +76,14 @@ token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Elec
 > MiniMax、美团 LongCat、opencode zen 按量余额在规划中（见 docs/DESIGN.md §5.2）。
 > 接新通道 = 通道目录声明式注册，映射零代码（标准接口）；复杂接口用 TS 适配器。
 
+通道级前置：两个 CLI 通道需要额外装官方 CLI（app 内卡片会给出安装指引），
+其余通道填 API Key 即用：
+
+| 通道 | 额外依赖 | 授权方式 |
+|------|---------|---------|
+| 阿里云百炼 | `bl` CLI | `bl auth login --console` 浏览器登录一次 |
+| 火山方舟 | `arkcli` CLI（`npm i -g @volcengine/ark-cli`） | `arkcli auth login volc-sso --no-browser` 设备码登录 |
+
 ## 仓库结构
 
 ```text
@@ -105,7 +117,15 @@ https://gitee.com/ITEater/token-wallet/releases/download/v0.2.0/token-wallet_0.2
 
 ### 从源码运行
 
-要求 Node.js ≥ 22（pnpm 由 corepack 自动对齐，无原生模块、无需任何 rebuild）：
+前置依赖（任一形态都需要）：
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| Node.js | ≥ 22 | 运行 / 构建（pnpm 由 corepack 自动对齐） |
+| pnpm | ≥ 9（corepack 自动） | 包管理 |
+| Windows 10/11 x64 | — | 桌面部件运行平台 |
+
+无需原生模块编译，无 Rust / Visual Studio / WebView2 工具链。
 
 ```bash
 git clone git@gitee.com:ITEater/token-wallet.git
@@ -175,9 +195,21 @@ SQLite。应用无任何遥测/上报代码，网络请求只有你在设置页�
 
 ## Roadmap
 
-- 本地 Agent token 消耗视图 + 「云 × 本地」对比（MCP 数据面，规划中）
-- 更多通道（MiniMax / 美团 LongCat / opencode zen 余额，见 docs/DESIGN.md §5.2）
-- 代码签名、CI、GitHub 镜像
+### 近期
+
+- MiniMax 通道（Token Plan 窗口制 + 按量余额双形态）
+- 火山方舟扩展：免费额度 / 媒资容量视角（usage balance 控制面命令）
+
+### 中期
+
+- MCP 数据面：本地 Agent token 消耗视图 + 「云 × 本地」对比（mcp-server 常驻 daemon）
+- 美团 LongCat、opencode zen 按量余额通道
+
+### 远期
+
+- 代码签名（消除 SmartScreen 警告）、CI 自动化、GitHub 镜像
+
+完整通道级规划见 [docs/DESIGN.md §5.2](docs/DESIGN.md)。
 
 ## License
 
