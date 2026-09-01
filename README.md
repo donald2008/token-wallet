@@ -40,17 +40,17 @@ token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Elec
 | 阿里云百炼 | Token Plan | 窗口制 | 官方 CLI `bl` | 免填 Key，`bl auth login --console` 登录一次 |
 | 火山方舟 | Coding Plan | 窗口制 | 官方 CLI `arkcli` | 免填 Key，SSO 设备码登录一次 |
 
-> 美团 LongCat、opencode zen 按量余额在规划中（见 docs/DESIGN.md §5.2）。
+> MiniMax、美团 LongCat、opencode zen 按量余额在规划中（见 docs/DESIGN.md §5.2）。
 > 接新通道 = 通道目录声明式注册，映射零代码（标准接口）；复杂接口用 TS 适配器。
 
 ## 安装
 
 ### 下载安装包（推荐）
 
-当前版本 **v0.1.4** 直链下载：
+当前版本 **v0.2.0** 直链下载：
 
 ```
-http://10.200.1.88:8889/token-wallet_v0.1.4_setup.exe
+http://10.200.1.88:8889/token-wallet/token-wallet_0.2.0_setup.exe
 ```
 
 - Windows 10/11 x64，单文件全离线安装包（~93 MB，含 Chromium 运行时，无外部依赖）
@@ -78,7 +78,6 @@ node start-dev.mjs           # 环境检查 → 装依赖 → 起 Electron 开�
 pnpm install
 pnpm dev        # Electron 开发壳
 pnpm dev:web    # 仅浏览器预览（无主进程 → 无钥匙串/SQLite）
-pnpm mcp        # MCP 数据面 daemon
 ```
 
 Windows 双击 `start-dev.cmd`；`node start-dev.mjs --check` 只做环境检查不起壳。
@@ -135,6 +134,6 @@ SQLite。应用无任何遥测/上报代码，网络请求只有你在设置页�
 
 ## Roadmap
 
-- 本地 Agent token 消耗视图 + 「云 × 本地」对比（MCP 数据面）
-- 更多通道（美团 LongCat / opencode zen 余额 / 高级自定义通道）
-- 自动更新（v0.2.0）、代码签名、CI、GitHub 镜像
+- 本地 Agent token 消耗视图 + 「云 × 本地」对比（MCP 数据面，规划中）
+- 更多通道（MiniMax / 美团 LongCat / opencode zen 余额，见 docs/DESIGN.md §5.2）
+- 代码签名、CI、GitHub 镜像
