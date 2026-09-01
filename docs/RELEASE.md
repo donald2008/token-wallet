@@ -1,84 +1,76 @@
-# token-wallet Windows 构建交接包（E3 / D-035）
+# token-wallet 发版流程（D-046, 2026-09-01 改版）
 
-> 本文档是 E3 交付的构建交接包（老大边界指引 comment #806 要求，同 t_6cc6020b 模式）。
-> 用途：在 **Windows 原生环境**一键产出 NSIS 离线安装包并挂 gitee release（D-031 渠道）。
-> WSL2/Linux 侧仅作构建链验证（证据见文末），最终安装包按 D-031 在 Windows 本机构建。
+> 构建环境细节（前置依赖/一键脚本/WSL2 验证史）保留在文末 §A。
+> 本文档主体是 **D-046 版本纪律下的标准发版流程**：版本 bump → build → 三件套上传 → tag → 验收。
+> 自动更新机制：electron-updater generic 通道，托管于 njbx02 nginx `http://10.200.1.88:8889/token-wallet/`。
 
-## 1. 前置依赖（比 Tauri 时代大幅收窄）
+## 1. 发版五步（每次发版照做，以 v0.2.0 为例）
 
-| 依赖 | 版本 | 说明 |
-|------|------|------|
-| Node.js | **≥ 22**（22.5+ 内置 node:sqlite） | winget install OpenJS.NodeJS.LTS 或 https://nodejs.org |
-| corepack | 随 Node 自带 | 脚本自动 `corepack prepare pnpm@9.15.0 --activate` |
-| ~~Rust~~ | ~~不需要~~ | D-033 换壳 Electron 后废弃 |
-| ~~VS Build Tools~~ | ~~不需要~~ | 无原生模块（D-034 node:sqlite），零 MSVC 依赖 |
-| ~~WebView2 工具链~~ | ~~不需要~~ | Electron 自带 Chromium |
+### ① 版本 bump（与 tag 同号，D-046 纪律）
+`packages/app/package.json` 的 `version` 改为本次版本号（如 `0.2.0`），commit 进 master。
+**版本号必须与 git tag 同号**——latest.yml 与安装包文件名都由此生成，错位即更新链断裂。
 
-## 2. 构建命令（二选一）
-
-### 方式 A：一键脚本（推荐）
+### ② 构建
+Windows 本机（推荐，产出真机包）：
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1
 ```
-脚本自动：探测仓库根 → 检测 Node/corepack（缺失打印指引退出）→ 注入大陆镜像
-（ELECTRON_MIRROR / ELECTRON_BUILDER_BINARIES_MIRROR）→ git clone/pull →
-pnpm install（frozen-lockfile）→ pnpm -r build → electron-builder NSIS → 输出 SHA256。
+WSL2 侧仅作构建链验证（`corepack pnpm -C packages/app dist:win`，需 wine64+i386）。
+⚠️ 出包前停 dev server（`dev:web` 与 `dist:win` 互斥）。
 
-### 方式 B：手动分步（脚本等价物）
-```powershell
-# 0. 镜像（大陆网络必需）
-$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
-$env:ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"
+### ③ 三件套上传（缺一不可）
+electron-builder 产出后传到 njbx02 托管目录 `/mnt/www/tts-test/token-wallet/`（走 :8889）：
 
-# 1. 取源码
-git clone git@gitee.com:ITEater/token-wallet.git
-cd token-wallet
-
-# 2. 对齐 pnpm + 装依赖
-corepack prepare pnpm@9.15.0 --activate
-pnpm install --frozen-lockfile
-
-# 3. 构建 core + app（esbuild 主进程 + vite 渲染层，base "./" 已配）
-pnpm -r build
-
-# 4. electron-builder NSIS 离线包（oneClick/静默/无签名，配置见 packages/app/package.json "build"）
-pnpm -C packages/app dist:win
-
-# 5. SHA256
-Get-FileHash .\packages\app\release\token-wallet_0.1.0_setup.exe -Algorithm SHA256
-```
-
-## 3. 预期产物
-
-| 路径 | 说明 |
+| 产物 | 作用 |
 |------|------|
-| `packages/app/release/token-wallet_<version>_setup.exe` | NSIS 离线安装包（oneClick 默认静默，支持 /S；无签名，SmartScreen 提示为预期） |
-| `packages/app/release/token-wallet_<version>_setup.exe.sha256` | SHA256 校验值（一键脚本自动落盘） |
-| `packages/app/release/win-unpacked/` | 解包目录（自检用，非交付物） |
+| `token-wallet_<version>_setup.exe` | NSIS 安装包（更新链的完整包源） |
+| `latest.yml` | 更新清单（版本号 + exe SHA512，**electron-updater 完整性校验依据**，build 时自动生成于 `packages/app/release/`） |
+| `token-wallet_<version>_setup.exe.blockmap` | 差量块表（nginx Range 已实证 206 → 后续版本自动差量下载） |
 
-Windows 构建下 electron-builder 会在 Windows 原生 rcedit 嵌入自设计图标
-（`packages/app/build-resources/icon.ico`，迁自旧 Tauri 壳 D-024 logo）。
+Windows 构建机用 scp 传 njbx02，或 njbx02 本机 `cp packages/app/release/* /mnt/www/tts-test/token-wallet/`。
+上传后 `curl -sI http://10.200.1.88:8889/token-wallet/latest.yml` 核对 200 与内容。
 
-## 4. gitee release 挂包（D-031 渠道不变）
+### ④ 打 tag（annotated，部署上线即打）
+```bash
+git tag -a v0.2.0 -m "token-wallet v0.2.0" && git push origin v0.2.0
+```
+tag 前 = 线上基线，tag 后 = 开发态（monorepo 单应用暂不带前缀，若未来多应用再议）。
 
-1. 打开 https://gitee.com/ITEater/token-wallet/releases/new（需仓主 token/登录）
-2. Tag 建议 `v0.1.0`；标题 `token-wallet v0.1.0`
-3. 附件上传：`token-wallet_<version>_setup.exe` + `.sha256`
-4. 发布后把 release 链接发给真机验收人（下载源）
+### ⑤ 验收
+见 §3 清单。**v0.2.0 = 最后一个手动安装版（bootstrap）**——此后版本由 v0.2.0 端内自动更新链路分发。
 
-## 5. 真机验收清单（用户/老大，产品红线）
+## 2. 自动更新链路速查（D-046）
 
-安装 → 首开 consent（一次，同意后重启不再弹）→ 添加 provider →
-托盘四态状态点 → 透明无边框观感（无边框透明圆角悬浮卡 + 托盘即弹）→
-重启实例仍在 → 开机自启（托盘/设置开关）→ 卸载。
+- 启动静默 CHECK ONLY（`autoDownload=false`，只发现不下载）；设置页关于区四态：已是最新→检查更新钮 / 发现新版→「更新到 vX」/ 下载中 %→「重启安装 vX」，下载与安装永远用户点击触发
+- 完整性 = latest.yml SHA512 内建校验；**不做代码签名**（SmartScreen 提示为预期）
+- 更新源硬编码 `build.publish`（generic 8889），**不做 UI 配置项**
+- dev（`app.isPackaged=false`）三通道恒 `unavailable`，属预期
 
-## 6. WSL2 侧已验证范围（E3 证据，2026-08-29）
+**全链自测捷径（无需出两个包）**：装好 vX 真包后，在托管目录放一份**假 latest.yml**（版本抬到 X.1，url/sha512 仍指向同一真 exe）→ 装好的 vX 应能 检测→下载→重启安装 → 验完删假 latest.yml。⚠️ 假清单期间真实用户也会看到假更新，自测窗口要短。
 
-- `electron-builder@26.15.3` NSIS 目标在 Linux 原生产包成功（装 wine64 后资源嵌入全量通过）：
-  `packages/app/release/token-wallet_0.1.0_setup.exe`（93.2MB，SHA256 见构建日志）
-- asar 内容核验：dist/（index.html + assets）+ dist-electron/（main/preload.cjs）+ electron/icons/ 四态全在
-- **vite base "./" 修复**：修复前 dist/index.html 的 `/assets/*` 在 file:// 下解析到盘符根会白屏；修复后 `./assets/` 相对路径
-- 生产模式冒烟（Linux Electron 加载 dist）：首开 consent 页真实渲染（OCR 文本证据）；
-  预置 consentAgreed 后 `get_bootstrap firstRun=false`，UI 切到「添加 Provider」页 —— consent 一次语义在打包路径生效
-- 回归：core vitest 61/61、app vitest 69/69、typecheck 0 error、e2e 27/27
-- WSLg 无法注入鼠标点击（已知限制），完整交互流由真机验收覆盖
+## 3. 真机验收清单（用户/老大，产品红线）
+
+安装 → 首开 consent（一次）→ 添加 provider → 托盘四态状态点 → 透明无边框观感 →
+重启实例仍在 → 开机自启 → **自动更新链路（v0.1.4 手动装 v0.2.0 → 实例数据在 → 走一次检查/下载/重启安装 → 数据仍在）** → 卸载。
+
+## 4. gitee release 挂包（P4 可选，主分发=8889）
+
+D-031 gitee release 渠道降为开源（P4）后再议；当前唯一分发渠道是 §1-③ 托管目录。
+
+## §A 构建环境（历史 E3 交接包，仍有效）
+
+| 依赖 | 版本 | 说明 |
+|------|------|------|
+| Node.js | **≥ 22**（22.5+ 内置 node:sqlite） | winget install OpenJS.NodeJS.LTS |
+| corepack | 随 Node 自带 | 脚本自动 `corepack prepare pnpm@9.15.0 --activate` |
+| ~~Rust / VS Build Tools / WebView2~~ | 不需要 | D-033 Electron / D-034 零原生模块 |
+
+一键脚本 `scripts/build-windows.ps1` 自动：探测仓库根 → 检测 Node/corepack → 注入大陆镜像
+（ELECTRON_MIRROR / ELECTRON_BUILDER_BINARIES_MIRROR）→ git clone/pull → pnpm install（frozen-lockfile）→
+pnpm -r build → electron-builder NSIS → 输出 SHA256。
+
+手动等价：镜像 env → clone → `corepack prepare pnpm@9.15.0 --activate && pnpm install --frozen-lockfile` →
+`pnpm -r build` → `pnpm -C packages/app dist:win` → 产物在 `packages/app/release/`。
+
+**WSL2 侧已验证史（E3, 2026-08-29）**：NSIS Linux 原生产包成功（93.2MB）；asar 内容核验全在；
+vite `base:"./"` 修复 file:// 白屏；生产模式 consent 冒烟通过；WSLg 不能注入点击，交互流归真机。
