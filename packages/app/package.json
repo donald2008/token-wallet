@@ -1,7 +1,7 @@
 {
   "name": "@token-wallet/app",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "token-wallet 桌面部件壳 — Electron + React 19 (托盘 + 弹出面板 + 主题)",
   "type": "module",
   "main": "dist-electron/main.cjs",
