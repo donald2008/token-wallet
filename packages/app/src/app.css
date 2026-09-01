@@ -4,6 +4,34 @@
   box-sizing: border-box;
 }
 
+/* ---- 细滚动条(v0.1.4 真机反馈: 默认 17px 灰条太重, 重设计为 8px 主题化) ----
+ * 全局生效(卡片列表/设置弹窗/添加向导所有滚动区统一观感)。
+ * thumb = 前景色低透明度混合: dark/light 自动适配(深底上浅灰条/浅底上深灰条), 比 --border
+ * 对比高一档(纯 --border 在面板底上几乎隐形, 真机截图评审判定可发现性不足)。
+ * hover 提亮到 fg 45% —— 悬停时才显眼, 常态保持低调。track=transparent(面板底色即轨道)。
+ * width 8px 与 .card-list 的 scrollbar-gutter: stable 预留槽宽一致(gutter 稳定不漂移的前提)。 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--fg) 24%, transparent);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--fg) 45%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 html,
 body,
 #root {
@@ -211,6 +239,10 @@ body {
   position: relative; /* D-039: drop-line 指示线定位容器 */
   flex: 1;
   overflow-y: auto;
+  /* v0.1.4 真机反馈: 滚动条槽常驻 —— 经典滚动条出现/消失不再挤压内容宽度,
+   * 过滤钮组(right:10px 绝对定位)不随滚动条出现向左漂移。槽宽 = 自定义滚动条
+   * 8px(见文件头 ::-webkit-scrollbar), 代价 = 内容右侧常驻 8px 预留。 */
+  scrollbar-gutter: stable;
   /* P1 t_9639078b round2: 顶部预留 34px 带 —— 让过滤 icon 钮组(position:absolute top:4px, 高 24px
    * 距顶 4px → 占 y4-28)浮在预留带内, 与第一张卡片(padding-top 起 y>=34)零重叠(修 round1 BLOCKING:
    * 钮组骑跨首卡头行/状态字)。滚动手不动, 吸顶遮挡已由「随内容滚动不吸顶」解决。 */
@@ -849,6 +881,8 @@ body {
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
+  /* 与 .card-list 同款: 滚动条槽常驻, 长表单滚动时内容宽度不跳变 */
+  scrollbar-gutter: stable;
   /* P1: 弹窗内部滚动不穿透 — 滚到底后背景面板完全不跟滚(链式滚动截断) */
   overscroll-behavior: contain;
   padding-bottom: 12px;
