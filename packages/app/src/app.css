@@ -989,7 +989,10 @@ body {
 .about-version {
   color: var(--fg-dim);
   font-size: 12px;
-  line-height: 28px; /* 与 .btn 高一致, 版本号不与按钮 baseline 错位 */
+  /* 与按钮同高的 inline-flex 容器: 文字在其盒内真正垂直居中, 不再受行框光学偏移影响 */
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
   font-variant-numeric: tabular-nums;
 }
 .updater-state {
