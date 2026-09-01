@@ -14,6 +14,7 @@
 #   packages/app/release/token-wallet_<version>_setup.exe   ← NSIS 离线安装包
 #     oneClick(默认) / 静默(安装程序支持 /S) / 无签名(D-031) / 单 exe 全离线
 #   packages/app/release/token-wallet_<version>_setup.exe.sha256
+#   packages/app/release/latest.yml + .blockmap              ← D-046 自更新三件套(electron-updater 用)
 #   脚本末尾打印安装包绝对路径 + SHA256 + gitee release 上传指引。
 # =============================================================================
 
@@ -99,13 +100,12 @@ try {
     pnpm install --frozen-lockfile
     if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败" }
 
-    Write-Step "构建 core + app (pnpm -r build)"
-    pnpm -r build
-    if ($LASTEXITCODE -ne 0) { throw "pnpm -r build 失败" }
-
-    Write-Step "electron-builder 打包 NSIS 离线安装包 (pnpm -C packages/app dist:win)"
-    pnpm -C packages/app dist:win
-    if ($LASTEXITCODE -ne 0) { throw "electron-builder 打包失败" }
+    Write-Step "构建 core + app + 打包 NSIS (pnpm build:win)"
+    # ⚠️ 必须走 root 的 build:win = pnpm -r build(vite build) + electron-builder。
+    #    禁止只跑 pnpm -C packages/app dist:win —— 它会打包上一次 vite build 留下的
+    #    陈旧 dist/，UI/core 改动全部不进包（2026-09-01 v0.2.1 真机踩雷实锤）。
+    pnpm build:win
+    if ($LASTEXITCODE -ne 0) { throw "pnpm build:win 失败" }
 
     # ---------- 5. 产物 + SHA256 ----------
     $pkg = Get-Content (Join-Path $RepoDir "packages\app\package.json") -Raw | ConvertFrom-Json
@@ -122,15 +122,16 @@ try {
     }
 
     $hash = (Get-FileHash -Algorithm SHA256 -Path $installer).Hash.ToLower()
+    # sidecar 格式与 8889 部署/README 一致: "hash  filename.ext"
     $hashFile = "$installer.sha256"
-    Set-Content -Path $hashFile -Value $hash -Encoding ascii
+    Set-Content -Path $hashFile -Value "$hash  $(Split-Path -Leaf $installer)" -Encoding ascii
 
     Write-Step "构建完成"
     Write-Host "安装包  : $installer"
     Write-Host "SHA256  : $hash"
     Write-Host "校验文件: $hashFile"
     Write-Host ""
-    Write-Host "gitee release 上传指引 (D-031 渠道不变):"
+    Write-Host "gitee release 上传指引 (个人机手动; 服务器走 API v5 repos 建 release+传附件):"
     Write-Host "  1. 打开 https://gitee.com/ITEater/token-wallet/releases/new"
     Write-Host "  2. Tag 建议: v$version; 标题: token-wallet v$version"
     Write-Host "  3. 附件上传: $artifactName + $artifactName.sha256"
