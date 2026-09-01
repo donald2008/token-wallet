@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ProviderSnapshot } from "../types";
 import { providerHealth, statusBadge } from "../health";
 import { getTemplateFor } from "../templates/registry";
 import { t } from "../i18n";
 import { BrandLogo } from "./brand-logos";
 import type { DragHandleProps } from "../useCardDragSort";
-import { commandAuthFinish, commandAuthStart } from "../ipc";
+import { commandAuthCancel, commandAuthFinish, commandAuthStart } from "../ipc";
 
 /**
  * 从 setup_hint 提取可复制的完整命令原文(契约4): 提取首个 `…` 反引号包裹段;
@@ -68,10 +68,10 @@ function HintCopyButton({ hint }: { hint: string }) {
 
 /**
  * t_fb8c44d8: command 通道一键授权(autopay 2026-09-01)。
- * 消灭「开终端跑命令」: 点「一键授权」→ 主进程 spawn auth login 取 URL 自动开浏览器
- * → 用户浏览器点同意 → 页面显示 code → 用户复制 → 本组件输入框粘贴 → 回喂 → 完成。
- * 用户全程不碰命令行, 仅「浏览器点一次 + 粘贴 code」。
- * (code 粘贴是 arkcli/bl 设备码协议天花板, 无法自动捕获; 见 auth-session.ts)
+ * 消灭「开终端跑命令」: 点「一键授权」→ 主进程 spawn auth login 取 URL 自动开浏览器 → 按协议完成:
+ * - finishMode="code" (arkcli 设备码): 浏览器页面显示 code → 用户复制 → 输入框粘贴 → 回喂 → 完成
+ * - finishMode="callback" (bl localhost 自闭环): 浏览器授权后 CLI 自收 code, **免粘贴**自动等待完成
+ * 用户全程不碰命令行。code 粘贴仅 arkcli 协议需要(设备码天花板, 见 auth-session.ts)。
  */
 export function extractCliFromHint(hint: string): string {
   const cmd = extractCommandFromHint(hint);
@@ -81,32 +81,56 @@ export function extractCliFromHint(hint: string): string {
 
 function OneClickAuth({ hint }: { hint: string }) {
   const [stage, setStage] = useState<"idle" | "starting" | "waiting" | "done" | "error">("idle");
+  const [finishMode, setFinishMode] = useState<"code" | "callback" | undefined>(undefined);
   const [sessionId, setSessionId] = useState("");
   const [code, setCode] = useState("");
   const [url, setUrl] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  // 取消/重开时递增, 使 in-flight 的 start/finish promise 回调失效, 防旧结果覆盖新 UI
+  const runGen = useRef(0);
   const cli = extractCliFromHint(hint);
 
   const onStart = () => {
     if (!cli) return;
+    const gen = ++runGen.current;
     setStage("starting");
     setErrorMsg("");
+    setCode("");
+    setFinishMode(undefined);
     void commandAuthStart(cli).then((res) => {
+      if (runGen.current !== gen) return; // 已被取消/重开
       if (!res.ok || !res.sessionId) {
         setErrorMsg(res.message ?? "授权启动失败");
         setStage("error");
         return;
       }
+      const mode = res.finishMode ?? "code";
       setSessionId(res.sessionId);
+      setFinishMode(mode);
       setUrl(res.url ?? "");
       setStage("waiting");
+      if (mode === "callback") {
+        // bl 自闭环: 浏览器授权后 CLI 自收 code 退出 → 免粘贴, 立即进入等待完成
+        void commandAuthFinish(res.sessionId, "").then((fr) => {
+          if (runGen.current !== gen) return;
+          if (fr.ok) {
+            setStage("done");
+          } else {
+            setErrorMsg(fr.message ?? "授权失败");
+            setStage("error");
+          }
+        });
+      }
     });
   };
 
   const onFinish = () => {
     if (!code.trim()) return;
+    const gen = runGen.current;
     setStage("starting");
+    setErrorMsg("");
     void commandAuthFinish(sessionId, code.trim()).then((res) => {
+      if (runGen.current !== gen) return;
       if (res.ok) {
         setStage("done");
         setCode("");
@@ -115,6 +139,14 @@ function OneClickAuth({ hint }: { hint: string }) {
         setStage("error");
       }
     });
+  };
+
+  const onCancel = () => {
+    runGen.current += 1; // 使 in-flight 回调失效
+    if (sessionId) void commandAuthCancel(sessionId);
+    setSessionId("");
+    setCode("");
+    setStage("idle");
   };
 
   return (
@@ -137,7 +169,11 @@ function OneClickAuth({ hint }: { hint: string }) {
       {stage === "waiting" ? (
         <div className="oneclick-auth-panel" data-testid="oneclick-auth-panel">
           <div className="oneclick-auth-head">
-            <span>{t("card.authBrowserHint")}</span>
+            {finishMode === "callback" ? (
+              <span>{t("card.authWaitingCallback")}</span>
+            ) : (
+              <span>{t("card.authBrowserHint")}</span>
+            )}
             {url ? (
               <a
                 href={url}
@@ -150,36 +186,49 @@ function OneClickAuth({ hint }: { hint: string }) {
               </a>
             ) : null}
           </div>
-          <div className="oneclick-auth-row">
-            <input
-              className="oneclick-auth-input"
-              data-testid="oneclick-auth-code"
-              placeholder={t("card.authCodePlaceholder")}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onFinish();
-              }}
-              autoFocus
-            />
-            <button
-              type="button"
-              className="btn btn-sm oneclick-auth-confirm"
-              data-testid="oneclick-auth-confirm"
-              disabled={!code.trim()}
-              onClick={onFinish}
-            >
-              {t("card.authConfirm")}
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm oneclick-auth-cancel"
-              data-testid="oneclick-auth-cancel"
-              onClick={() => setStage("idle")}
-            >
-              {t("card.authCancel")}
-            </button>
-          </div>
+          {finishMode === "callback" ? (
+            <div className="oneclick-auth-row">
+              <button
+                type="button"
+                className="btn btn-sm oneclick-auth-cancel"
+                data-testid="oneclick-auth-cancel"
+                onClick={onCancel}
+              >
+                {t("card.authCancel")}
+              </button>
+            </div>
+          ) : (
+            <div className="oneclick-auth-row">
+              <input
+                className="oneclick-auth-input"
+                data-testid="oneclick-auth-code"
+                placeholder={t("card.authCodePlaceholder")}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onFinish();
+                }}
+                autoFocus
+              />
+              <button
+                type="button"
+                className="btn btn-sm oneclick-auth-confirm"
+                data-testid="oneclick-auth-confirm"
+                disabled={!code.trim()}
+                onClick={onFinish}
+              >
+                {t("card.authConfirm")}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm oneclick-auth-cancel"
+                data-testid="oneclick-auth-cancel"
+                onClick={onCancel}
+              >
+                {t("card.authCancel")}
+              </button>
+            </div>
+          )}
           {errorMsg ? <div className="oneclick-auth-error">{errorMsg}</div> : null}
         </div>
       ) : null}
@@ -190,7 +239,7 @@ function OneClickAuth({ hint }: { hint: string }) {
             type="button"
             className="btn btn-sm oneclick-auth-retry"
             data-testid="oneclick-auth-retry"
-            onClick={() => setStage("idle")}
+            onClick={onCancel}
           >
             {t("card.authRetry")}
           </button>

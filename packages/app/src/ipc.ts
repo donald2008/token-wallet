@@ -238,23 +238,28 @@ export async function commandRun(payload: CommandRunPayload): Promise<unknown | 
 
 /**
  * t_fb8c44d8: command 通道一键授权 — 主进程 command_auth_start 桥。
- * 传入 CLI 名(从 setup_hint 提取, ep: arkcli/bl); 返回 { ok, sessionId?, url?, message? }。
+ * 传入 CLI 名(从 setup_hint 提取, ep: arkcli/bl); 返回 { ok, sessionId?, url?, finishMode?, message? }。
  * 浏览器自动打开由主进程 shell.openExternal 完成(renderer 只拿 url 做展示)。
+ * finishMode: "code"=用户需从浏览器复制 code 粘贴(app 显输入框); "callback"=免粘贴等浏览器授权完成。
  */
 export async function commandAuthStart(cli: string): Promise<{
   ok: boolean;
   sessionId?: string;
   url?: string;
+  finishMode?: "code" | "callback";
   message?: string;
 }> {
-  const viaHost = await hostInvoke<{ ok: boolean; sessionId?: string; url?: string; message?: string }>(
-    "command_auth_start",
-    { cli },
-  );
+  const viaHost = await hostInvoke<{
+    ok: boolean;
+    sessionId?: string;
+    url?: string;
+    finishMode?: "code" | "callback";
+    message?: string;
+  }>("command_auth_start", { cli });
   return viaHost ?? { ok: false, message: "授权通道不可用(浏览器预览模式)" };
 }
 
-/** 一键授权收尾 — 用户已从浏览器复制 code, 回喂主进程等授权完成 */
+/** 一键授权收尾 — 用户已从浏览器复制 code, 回喂主进程等授权完成 (finish=callback 通道传空串自动等待) */
 export async function commandAuthFinish(
   sessionId: string,
   code: string,
@@ -264,6 +269,12 @@ export async function commandAuthFinish(
     code,
   });
   return viaHost ?? { ok: false, message: "授权通道不可用(浏览器预览模式)" };
+}
+
+/** 取消进行中的授权会话(浏览器等待中放弃) */
+export async function commandAuthCancel(sessionId: string): Promise<{ ok: boolean }> {
+  const viaHost = await hostInvoke<{ ok: boolean }>("command_auth_cancel", { sessionId });
+  return viaHost ?? { ok: false };
 }
 
 // ---------------- E1 新增: 窗口控制(HTML TitleBar 的 min/close) ----------------

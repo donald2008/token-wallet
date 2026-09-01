@@ -1,25 +1,78 @@
 /**
- * command 通道授权命令定义表(D-041/D-044 同构, 2026-09-01)
+ * command 通道授权命令定义表(D-041/D-044 同构, 2026-09-01 njbx02 定)
  *
- * 每 command 通道的 auth login 两段式:
- *   1. `<command> <loginArgs>` → stdout 打出授权 URL(浏览器打开)
- *   2. 用户浏览器完成 → 页面显示 code → `<command> <codeArgs(code)>` 或 stdin 回喂
+ * 两种完成模式(评审 round1 修正, 推翻先前 stdin 回喂模型):
+ *   - finishMode="code"(arkcli, 设备码协议): step1 spawn `<command> <loginArgs>` → stdout 打
+ *     授权 JSON(authorize_url 字段 + 人类文本), 进程随即 **exit 0 立即退出, 不读 stdin**;
+ *     浏览器打开授权页显示 base64 code(不可自动捕获)→ 用户复制 → app 收集 →
+ *     step2 spawn **新进程** `<command> <buildCodeArgs(code)>`(官方 next_command:
+ *     `arkcli auth login --no-browser --code <code>`) → 解析 stdout+stderr JSON `ok` 字段
+ *     判成败(exit code 不可信, 实测失败也 exit 0/1 不定)。
+ *   - finishMode="callback"(bl, localhost 自闭环): step1 spawn `bl auth login --console` → stdout 打
+ *     `https://bailian.console.aliyun.com/console-login?notice=127.0.0.1:PORT?state=...`,
+ *     进程**保持存活**; 浏览器授权后 302 回跳本机端口, bl 自收 code 落盘 → exit 0。
+ *     免回喂: app 监听进程 close(0) 即完成(无效 code 返回 400 且保持存活, 可取消)。
  *
- * 实测基线(用户真机 2026-09-01):
- *   - arkcli auth login volc-sso --no-browser → `@url:` 前缀 + 提示复制授权码
- *     **stdin 交互**: 粘贴 code 回车(auth-session.ts 已按 stdin 回喂实现, 非 --code 参数)
- *   - bl auth login --console → 同构(声称 console access token, 输出窗口未逐字节实测,
- *     按通用 http(s) URL 提取 + stdin 回喂; 真机验证后如需微调只改本表)
- *
- * 协议天花板(诚实标注): 浏览器页面显示 code 是设备码协议, 无法自动捕获 ——
- * 用户仍需「浏览器复制 code → app 粘贴」一次。本表/本流程消灭的是「开终端跑命令」。
+ * 实测基线(2026-09-01 njbx02 隔离 HOME /tmp/arkcli-research + /tmp/bl181 复现):
+ *   - arkcli 1.0.23(stdin=pipe 非交互)输出尾 JSON
+ *     {"authorize_url":"…","expires_in_sec":600,"method":"sso_no_browser",
+ *      "next_command":"arkcli auth login --no-browser --code <code>","stage":"authorize_pending"}
+ * 后 exit 0; 官方 Phase2 = next_command(新进程 --code), 非 stdin 回喂
+ *   - `arkcli … --code <code>` → JSON {"ok":true|false,"error":{…}}, 成败必须解析 ok 字段
  */
 import type { AuthCommandDef } from "./auth-session";
 
-/** 通用 URL 提取: 首个 http(s) 链接(bl console 输出与 arkcli @url: 均兼容) */
+/**
+ * 从 CLI 输出提取全部 JSON 对象(处理嵌套花括号 + 字符串内花括号, 与人类文本混排兼容)。
+ * 现仅 mode="code" 的 phase2 成败判定使用(arkcli JSON ok 字段)。
+ */
+export function extractJsonObjects(text: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const start = text.indexOf("{", i);
+    if (start < 0) break;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    let j = start;
+    for (; j < text.length; j++) {
+      const c = text[j];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === '"') inStr = false;
+      } else if (c === '"') inStr = true;
+      else if (c === "{") depth += 1;
+      else if (c === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          j += 1;
+          break;
+        }
+      }
+    }
+    if (j > start && text[j - 1] === "}") out.push(text.slice(start, j));
+    i = j;
+  }
+  return out;
+}
+
+/** 通用 URL 提取: 首个 http(s) 链接(bl console 输出与 arkcli @url:/JSON authorize_url 均兼容) */
 function extractFirstUrl(stdout: string): string | null {
   const m = /https?:\/\/[^\s`"'<>）)\]]+/i.exec(stdout);
   return m?.[0] ?? null;
+}
+
+/** arkcli phase2 成败判定: 解析 JSON 的 ok 字段(任一对象 ok===true 即成功; 不信 exit code) */
+function arkParseOk(out: string): boolean {
+  return extractJsonObjects(out).some((s) => {
+    try {
+      return (JSON.parse(s) as { ok?: unknown }).ok === true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** 按 CLI 命令名注册(renderer 从 setup_hint 提取命令首词 → 主进程查表) */
@@ -28,16 +81,22 @@ export const AUTH_DEFS: Record<string, AuthCommandDef> = {
     command: "arkcli",
     loginArgs: ["auth", "login", "volc-sso", "--no-browser"],
     extractUrl: (stdout) => {
-      // arkcli 明确 @url: 前缀优先, 兜底通用 http(s)
+      // arkcli step1 输出@url/JSON authorize_url; 通用 http(s) 兜底
       const m = /@url:\s*`?([^`\s]+)/i.exec(stdout);
       if (m?.[1]?.startsWith("http")) return m[1];
       return extractFirstUrl(stdout);
     },
+    finishMode: "code",
+    // step2 = 官方 next_command: `arkcli auth login --no-browser --code <code>`(新进程)
+    buildCodeArgs: (code) => ["auth", "login", "--no-browser", "--code", code],
+    parseOk: arkParseOk,
   },
   bl: {
     command: "bl",
     loginArgs: ["auth", "login", "--console"],
     extractUrl: extractFirstUrl,
+    // localhost 自闭环免回喂: 浏览器授权后 302 回跳, bl 自收 code 退出(等 close(0))
+    finishMode: "callback",
   },
 };
 

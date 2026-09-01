@@ -281,6 +281,31 @@ const ipcMocks: Record<string, IpcHandler> = {
     const id = inst.id ?? "inst-cmd";
     const name = inst.name ?? "百炼 Token Plan #1";
     const fetched_at = Math.floor(Date.now() / 1000);
+    // t_fb8c44d8: auth_expired 态注入(授权按钮流 e2e) —— localStorage
+    // token-wallet.mock.authexpired = "arkcli" | "bl"; 命中返回 auth_expired + 对应 setup_hint
+    // (与 core 适配器产出同形态: bl/arkcli 会话失效 → warn 卡 + OneClickAuth 按钮)
+    let authexpired = "";
+    try {
+      authexpired = localStorage.getItem("token-wallet.mock.authexpired") ?? "";
+    } catch {
+      /* ignore */
+    }
+    if (authexpired === "arkcli" || authexpired === "bl") {
+      const hint =
+        authexpired === "arkcli"
+          ? "运行 `arkcli auth login volc-sso --no-browser` 重新授权(SSO 会话由 CLI 管理)"
+          : "运行 `bl auth login --console` 重新授权(控制台会话由 CLI 管理)";
+      return {
+        provider_id: id,
+        display_name: name,
+        plan_type: "window",
+        fetched_at,
+        status: "auth_expired",
+        metrics: [],
+        alerts: [{ level: "warn", message: "控制台会话已失效, 请重新授权", code: "auth_expired" }],
+        setup_hint: hint,
+      };
+    }
     let fail = false;
     try {
       fail = localStorage.getItem("token-wallet.mock.commandfail") === "1";
@@ -312,6 +337,51 @@ const ipcMocks: Record<string, IpcHandler> = {
       alerts: [],
     };
   },
+  // ---- t_fb8c44d8: 一键授权两通道(renderer 按钮流 e2e) ----
+  // mock 语义与主进程 auth-defs.ts 对齐: bl → finishMode="callback" 免回喂 / arkcli → "code" 两段
+  // 失败路径: authfail=1 → start ok:false; authfinishfail=1 → finish ok:false
+  // 延迟: authfinishdelay=<ms> → finish 延迟 resolve(测 bl 自闭环 waiting 态可见性)
+  command_auth_start: (args) => {
+    const cli = String(args?.cli ?? "");
+    let fail = false;
+    try {
+      fail = localStorage.getItem("token-wallet.mock.authfail") === "1";
+    } catch {
+      /* ignore */
+    }
+    if (fail) return { ok: false, message: `授权启动失败: ${cli} CLI 不在 PATH` };
+    if (cli === "bl") {
+      return {
+        ok: true,
+        sessionId: "auth-bl-mock",
+        url: "https://bailian.console.aliyun.com/console-login?notice=127.0.0.1:9876?state=e2e",
+        finishMode: "callback",
+      };
+    }
+    if (cli === "arkcli") {
+      return {
+        ok: true,
+        sessionId: "auth-ark-mock",
+        url: "https://signin.volcengine.com/authorize/oauth/authorize?client_id=e2e&state=mock",
+        finishMode: "code",
+      };
+    }
+    return { ok: false, message: `未知 CLI: ${cli}` };
+  },
+  command_auth_finish: () => {
+    let fail = false;
+    let delayMs = 0;
+    try {
+      fail = localStorage.getItem("token-wallet.mock.authfinishfail") === "1";
+      delayMs = Number(localStorage.getItem("token-wallet.mock.authfinishdelay") ?? 0) || 0;
+    } catch {
+      /* ignore */
+    }
+    const result = fail ? { ok: false, message: "授权失败: invalid code (mock)" } : { ok: true, message: "授权成功" };
+    if (delayMs > 0) return new Promise((res) => setTimeout(() => res(result), delayMs));
+    return result;
+  },
+  command_auth_cancel: () => ({ ok: true }),
   sqlite_batch: () => null,
   sqlite_exec: (args) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

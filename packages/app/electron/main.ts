@@ -28,7 +28,12 @@ import { SafeStorageLike, deleteSecret, getSecret, setSecret } from "./keyring";
 import { deriveStoragePaths, type StoragePaths } from "./paths";
 import { batch, closeAll, exec, query } from "./sqlite";
 import { runCommandFetch, type CommandRunPayload } from "./command-run";
-import { abortAllAuthSessions, finishAuthSession, startAuthSession } from "./auth-session";
+import {
+  abortAllAuthSessions,
+  cancelAuthSession,
+  finishAuthSession,
+  startAuthSession,
+} from "./auth-session";
 import { authDefFor } from "./auth-defs";
 import { AppUpdaterController } from "./updater";
 
@@ -373,19 +378,21 @@ function registerIpc(): void {
     runCommandFetch(payload ?? {}),
   );
 
-  // ---- t_fb8c44d8: command 通道一键授权(autopay 2016-09-01) ----
-  // 用户点「授权」→ 主进程 spawn auth login 取 URL 自动开浏览器 → 用户粘贴 code
-  // → 自动回喂 → 授权完成。CLI 名从 renderer 的 setup_hint 提取(ep: arkcli/bl)。
+  // ---- t_fb8c44d8: command 通道一键授权(2026-09-01, round1 修正) ----
+  // 用户点「授权」→ 主进程 spawn auth login 取 URL 自动开浏览器 → 按 finishMode 分流完成:
+  //   "code"(arkcli): 设备码协议, 浏览器页面显示 code → 用户粘贴 → spawn 新进程 --code 回喂, 解析 ok
+  //   "callback"(bl): localhost 自闭环, 浏览器授权后 302 回跳 CLI 自收 code, 等 close(0) 免回喂
+  // CLI 名从 renderer 的 setup_hint 提取(ep: arkcli/bl)。返回 finishMode 供 UI 分流渲染。
   ipcMain.handle(
     "command_auth_start",
     async (_event, payload: { cli?: string } | undefined) => {
       const def = authDefFor(String(payload?.cli ?? ""));
       if (!def) return { ok: false, message: `未知 CLI: ${String(payload?.cli)}` };
       try {
-        const { sessionId, url } = await startAuthSession(def, (u) => {
+        const { sessionId, url, finishMode } = await startAuthSession(def, (u) => {
           void shell.openExternal(u);
         });
-        return { ok: true, sessionId, url };
+        return { ok: true, sessionId, url, finishMode };
       } catch (err) {
         return { ok: false, message: `授权启动失败: ${String(err)}` };
       }
@@ -396,6 +403,11 @@ function registerIpc(): void {
     (_event, payload: { sessionId?: string; code?: string } | undefined) =>
       finishAuthSession(String(payload?.sessionId ?? ""), String(payload?.code ?? "")),
   );
+  // 取消进行中的授权会话(浏览器等待中放弃; bl callback 模式进程保持存活, 必须有取消出口 kill 掉防残留)
+  ipcMain.handle("command_auth_cancel", (_event, payload: { sessionId?: string } | undefined) => {
+    cancelAuthSession(String(payload?.sessionId ?? ""));
+    return { ok: true };
+  });
 
   // ---- D-046: 自动更新三通道(状态机在 updater.ts, node vitest 直测) ----
   // updater_check: 查当前态+触发检查; updater_download: 用户显式下载(进度走 updater_event);
