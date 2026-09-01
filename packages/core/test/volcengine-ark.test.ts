@@ -149,16 +149,23 @@ describe("volcengine-ark/coding-plan golden sample(D-044 三态)", () => {
     expect(snap.metrics).toHaveLength(3);
   });
 
-  it("STS 撞锁连续 3 次(长期锁占用): 重试 2 次后仍失败 → 可读文案 error, 不走 auth_expired", async () => {
+  it("STS 撞锁连续 3 次(长期锁占用): 重试 2 次后仍失败 → stale 灰卡 + sts_refresh_locked 告警(不报采集失败), 不走 auth_expired", async () => {
     const seq = runnerSequence([{ code: 1, stderr: STS_LOCK }]);
     const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0);
     const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
 
     expect(seq.callCount()).toBe(3); // 首呼 + 2 次重试上限
-    expect(snap.status).toBe("error");
-    expect(snap.error_message).toContain("刷新");
+    // 卡片主案(round1 审查修正): 重试耗尽仍撞锁 = 长期锁占用 → stale 灰卡「数据过期」,
+    // 不渲染「采集失败」红卡; 可读文案经 alerts 在卡上可见
+    expect(snap.status).toBe("stale");
+    const lockAlert = snap.alerts.find((a) => a.code === "sts_refresh_locked");
+    expect(lockAlert).toBeDefined();
+    expect(lockAlert?.level).toBe("warn");
+    expect(lockAlert?.message).toContain("刷新");
+    expect(lockAlert?.message).toContain("稍候自动重试");
     // 撞锁判别与 auth_expired 互斥: 锁竞争 body 不因含 "SSO" 被误判为会话失效
-    expect(snap.alerts?.some((a) => a.code === "auth_expired")).toBeFalsy();
+    expect(snap.alerts.some((a) => a.code === "auth_expired")).toBeFalsy();
+    expect(snap.error_message).toBeUndefined(); // stale 分支不携带 error_message(可读文案走 alerts)
   });
 
   it("auth_expired 判别不因含 'SSO'/'refresh token' 串与撞锁混淆: 会话失效 body 不重试直接 auth_expired", async () => {

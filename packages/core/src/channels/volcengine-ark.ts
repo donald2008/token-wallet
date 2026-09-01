@@ -67,7 +67,8 @@ const INSTALL_HINT = "未检测到 arkcli: 请安装 `npm i -g @volcengine/ark-c
  * 与用户手动 arkcli(或同时刻两个实例)并发刷新时, 后到者 exit!=0 + 锁竞争 body:
  *   "... STS 续期失败: 另一个 arkcli 进程正在刷新 SSO 凭证，请稍后重试"
  * 此类瞬时竞争不应上报「采集失败」(scheduler 兜底), 改为短暂退避后重试(串行, 最多 2 次)。
- * 3 次仍失败 = 长期锁占用(异常) → 可读文案错误卡, 不伪装 stale(适配器无快照表达力)。
+ * 3 次仍失败 = 长期锁占用(异常) → status=stale 灰卡 + sts_refresh_locked 告警(卡片主案,
+ * round1 审查修正: schema stale 一等公民 + UI 灰卡/告警文案可见, 不打红卡「采集失败」)。
  */
 export const STS_LOCK_PATTERNS = ["另一个 arkcli 进程正在刷新", "STS 续期失败"] as const;
 export const STS_LOCK_MAX_RETRIES = 2;
@@ -180,12 +181,19 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
 
     // 锁竞争优先判定(先于 auth_expired): arkcli 锁竞争 body 内嵌 "auth login" 误导提示
     // (ListSubscribeTrade requires ... please run arkcli auth login volc-sso), 若先跑
-    // isAuthExpiredBody 会把撞锁误判为会话失效 → 重试耗尽后仍撞锁 = 长期锁占用 → 可读 error
+    // isAuthExpiredBody 会把撞锁误判为会话失效 → 重试耗尽后仍撞锁 = 长期锁占用 →
+    // stale 灰卡 + sts_refresh_locked 告警(card 主案: 不报「采集失败」, UI 灰卡文案经 alerts 可见)
     if (res.code !== 0 && isStsLockBody(res.stdout + res.stderr)) {
       return {
         ...base,
-        status: "error",
-        error_message: "火山方舟 SSO 凭证刷新中(另一进程占用), 请稍候自动重试",
+        status: "stale",
+        alerts: [
+          {
+            level: "warn",
+            code: "sts_refresh_locked",
+            message: "火山方舟 SSO 凭证刷新中(另一进程占用), 请稍候自动重试",
+          },
+        ],
       };
     }
     // 未登录 error body 落 **stderr**(exit=1, stdout 空; 同 bl round3 教训)——
