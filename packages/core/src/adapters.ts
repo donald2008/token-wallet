@@ -16,7 +16,6 @@ import type { ProviderSnapshot } from "./schema.js";
 import type { FetchContext } from "./scheduler.js";
 import type { AdapterContext, GenericHttpMapping, InstanceConfig } from "./generic-http.js";
 import { GenericHttpAdapter } from "./generic-http.js";
-import { existsSync } from "node:fs";
 export { GenericHttpAdapter } from "./generic-http.js";
 export type {
   AdapterContext,
@@ -97,9 +96,11 @@ export function resolveCommandAbsPath(
   command: string,
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
-  exists: (p: string) => boolean = existsSync,
+  exists?: (p: string) => boolean,
 ): string {
-  if (platform !== "win32") return command;
+  // browser-safe 纪律: adapters.ts 顶层零 node:fs 静态导入 → exists 由 Node 侧调用方
+  // (runCommandResult 动态 import 得之) 注入; 无注入则不探测, 回退 PATH 解析(原行为)
+  if (platform !== "win32" || !exists) return command;
   // win32 路径显式反斜杠拼接(不用 path.join: Linux CI 上 join 会用正斜杠, 与 Windows 候选路径不符)
   const candidates = [
     env.APPDATA ? `${env.APPDATA}\\npm\\${command}.cmd` : "",
@@ -116,7 +117,7 @@ export function buildSpawnPlan(
   args: string[],
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
-  exists: (p: string) => boolean = existsSync,
+  exists?: (p: string) => boolean,
 ): { command: string; args: string[]; windowsHide: boolean } {
   if (platform === "win32") {
     return {
@@ -166,7 +167,8 @@ export abstract class ScriptedAdapter implements ProviderAdapter {
     ctx: FetchContext,
   ): Promise<CommandRunResult> {
     const { spawn } = await import("node:child_process");
-    const plan = buildSpawnPlan(command, args);
+    const { existsSync } = await import("node:fs");
+    const plan = buildSpawnPlan(command, args, process.platform, process.env, existsSync);
     return new Promise<CommandRunResult>((resolvePromise, reject) => {
       const child = spawn(plan.command, plan.args, {
         stdio: ["ignore", "pipe", "pipe"],
