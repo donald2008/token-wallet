@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ProviderSnapshot } from "../types";
 import { providerHealth, statusBadge } from "../health";
 import { getTemplateFor } from "../templates/registry";
+import { t } from "../i18n";
 import { BrandLogo } from "./brand-logos";
 import type { DragHandleProps } from "../useCardDragSort";
 
@@ -55,29 +56,30 @@ function HintCopyButton({ hint }: { hint: string }) {
       className="btn btn-sm hint-copy-btn"
       data-testid="hint-copy-btn"
       data-copied={copied}
-      title={`复制命令: ${command}`}
-      aria-label={copied ? "已复制" : `复制命令 ${command}`}
+      title={t("card.copyCmdTitle", { cmd: command })}
+      aria-label={copied ? t("card.copied") : t("card.copyCmdAria", { cmd: command })}
       onClick={onCopy}
     >
-      {copied ? "已复制" : "复制"}
+      {copied ? t("card.copied") : t("card.copy")}
     </button>
   );
 }
 
 /** 品牌色块(§6.1 第 4 条): 16px 平台识别色 — P1(t_696ec820)起由内置单色 SVG 品牌图标(BrandLogo)取代 */
 
+/** 值为 i18n 键(渲染时经 t() 取文案, D-047) */
 const STATUS_TEXT: Record<string, string> = {
-  stale: "数据过期(超 2 个轮询周期未更新)",
-  auth_expired: "登录态过期, 请重新授权",
-  unsupported: "该通道暂未接入",
-  error: "采集失败",
+  stale: "statusText.stale",
+  auth_expired: "statusText.auth_expired",
+  unsupported: "statusText.unsupported",
+  error: "statusText.error",
 };
 
 function agoText(fetchedAt: number): string {
   const s = Math.floor(Date.now() / 1000) - fetchedAt;
-  if (s < 60) return "刚刚";
-  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
-  return `${Math.floor(s / 3600)} 小时前`;
+  if (s < 60) return t("ago.now");
+  if (s < 3600) return t("ago.minutes", { n: Math.floor(s / 60) });
+  return t("ago.hours", { n: Math.floor(s / 3600) });
 }
 
 /**
@@ -93,11 +95,11 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
     <div className="abnormal-body" data-testid="abnormal-body">
       <div className={`card-status-text text-${health}`}>
         {p.status === "auth_expired" && (
-          <span className="lamp" data-lamp="auth_expired" title="登录态失效, 亮黄灯" aria-label="auth_expired 黄灯">
+          <span className="lamp" data-lamp="auth_expired" title={t("card.lampAuthTitle")} aria-label={t("card.lampAuthAria")}>
             ●
           </span>
         )}
-        {STATUS_TEXT[p.status] ?? p.status}
+        {STATUS_TEXT[p.status] ? t(STATUS_TEXT[p.status] as Parameters<typeof t>[0]) : p.status}
       </div>
       {p.status === "auth_expired" && p.setup_hint && (
         <div className="setup-hint" data-testid="setup-hint">
@@ -107,7 +109,7 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
         </div>
       )}
       <div className="card-error-note">
-        上次更新: {agoText(p.fetched_at)}
+        {t("card.lastUpdate", { ago: agoText(p.fetched_at) })}
         {p.alerts.length > 0 ? ` — ${p.alerts.map((a) => a.message).join("; ")}` : ""}
       </div>
     </div>
@@ -156,7 +158,7 @@ export function ProviderCard({
       <div className="card-head">
         <span
           className={`brand-block${dragHandle ? " drag-handle" : ""}`}
-          title={dragHandle ? `拖动排序 ${p.display_name}` : p.provider_id}
+          title={dragHandle ? t("card.dragSort", { name: p.display_name }) : p.provider_id}
           data-testid={dragHandle ? `drag-handle-${p.provider_id}` : undefined}
           {...dragHandle}
         >
@@ -172,8 +174,8 @@ export function ProviderCard({
             type="button"
             className="btn btn-icon btn-danger card-del-btn"
             data-testid={`card-del-${p.provider_id}`}
-            title={`删除 ${p.display_name}`}
-            aria-label={`删除 ${p.display_name}`}
+            title={t("card.deleteNamed", { name: p.display_name })}
+            aria-label={t("card.deleteNamed", { name: p.display_name })}
             onClick={() => setConfirming(true)}
           >
             {/* 手绘垃圾桶(D-002 不引图标库, 与图钉/侧栏同 stroke 风格) */}
@@ -193,7 +195,7 @@ export function ProviderCard({
           // 确认气泡(沿用设置页 confirm-delete 模式: 文案 + 确认 + 取消, 红调);
           // 绝对定位浮在卡右上, 不挤压 360px 卡头布局
           <span className="confirm-row card-confirm" data-testid={`card-confirm-row-${p.provider_id}`}>
-            <span className="confirm-text">删除并清钥匙串?</span>
+            <span className="confirm-text">{t("card.confirmDelete")}</span>
             <button
               type="button"
               className="btn btn-danger btn-sm"
@@ -203,7 +205,7 @@ export function ProviderCard({
                 onDelete(p.provider_id);
               }}
             >
-              确认
+              {t("card.confirm")}
             </button>
             <button
               type="button"
@@ -211,7 +213,7 @@ export function ProviderCard({
               data-testid={`card-cancel-del-${p.provider_id}`}
               onClick={() => setConfirming(false)}
             >
-              取消
+              {t("card.cancel")}
             </button>
           </span>
         )}

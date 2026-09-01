@@ -1,6 +1,7 @@
 import type { HealthLevel } from "../types";
 import { StatusDot } from "./StatusDot";
 import { winClose, winMinimize } from "../ipc";
+import { t } from "../i18n";
 
 interface Props {
   health: HealthLevel;
@@ -37,7 +38,7 @@ export function TitleBar(props: Props) {
         data-testid="pin-btn"
         data-pinned={props.pinned}
         aria-pressed={props.pinned}
-        title={props.pinned ? "取消置顶" : "置顶窗口"}
+        title={props.pinned ? t("tb.unpin") : t("tb.pin")}
         onClick={props.onTogglePin}
       >
         {/* 手写图钉 SVG(推钉剪影); 描边/填充语义由 CSS 按 data-pinned 切换 */}
@@ -54,7 +55,7 @@ export function TitleBar(props: Props) {
         type="button"
         className="btn btn-icon"
         data-testid="win-min-btn"
-        title="最小化"
+        title={t("tb.min")}
         onClick={() => void winMinimize()}
       >
         🗕
@@ -63,7 +64,7 @@ export function TitleBar(props: Props) {
         type="button"
         className="btn btn-icon"
         data-testid="win-close-btn"
-        title="关闭(隐藏到托盘)"
+        title={t("tb.close")}
         onClick={() => void winClose()}
       >
         ✕

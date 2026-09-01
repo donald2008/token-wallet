@@ -22,6 +22,7 @@ import { keyFingerprint } from "../instances/schema";
 import { KEYRING_SERVICE, getSharedKeyring, getSharedStore } from "../instances/store";
 import { getSharedStorage, type SnapshotStorage } from "./storage";
 import { commandRun, httpGetJson } from "../ipc";
+import { t } from "../i18n";
 
 const HTTP_TIMEOUT_MS = 10_000;
 
@@ -58,22 +59,22 @@ async function runtimeFetch(input: RequestInfo | URL, init?: RequestInit): Promi
 /** 凭据解析(D-029): CredentialRef{source:store} → OS 钥匙串读取; key 只活构造瞬间 */
 async function resolveCredential(ref: unknown): Promise<string> {
   const r = ref as CredentialRef | undefined;
-  if (!r || typeof r !== "object") throw new Error("凭据引用非法");
+  if (!r || typeof r !== "object") throw new Error(t("engine.credInvalid"));
   if (r.source === "store") {
     const key = r.key ?? "default";
     const value = await getSharedKeyring().get(KEYRING_SERVICE, key);
     if (value === null || value === "") {
-      throw new Error(`钥匙串条目不存在: ${key}`);
+      throw new Error(t("engine.keyringMissing", { key }));
     }
     return value;
   }
   if (r.source === "env") {
     const name = r.key ?? "";
     const value = import.meta.env?.[name];
-    if (typeof value !== "string" || value === "") throw new Error(`环境变量未设置: ${name}`);
+    if (typeof value !== "string" || value === "") throw new Error(t("engine.envMissing", { name }));
     return value;
   }
-  throw new Error(`凭据源暂不支持: ${r.source}`);
+  throw new Error(t("engine.credSourceUnsupported", { source: r.source }));
 }
 
 /**
@@ -90,7 +91,7 @@ export function unsupportedSnapshot(inst: InstanceConfig): ProviderSnapshot {
     fetched_at: Math.floor(Date.now() / 1000),
     status: "unsupported",
     metrics: [],
-    alerts: [{ level: "info", message: `通道 ${inst.channel} 暂未接入, 等待适配器(P2 多通道)` }],
+    alerts: [{ level: "info", message: t("engine.unsupportedAlert", { channel: inst.channel }) }],
     logo: ch?.logo,
   };
 }
@@ -245,8 +246,8 @@ export class RuntimeEngine {
             fetched_at: Math.floor(Date.now() / 1000),
             status: "error",
             metrics: [],
-            alerts: [{ level: "critical", message: "command 通道需桌面壳(主进程)执行", code: "no_host" }],
-            error_message: "command 通道需桌面壳(主进程)执行",
+            alerts: [{ level: "critical", message: t("test.needsHost"), code: "no_host" }],
+            error_message: t("test.needsHost"),
           };
         }
         return snap as ProviderSnapshot;

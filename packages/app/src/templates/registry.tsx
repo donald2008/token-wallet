@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { Metric, PlanType, ProviderSnapshot } from "../types";
 import { metricHealth } from "../health";
+import { t, currentLocale } from "../i18n";
 import { ProgressBar } from "../components/ProgressBar";
 
 /**
@@ -108,7 +109,7 @@ export function BarsTemplate({ p }: { p: ProviderSnapshot }) {
 /* ---------------- 余额制: ticker 模板(§6.3) ---------------- */
 
 function fmtMoney(n: number): string {
-  return n.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+  return n.toLocaleString(currentLocale(), { maximumFractionDigits: 2 });
 }
 
 /** 币种符号: CNY/人民币 → ¥; 其他用 ISO 码兜底 */
@@ -158,17 +159,17 @@ export function TickerTemplate({ p }: { p: ProviderSnapshot }) {
       </div>
       {showSplit && (
         <div className="ticker-split" data-testid="ticker-split">
-          {m!.granted !== undefined && <span>赠送 {symbol}{fmtMoney(m!.granted!)}</span>}
-          {m!.topped_up !== undefined && <span>充值 {symbol}{fmtMoney(m!.topped_up!)}</span>}
+          {m!.granted !== undefined && <span>{t("tpl.granted", { amount: `${symbol}${fmtMoney(m!.granted!)}` })}</span>}
+          {m!.topped_up !== undefined && <span>{t("tpl.toppedUp", { amount: `${symbol}${fmtMoney(m!.topped_up!)}` })}</span>}
         </div>
       )}
       <div className="ticker-sub">
         {days !== null ? (
           <>
-            近 7 天 ~{m!.daily_rate}/天 · <span data-testid="ticker-days">预计可用约 {fmtDays(days)} 天</span>
+            {t("tpl.rate7", { rate: String(m!.daily_rate) })} · <span data-testid="ticker-days">{t("tpl.eta", { days: fmtDays(days) })}</span>
           </>
         ) : (
-          "余额 · 预计可用天数待消耗速率数据(历史积累后显示)"
+          t("tpl.noRate")
         )}
       </div>
     </div>
@@ -180,7 +181,7 @@ export function TickerTemplate({ p }: { p: ProviderSnapshot }) {
 export function LocalTemplate({ p }: { p: ProviderSnapshot }) {
   return (
     <div className="local-template" data-testid="local-template">
-      <div className="ticker-sub">{p.display_name} · 本地用量(P3)</div>
+      <div className="ticker-sub">{t("tpl.localUsage", { name: p.display_name })}</div>
     </div>
   );
 }

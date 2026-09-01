@@ -10,6 +10,7 @@ import type { ChannelDescriptor } from "@token-wallet/core/channels";
 import { defaultInstanceName, findKeyDuplicate, keyFingerprint } from "../instances/schema";
 import { existingInstances, existingNames, getSharedKeyring, saveInstance } from "../instances/store";
 import { testConnection } from "../connection/testConnection";
+import { t } from "../i18n";
 import type { TestConnectionResult } from "../connection/testConnection";
 import type { ProviderSnapshot } from "../types";
 
@@ -23,22 +24,22 @@ interface Props {
 /** 从 health_check.command 取 CLI 可执行名(如 "arkcli auth status …" → "arkcli") */
 function cliCommandName(channel: ChannelDescriptor): string {
   const cmd = channel.health_check?.command?.trim();
-  if (!cmd) return "官方 CLI";
-  return cmd.split(/\s+/)[0] ?? "官方 CLI";
+  if (!cmd) return t("form.cliFallback");
+  return cmd.split(/\s+/)[0] ?? t("form.cliFallback");
 }
 
 /** 迷你余额/窗口快照展示(测试连接成功)(D-017) */
 function SnapshotPreview({ snapshot }: { snapshot: ProviderSnapshot }) {
   return (
     <div className="test-result ok" data-testid="test-ok">
-      <span className="test-result-title">✓ 连接成功</span>
+      <span className="test-result-title">{t("form.okTitle")}</span>
       {snapshot.metrics.map((m) => (
         <div key={m.key} className="test-metric">
           <span className="test-metric-value">
             {m.used}
             {m.limit ? ` / ${m.limit}` : ""}
           </span>
-          <span className="test-metric-unit">{m.unit} · {m.kind === "balance" ? "余额" : "窗口"}</span>
+          <span className="test-metric-unit">{m.unit} · {m.kind === "balance" ? t("plan.balance") : t("plan.window")}</span>
         </div>
       ))}
     </div>
@@ -83,8 +84,8 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
 
   // 名称即时唯一校验(D-026 第 1 道: 表单保存前)
   const currentNameError = (() => {
-    if (nameTouched.current && !name.trim()) return "实例名不能为空";
-    if (name.trim() && !nameError && existingNames().has(name.trim())) return `实例名已存在: ${name.trim()}`;
+    if (nameTouched.current && !name.trim()) return t("form.nameEmpty");
+    if (name.trim() && !nameError && existingNames().has(name.trim())) return t("form.nameDup", { name: name.trim() });
     return nameError;
   })();
 
@@ -106,13 +107,13 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
 
   const onSaveClick = async () => {
     // 名称即时校验
-    const err = name.trim() ? null : "实例名不能为空";
+    const err = name.trim() ? null : t("form.nameEmpty");
     if (err) {
       setNameError(err);
       return;
     }
     if (existingNames().has(name.trim())) {
-      setNameError(`实例名已存在: ${name.trim()}`);
+      setNameError(t("form.nameDup", { name: name.trim() }));
       return;
     }
     // D-043 key 判重(DynamicForm 提交时, 添加向导提交前): 同 channel 下 key 已存在 → 内联阻断。
@@ -126,7 +127,7 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
       const fp = await keyFingerprint(fpSecretPairs.map(([, v]) => String(v)).join("\n"));
       const dup = findKeyDuplicate(existingInstances(), channel.channel, fp);
       if (dup) {
-        setKeyError(`该 key 已存在于实例「${dup.name}」`);
+        setKeyError(t("form.keyDup", { name: dup.name }));
         return;
       }
     }
@@ -142,7 +143,7 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
         secretFields,
         keyring: getSharedKeyring(),
       });
-      setSavedMsg("已保存到实例列表");
+      setSavedMsg(t("form.saved"));
       onSaved?.();
     } finally {
       setPending(false);
@@ -159,28 +160,28 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
       }}
     >
       <h3 className="form-channel-title">{channel.display_name}</h3>
-      <p className="hint">{channel.plan_type === "balance" ? "余额制" : "窗口制"} · {channel.adapter === "command" ? "command(官方 CLI)" : "http"}</p>
+      <p className="hint">{channel.plan_type === "balance" ? t("planType.balance") : t("planType.window")} · {channel.adapter === "command" ? t("form.adapterCommand") : t("form.adapterHttp")}</p>
 
       {channel.adapter === "command" && channel.health_check?.setup_hint && (
         <div className="command-help" data-testid="command-help">
-          <span className="command-help-title">两段式授权</span>
+          <span className="command-help-title">{t("form.twoStep")}</span>
           <span className="command-help-text">
-            ① 先安装官方 CLI(<code>{cliCommandName(channel)}</code>, 见通道说明)
+            {t("form.twoStep1")}<code>{cliCommandName(channel)}</code>{t("form.twoStep2")}
             <br />
-            ② 再完成一次登录:{channel.health_check.setup_hint}
+            {t("form.twoStepLogin", { hint: channel.health_check.setup_hint ?? "" })}
           </span>
         </div>
       )}
 
       <label className="field">
-        <span className="field-label">实例名称</span>
+        <span className="field-label">{t("form.nameLabel")}</span>
         <input
           type="text"
           className="input"
           data-testid="inst-name"
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
-          placeholder="DeepSeek-按量 #1"
+          placeholder={t("form.namePlaceholder")}
         />
         {currentNameError && <span className="field-error" data-testid="name-error">{currentNameError}</span>}
       </label>
@@ -236,27 +237,27 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
       )}
 
       <label className="field">
-        <span className="field-label">轮询间隔</span>
+        <span className="field-label">{t("form.pollLabel")}</span>
         <input
           type="text"
           className="input"
           data-testid="poll-interval"
           value={pollInterval}
           onChange={(e) => setPollInterval(e.target.value)}
-          placeholder="5m(可选, 覆盖全局默认)"
+          placeholder={t("form.pollPlaceholder")}
         />
       </label>
 
       <div className="form-actions">
         <button type="button" className="btn" data-testid="test-conn" disabled={testing} onClick={onTest}>
-          {testing ? "测试中…" : "测试连接"}
+          {testing ? t("form.testing") : t("form.test")}
         </button>
         <button type="submit" className="btn btn-primary" data-testid="save-instance" disabled={pending}>
-          {pending ? "保存中…" : "保存实例"}
+          {pending ? t("form.saving") : t("form.save")}
         </button>
         {onBack && (
           <button type="button" className="btn" data-testid="form-back" onClick={onBack}>
-            ← 返回选择
+            {t("form.back")}
           </button>
         )}
       </div>

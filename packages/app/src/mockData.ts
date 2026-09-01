@@ -16,14 +16,14 @@ export type ScenarioId =
   | "mixed";
 
 export const SCENARIOS: { id: ScenarioId; label: string; expectHealth: string }[] = [
-  { id: "loading", label: "加载中", expectHealth: "-" },
-  { id: "empty", label: "空态", expectHealth: "-" },
-  { id: "all-ok", label: "全绿", expectHealth: "ok" },
-  { id: "warn", label: "黄(偏低)", expectHealth: "warn" },
-  { id: "expired", label: "黄(auth_expired)", expectHealth: "warn" },
-  { id: "stale", label: "灰(stale)", expectHealth: "unknown" },
-  { id: "error", label: "红(error)", expectHealth: "bad" },
-  { id: "mixed", label: "混合示例", expectHealth: "warn" },
+  { id: "loading", label: "scenario.loading", expectHealth: "-" }, // i18n 键(ScenarioBar 渲染时 t())
+  { id: "empty", label: "scenario.empty", expectHealth: "-" },
+  { id: "all-ok", label: "scenario.allOk", expectHealth: "ok" },
+  { id: "warn", label: "scenario.warn", expectHealth: "warn" },
+  { id: "expired", label: "scenario.auth", expectHealth: "warn" },
+  { id: "stale", label: "scenario.stale", expectHealth: "unknown" },
+  { id: "error", label: "scenario.error", expectHealth: "bad" },
+  { id: "mixed", label: "scenario.mixed", expectHealth: "warn" },
 ];
 
 const NOW = Math.floor(Date.now() / 1000);

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { t } from "../i18n";
 
 /**
  * 本地 Agent 区(§6.5): 默认折叠占位, P3 才做真实数据(per-agent 用量 + 云×本地对比行)。
@@ -18,12 +19,12 @@ export function LocalAgentSection() {
         <span className="local-agent-chevron" data-open={open || undefined}>
           ▸
         </span>
-        <span className="local-agent-title">本地 Agent</span>
-        <span className="local-agent-tag">P3 占位</span>
+        <span className="local-agent-title">{t("local.title")}</span>
+        <span className="local-agent-tag">{t("local.tag")}</span>
       </button>
       {open && (
         <div className="local-agent-body" data-testid="local-agent-body">
-          <div className="ticker-sub">per-agent 用量 + 云×本地对比行(P3 接入真实数据)</div>
+          <div className="ticker-sub">{t("local.body")}</div>
         </div>
       )}
     </section>

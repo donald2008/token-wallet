@@ -1,5 +1,6 @@
 import type { ThemeMode } from "../theme";
-import { THEME_LABEL } from "../theme";
+import { themeLabel } from "../theme";
+import { t } from "../i18n";
 import { ClassicGearIcon, ThemeQuickIcon } from "./icons";
 
 interface Props {
@@ -40,13 +41,13 @@ export function SideBar({
   onCycleTheme,
 }: Props) {
   return (
-    <nav className="sidebar" data-testid="sidebar" aria-label="功能侧栏">
+    <nav className="sidebar" data-testid="sidebar" aria-label={t("side.aria")}>
       <button
         type="button"
         className="btn btn-icon sidebar-btn"
         data-testid="sidebar-add"
-        title="添加 Provider"
-        aria-label="添加 Provider"
+        title={t("common.add")}
+        aria-label={t("common.add")}
         onClick={onAdd}
       >
         {/* 手绘加号 */}
@@ -64,8 +65,8 @@ export function SideBar({
         type="button"
         className={`btn btn-icon sidebar-btn${refreshing ? " spinning" : ""}`}
         data-testid="refresh-btn"
-        title="刷新"
-        aria-label="刷新"
+        title={t("side.refresh")}
+        aria-label={t("side.refresh")}
         onClick={onRefresh}
       >
         {/* 手绘环形箭头(缺口圆弧 + 箭头) */}
@@ -93,8 +94,8 @@ export function SideBar({
         className="btn btn-icon sidebar-btn"
         data-testid="theme-cycle-btn"
         data-theme-mode={themeMode}
-        title={`主题: ${THEME_LABEL[themeMode]}(点击切换)`}
-        aria-label={`主题: ${THEME_LABEL[themeMode]}(点击切换)`}
+        title={t("side.themeTitle", { mode: themeLabel(themeMode) })}
+        aria-label={t("side.themeTitle", { mode: themeLabel(themeMode) })}
         onClick={onCycleTheme}
       >
         {/* 手绘主题图标(随 mode 切换): system=半日半月 / light=太阳 / dark=月亮 */}
@@ -104,8 +105,8 @@ export function SideBar({
         type="button"
         className="btn btn-icon sidebar-btn"
         data-testid="settings-btn"
-        title="设置"
-        aria-label="设置"
+        title={t("common.settings")}
+        aria-label={t("common.settings")}
         onClick={onOpenSettings}
       >
         {/* 经典齿轮剪影(齿环 + 中心孔): t_66b67453 契约3 重画 ——

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ProviderSnapshot } from "../types";
 import { providerHealth } from "../health";
+import { t } from "../i18n";
 
 /**
  * 主页过滤 — P1 t_9639078b: chips 收敛重设计(三枚 icon 钮)。
@@ -73,10 +74,11 @@ interface IconDef {
   colorClass: "filter-icon-all" | "filter-icon-available" | "filter-icon-abnormal";
 }
 
+/** label 为 i18n 键(渲染时 FilterIcons 经 t() 取文案) */
 const ICONS: IconDef[] = [
-  { sel: { kind: "all" }, testid: "filter-all", label: "全部", colorClass: "filter-icon-all" },
-  { sel: { kind: "available" }, testid: "filter-available", label: "可用", colorClass: "filter-icon-available" },
-  { sel: { kind: "abnormal" }, testid: "filter-abnormal", label: "异常", colorClass: "filter-icon-abnormal" },
+  { sel: { kind: "all" }, testid: "filter-all", label: "filter.all", colorClass: "filter-icon-all" },
+  { sel: { kind: "available" }, testid: "filter-available", label: "filter.available", colorClass: "filter-icon-available" },
+  { sel: { kind: "abnormal" }, testid: "filter-abnormal", label: "filter.abnormal", colorClass: "filter-icon-abnormal" },
 ];
 
 /** 手绘 14px 单色 glyph(SVG path, currentColor 自适应主题, 不引图标库 D-002)。 */
@@ -123,7 +125,7 @@ const GLYPHS: Record<IconDef["colorClass"], ReactNode> = {
  */
 export function FilterIcons({ value, onChange }: Props) {
   return (
-    <div className="filter-icons" role="radiogroup" aria-label="过滤 Provider" data-testid="filter-icons">
+    <div className="filter-icons" role="radiogroup" aria-label={t("filter.aria")} data-testid="filter-icons">
       {ICONS.map(({ sel, testid, label, colorClass }) => {
         const checked = isSameSel(sel, value);
         return (
@@ -132,8 +134,8 @@ export function FilterIcons({ value, onChange }: Props) {
             type="button"
             role="radio"
             aria-checked={checked}
-            aria-label={label}
-            title={label}
+            aria-label={t(label as Parameters<typeof t>[0])}
+            title={t(label as Parameters<typeof t>[0])}
             className={`filter-icon ${colorClass}${checked ? " active" : ""}`}
             data-testid={testid}
             onClick={() => onChange(checked ? DEFAULT_FILTER : sel)}

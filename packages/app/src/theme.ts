@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AppSettings } from "./types";
+import { t } from "./i18n";
 
 /**
  * 主题(D-010): dark/light 双套 CSS 变量, 默认追随系统, 可配置覆盖。
@@ -13,12 +14,18 @@ export type EffectiveTheme = "light" | "dark";
 /** 主题快切循环(t_66b67453 契约2): 自动 → 浅色 → 深色 → 自动; 设置弹窗三态与快切同走此序 */
 export const THEME_CYCLE: readonly ThemeMode[] = ["system", "light", "dark"] as const;
 
-/** ThemeMode 中文标签(侧栏快切钮 title / aria-label 用, 与设置页文案同源) */
+/** ThemeMode 标签键(侧栏快切钮 title / aria-label 用, 与设置页文案同源);
+ * 值为 i18n 键, 渲染时 themeLabel() 按当前语言取文案(D-047) */
 export const THEME_LABEL: Record<ThemeMode, string> = {
-  system: "跟随系统",
-  light: "浅色",
-  dark: "深色",
+  system: "theme.system",
+  light: "theme.light",
+  dark: "theme.dark",
 };
+
+/** 主题文案(渲染用): 侧栏快切 title/aria 与设置页三档共用 */
+export function themeLabel(m: ThemeMode): string {
+  return t(THEME_LABEL[m] as Parameters<typeof t>[0]);
+}
 
 const THEME_KEY = "token-wallet.theme.v1";
 

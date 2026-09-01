@@ -1,15 +1,19 @@
+import { t } from "../i18n";
+
 /** 首开隐私声明页(D-021 §10): 零遥测/零上报/数据不出本机, 须点同意。P0-2 为占位实现。 */
 export function ConsentPage({ onAgree }: { onAgree: () => void }) {
   return (
     <div className="placeholder" data-testid="consent-page">
-      <h2>欢迎使用 token-wallet</h2>
+      <h2>{t("consent.title")}</h2>
       <p>
-        本应用<strong>零遥测、零上报</strong>, 你的套餐与凭据数据
-        <strong>只保存在本机</strong>。
+        {t("consent.l1a")}
+        <strong>{t("consent.l1b")}</strong>
+        {t("consent.l1c")}
+        <strong>{t("consent.l1d")}</strong>。
       </p>
-      <p>继续使用即表示你已知晓以上隐私声明。</p>
+      <p>{t("consent.p2")}</p>
       <button type="button" className="btn btn-primary" data-testid="consent-agree" onClick={onAgree}>
-        同意并继续
+        {t("consent.agree")}
       </button>
     </div>
   );
@@ -19,10 +23,10 @@ export function ConsentPage({ onAgree }: { onAgree: () => void }) {
 export function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="placeholder" data-testid="empty-state">
-      <h2>暂无 Provider</h2>
-      <p>添加第一个 AI 套餐 / 余额通道, 额度健康状况将显示在这里。</p>
+      <h2>{t("empty.title")}</h2>
+      <p>{t("empty.desc")}</p>
       <button type="button" className="btn btn-primary" data-testid="add-provider" onClick={onAdd}>
-        添加 Provider
+        {t("common.add")}
       </button>
     </div>
   );
@@ -46,8 +50,8 @@ export function LoadingState() {
 export function CollectingState() {
   return (
     <div className="placeholder" data-testid="collecting-state" aria-busy="true">
-      <h2>数据采集中</h2>
-      <p>已配置的 Provider 正在采集额度数据, 首个快照到达后即显示。</p>
+      <h2>{t("collecting.title")}</h2>
+      <p>{t("collecting.desc")}</p>
     </div>
   );
 }
@@ -56,8 +60,8 @@ export function CollectingState() {
 export function NoMatchState() {
   return (
     <div className="placeholder" data-testid="no-match">
-      <h2>无匹配实例</h2>
-      <p>当前过滤条件下没有 Provider, 切换其他过滤视角查看。</p>
+      <h2>{t("noMatch.title")}</h2>
+      <p>{t("noMatch.desc")}</p>
     </div>
   );
 }
@@ -73,14 +77,13 @@ export function ConfigErrorState({
 }) {
   return (
     <div className="placeholder" data-testid="config-error">
-      <h2>配置加载失败</h2>
+      <h2>{t("cfgErr.title")}</h2>
       <p>
-        实例配置(instances.yaml)损坏或未通过校验。为避免覆盖你的配置,
-        应用已停止加载, 请修复配置文件后重启。
+        {t("cfgErr.desc")}
       </p>
       {instancesPath && (
         <p data-testid="config-error-path">
-          配置文件位置: <code>{instancesPath}</code>
+          {t("cfgErr.pathLabel")}<code>{instancesPath}</code>
         </p>
       )}
       <p data-testid="config-error-detail">{error}</p>
@@ -95,11 +98,11 @@ export function ConfigErrorState({
 export function PersistErrorBar({ error, onDismiss }: { error: string; onDismiss: () => void }) {
   return (
     <div className="persist-error-bar" role="alert" data-testid="persist-error-bar">
-      <span className="persist-error-text">配置未能保存到磁盘，重启后可能丢失：{error}</span>
+      <span className="persist-error-text">{t("persistError.text", { error })}</span>
       <button
         type="button"
         className="persist-error-close"
-        aria-label="关闭"
+        aria-label={t("common.close")}
         data-testid="persist-error-dismiss"
         onClick={onDismiss}
       >

@@ -9,6 +9,7 @@
  *   - 表单保存时: secret 值写入钥匙串, 实例配置存 store 引用
  */
 import { useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 import type { InstanceConfig, CredentialRef } from "./schema";
 import {
   InstancesFileSchema,
@@ -189,7 +190,7 @@ export function buildInstancesFile(instances: InstanceConfig[]): {
 } {
   const parsed = InstancesFileSchema.safeParse({ version: 1, instances });
   if (!parsed.success) {
-    throw new Error(`实例配置校验失败: ${parsed.error.issues[0]?.message ?? "未知错误"}`);
+    throw new Error(t("store.validateFailed", { msg: parsed.error.issues[0]?.message ?? t("schema.unknownError") }));
   }
   return parsed.data;
 }
@@ -226,14 +227,14 @@ export async function loadPersistedInstances(): Promise<string | null> {
   try {
     raw = await instancesLoad();
   } catch (err) {
-    return `instances.yaml 读取失败: ${err instanceof Error ? err.message : String(err)}`;
+    return t("store.yamlReadFailed", { err: err instanceof Error ? err.message : String(err) });
   }
   if (raw === null || raw === undefined) {
     getSharedStore().hydrate([]);
     return null;
   }
   const parsed = parseInstances(raw);
-  if (!parsed.ok) return `instances.yaml 校验失败: ${parsed.error ?? "未知错误"}`;
+  if (!parsed.ok) return t("store.yamlValidateFailed", { err: parsed.error ?? t("schema.unknownError") });
   getSharedStore().hydrate(parsed.instances ?? []);
   return null;
 }

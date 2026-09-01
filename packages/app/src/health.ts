@@ -1,5 +1,5 @@
 import type { HealthLevel, Metric, ProviderSnapshot, ProviderStatus } from "./types";
-
+import { t, tKey } from "./i18n";
 /** 阈值默认值(D-022): 黄线 30% / 红线 10%(剩余百分比), P0 后续卡片入全局设置 */
 export const WARN_THRESHOLD = 0.3;
 export const BAD_THRESHOLD = 0.1;
@@ -12,14 +12,20 @@ export const HEALTH_RANK: Record<HealthLevel, number> = {
   ok: 0,
 };
 
-/** 配额健康度文案(D-022): 仅表达配额维度, 不表达 status 原因(status 文案见 STATUS_BADGE) */
+/** 配额健康度文案键(D-022): 仅表达配额维度, 不表达 status 原因(原因文案见 statusBadge);
+ * 值为 i18n 键, 渲染时经 t() 按当前语言取文案(D-047 前 zh 文案原样) */
 export const HEALTH_LABEL: Record<HealthLevel, string> = {
-  ok: "健康",
-  warn: "偏低",
+  ok: "badge.ok",
+  warn: "badge.warn",
   // 额度打满/耗尽(剩余 ≤10%), 不是"过期" — 耗尽只需等窗口重置, 无需重新授权
-  bad: "已耗尽",
-  unknown: "未知",
+  bad: "badge.exhausted",
+  unknown: "badge.unknown",
 };
+
+/** 健康度文案(渲染用): t(HEALTH_LABEL[h]) 的便捷封装 */
+export function healthLabel(h: HealthLevel): string {
+  return t(HEALTH_LABEL[h] as Parameters<typeof t>[0]);
+}
 
 /**
  * 徽章短文案(≤4 汉字, D-005 status 一等公民) — 徽章位表达"原因", 非颜色带。
@@ -28,20 +34,20 @@ export const HEALTH_LABEL: Record<HealthLevel, string> = {
  * - status === "ok" → 才看配额健康度(HEALTH_LABEL)
  */
 const STATUS_BADGE: Record<Exclude<ProviderStatus, "ok">, string> = {
-  auth_expired: "待授权",
-  stale: "已陈旧",
-  unsupported: "未接入",
-  error: "采集失败",
+  auth_expired: "badge.auth_expired",
+  stale: "badge.stale",
+  unsupported: "badge.unsupported",
+  error: "badge.error",
 };
 
 export function statusBadge(p: ProviderSnapshot): string {
-  if (p.status !== "ok") return STATUS_BADGE[p.status];
+  if (p.status !== "ok") return t(STATUS_BADGE[p.status] as Parameters<typeof t>[0]);
   const h = providerHealth(p);
   // 耗尽分级(t_05271be0): bad 带内按 metric 级判定取最差级拆文案 ——
   // 任一窗口 remaining==0(used>=limit) → 「已耗尽」; 否则(0<remaining≤10%) → 「即将耗尽」。
   // 颜色语义不动: 两级同属 bad 红(D-022), metricHealth 阈值判定不改。
-  if (h === "bad") return hasExhaustedMetric(p) ? HEALTH_LABEL.bad : "即将耗尽";
-  return HEALTH_LABEL[h];
+  if (h === "bad") return hasExhaustedMetric(p) ? healthLabel("bad") : t("badge.exhausting");
+  return healthLabel(h);
 }
 
 /** metric 级耗尽判定: 任一窗口额度打满(used>=limit, remaining==0) */
@@ -49,8 +55,18 @@ function hasExhaustedMetric(p: ProviderSnapshot): boolean {
   return p.metrics.some((m) => m.limit !== undefined && m.limit > 0 && m.used >= m.limit);
 }
 
-/** tooltip 摘要分组的展示顺序: 严重度降序(采集失败 > 已耗尽 > 即将耗尽 > 待授权 > 偏低 > 已陈旧 > 未接入 > 健康) */
-const BADGE_ORDER = ["采集失败", "已耗尽", "即将耗尽", "待授权", "偏低", "已陈旧", "未接入", "健康"];
+/** tooltip 摘要分组的展示顺序: 严重度降序(采集失败 > 已耗尽 > 即将耗尽 > 待授权 > 偏低 > 已陈旧 > 未接入 > 健康)
+ * 值为 i18n 键(tooltipSummary 渲染时按当前语言取文案) */
+const BADGE_ORDER = [
+  "badge.error",
+  "badge.exhausted",
+  "badge.exhausting",
+  "badge.auth_expired",
+  "badge.warn",
+  "badge.stale",
+  "badge.unsupported",
+  "badge.ok",
+];
 
 /** 单条 metric 健康度(剩余百分比 vs 阈值) */
 export function metricHealth(m: Metric): HealthLevel {
@@ -250,12 +266,16 @@ export function reorderByIds(ids: string[], dragId: string, overIndex: number): 
  * P1 起按 statusBadge(原因)分组, 不再按颜色带分组 —— auth_expired 不再被统计成"偏低",
  * 配额耗尽显示"已耗尽"而非"过期"。 */
 export function tooltipSummary(providers: ProviderSnapshot[]): string {
-  if (providers.length === 0) return "token-wallet — 暂无 Provider";
+  if (providers.length === 0) return t("tray.noProviders");
   const counts = new Map<string, number>();
   for (const p of providers) {
     const label = statusBadge(p);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  const parts = BADGE_ORDER.filter((l) => counts.has(l)).map((l) => `${counts.get(l)}${l}`);
-  return `token-wallet — ${parts.join(" ")}`;
+  // counts 以"渲染后文案"为键(statusBadge 产出); BADGE_ORDER 键序即严重度降序, 按 key 序取即得稳定排序
+  const ordered = BADGE_ORDER.map((k) => tKey(k))
+    .map((label) => ({ label, n: counts.get(label) ?? 0 }))
+    .filter(({ n }) => n > 0)
+    .map(({ label, n }) => t("tray.countBadge", { count: n, label }));
+  return `token-wallet — ${ordered.join(" ")}`;
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { t } from "../i18n";
 import type { ChannelDescriptor } from "@token-wallet/core/channels";
 import { useInstances } from "../instances/store";
 import { ChannelTree } from "./ChannelTree";
@@ -31,20 +32,20 @@ export function AddProviderWizard({ onBack, variant = "page" }: Props) {
   return (
     <div className="settings-view" data-testid="add-wizard">
       <div className="settings-head">
-        <h3>添加 Provider</h3>
+        <h3>{t("common.add")}</h3>
         {variant === "modal" ? (
           <button
             type="button"
             className="btn btn-icon"
             data-testid="add-close"
-            aria-label="关闭添加向导"
+            aria-label={t("wizard.closeAria")}
             onClick={onBack}
           >
             ×
           </button>
         ) : (
           <button type="button" className="btn" data-testid="add-back" onClick={onBack}>
-            ← 返回
+            {t("common.back")}
           </button>
         )}
       </div>
@@ -52,8 +53,8 @@ export function AddProviderWizard({ onBack, variant = "page" }: Props) {
       <div className="settings-body" data-testid="settings-body">
         {step === "add-channel" && (
           <section className="settings-section" data-testid="add-channel-step">
-            <h4>{isFirstRun ? "引导: 选择第一个平台" : "选择平台"}</h4>
-            <p className="hint">展开平台, 点击产品直达配置表单(D-025)。</p>
+            <h4>{isFirstRun ? t("wizard.firstTitle") : t("wizard.pickTitle")}</h4>
+            <p className="hint">{t("wizard.hint")}</p>
             <ChannelTree
               onSelect={(d) => {
                 setSelectedChannel(d);
@@ -65,7 +66,7 @@ export function AddProviderWizard({ onBack, variant = "page" }: Props) {
 
         {step === "fill-form" && selectedChannel && (
           <section className="settings-section">
-            <h4>配置 {selectedChannel.display_name}</h4>
+            <h4>{t("wizard.configure", { name: selectedChannel.display_name })}</h4>
             <DynamicForm
               channel={selectedChannel}
               onBack={() => {

@@ -15,6 +15,7 @@
  * 本卡(P0-4)用内存 mock 撑住 store 接口, OS 钥匙串真实现 P0-5/P1。
  */
 import { z } from "zod";
+import { t } from "../i18n";
 import type { ChannelDescriptor } from "@token-wallet/core/channels";
 
 /** 凭据引用来源(§5.0.1 / D-029) */
@@ -79,7 +80,7 @@ export const InstancesFileSchema = z
       if (names.has(inst.name)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `实例名重复: ${inst.name}`,
+          message: t("schema.nameDup", { name: inst.name }),
           path: ["instances", i, "name"],
         });
       }
@@ -87,7 +88,7 @@ export const InstancesFileSchema = z
       if (ids.has(inst.id)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `实例 id 重复: ${inst.id}`,
+          message: t("schema.idDup", { id: inst.id }),
           path: ["instances", i, "id"],
         });
       }
@@ -101,12 +102,12 @@ export function validateFormName(
   existingNames: Iterable<string>,
   ignoreId?: string,
 ): string | null {
-  if (!name.trim()) return "实例名不能为空";
+  if (!name.trim()) return t("schema.nameEmpty");
   const others = new Set(existingNames);
   if (ignoreId) {
     // 编辑场景允许保留自身原名(本卡暂不支持编辑, 占位签名)
   }
-  if (others.has(name.trim())) return `实例名已存在: ${name.trim()}`;
+  if (others.has(name.trim())) return t("schema.nameExists", { name: name.trim() });
   return null;
 }
 
@@ -135,8 +136,8 @@ export function validateChannelConfig(
   channelId: string,
   { params_schema }: Pick<ChannelDescriptor, "params_schema">,
 ): string | null {
-  if (!channelId.includes("/")) return `通道路径非法: ${channelId}`;
-  if (!params_schema) return `通道不存在或无参数 schema: ${channelId}`;
+  if (!channelId.includes("/")) return t("schema.badChannelPath", { channel: channelId });
+  if (!params_schema) return t("schema.noSchema", { channel: channelId });
   return null;
 }
 
@@ -149,7 +150,7 @@ export function parseInstances(input: unknown): {
   const parsed = InstancesFileSchema.safeParse(input);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    return { ok: false, error: `${first?.message ?? "未知错误"}` };
+    return { ok: false, error: first?.message ?? t("schema.unknownError") };
   }
   return { ok: true, instances: parsed.data.instances };
 }

@@ -2,7 +2,7 @@
 // 徽章表达"原因"而非颜色带 —— 配额耗尽≠过期, auth_expired≠偏低。
 // 颜色语义(providerHealth 判定)本卡一律不动, 此处固化为回归断言。
 import { describe, expect, it } from "vitest";
-import { HEALTH_LABEL, providerHealth, statusBadge, tooltipSummary } from "./health";
+import { healthLabel, providerHealth, statusBadge, tooltipSummary } from "./health";
 import type { HealthLevel, Metric, ProviderSnapshot, ProviderStatus } from "./types";
 
 const NOW = 1_780_000_000;
@@ -91,8 +91,11 @@ describe("颜色语义不变(D-022) — 本卡只改文案, 不动判定", () =>
 
 describe("HEALTH_LABEL 定位收窄为配额健康度", () => {
   it("bad = 已耗尽(配额语义), 不再出现\"过期\"", () => {
-    expect(HEALTH_LABEL.bad).toBe("已耗尽");
-    expect(Object.values(HEALTH_LABEL)).not.toContain("过期");
+    // D-047 起 HEALTH_LABEL 值为 i18n 键; 文案语义经 healthLabel() 断言(zh 态)
+    expect(healthLabel("bad")).toBe("已耗尽");
+    for (const h of ["ok", "warn", "bad", "unknown"] as const) {
+      expect(healthLabel(h)).not.toBe("过期");
+    }
   });
 });
 

@@ -15,6 +15,7 @@ import type { ChannelDescriptor } from "@token-wallet/core/channels";
 import { CHANNEL_MAPPINGS, getPresetChannel } from "@token-wallet/core/channels";
 import { GenericHttpAdapter } from "@token-wallet/core/generic-http";
 import { commandRun, httpGetJson } from "../ipc";
+import { t } from "../i18n";
 
 export type TestConnectionResult =
   | { ok: true; snapshot: ProviderSnapshot }
@@ -42,13 +43,13 @@ async function realHttpTest(
   const mapping = CHANNEL_MAPPINGS[channel.channel];
   const descriptor = getPresetChannel(channel.channel);
   if (!mapping || !descriptor) {
-    return { ok: false, error: `通道 ${channel.channel} 未接入真实采集(目录不变量破坏)` };
+    return { ok: false, error: t("test.notWired", { channel: channel.channel }) };
   }
   const adapter = new GenericHttpAdapter(mapping, testFetch);
   const instance = {
     id: "test-conn",
     channel: channel.channel,
-    name: "测试连接",
+    name: t("test.instanceName"),
     params: { api_key: String(params.api_key ?? "") },
   };
   const ctx = {
@@ -63,8 +64,8 @@ async function realHttpTest(
   if (snap.status === "ok") return { ok: true, snapshot: snap };
   const msg =
     snap.status === "auth_expired"
-      ? "认证失败: API Key 无效 (401 Unauthorized)"
-      : snap.error_message ?? `采集失败(${snap.status})`;
+      ? t("test.authFailed401")
+      : snap.error_message ?? t("test.fetchFailed", { status: snap.status });
   return { ok: false, error: msg };
 }
 
@@ -77,33 +78,33 @@ async function realHttpTest(
 async function realCommandTest(channel: ChannelDescriptor): Promise<TestConnectionResult> {
   const descriptor = getPresetChannel(channel.channel);
   if (!descriptor) {
-    return { ok: false, error: `通道 ${channel.channel} 未接入真实采集(目录不变量破坏)` };
+    return { ok: false, error: t("test.notWired", { channel: channel.channel }) };
   }
   let snap: unknown;
   try {
     snap = await commandRun({
       channel: channel.channel,
       descriptor,
-      instance: { id: "test-conn", channel: channel.channel, name: "测试连接", params: {} },
+      instance: { id: "test-conn", channel: channel.channel, name: t("test.instanceName"), params: {} },
       fetchedAt: NOW,
       timeoutMs: 15_000,
     });
   } catch (err) {
     // t_c561c8a8 round3(W1): 桥 reject(主进程异常/注册表破坏) → 显式失败, 不停「测试中…」
-    return { ok: false, error: `command 测试连接失败: ${err instanceof Error ? err.message : String(err)}` };
+    return { ok: false, error: t("test.cmdBridgeFailed", { err: err instanceof Error ? err.message : String(err) }) };
   }
   if (snap === null) {
-    return { ok: false, error: "command 通道需桌面壳(主进程)执行" };
+    return { ok: false, error: t("test.needsHost") };
   }
   const result = snap as ProviderSnapshot;
   if (result.status === "ok") return { ok: true, snapshot: result };
   if (result.status === "auth_expired") {
     return {
       ok: false,
-      error: `认证失败: ${result.setup_hint ?? "控制台会话已失效, 请重新登录"}`,
+      error: t("test.authFailedPrefix", { reason: result.setup_hint ?? t("test.sessionExpired") }),
     };
   }
-  return { ok: false, error: result.error_message ?? `采集失败(${result.status})` };
+  return { ok: false, error: result.error_message ?? t("test.fetchFailed", { status: result.status }) };
 }
 
 /**
@@ -121,17 +122,17 @@ export async function testConnection(
     if (!f.required) continue;
     const v = params[f.key];
     if (v === undefined || v === "" || v === null) {
-      return { ok: false, error: `缺少必填参数: ${f.label}` };
+      return { ok: false, error: t("test.missingParam", { label: f.label }) };
     }
     if (typeof v === "string" && v.trim() === "") {
-      return { ok: false, error: `缺少必填参数: ${f.label}` };
+      return { ok: false, error: t("test.missingParam", { label: f.label }) };
     }
   }
 
   // 任何 secret 值为 "fail" 哨兵 → 模拟失败(acceptance: 失败要给出具体错误)
   for (const f of channel.params_schema) {
     if (f.type === "secret" && params[f.key] === "fail") {
-      return { ok: false, error: "认证失败: API Key 无效 (401 Unauthorized)" };
+      return { ok: false, error: t("test.authFailed401") };
     }
   }
 

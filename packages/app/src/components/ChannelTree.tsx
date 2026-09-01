@@ -14,6 +14,7 @@
 import { useMemo, useState } from "react";
 import { PRESET_CHANNELS, type ChannelDescriptor } from "@token-wallet/core/channels";
 import { BrandLogo } from "./brand-logos";
+import { t } from "../i18n";
 
 interface Props {
   onSelect: (channel: ChannelDescriptor) => void;
@@ -93,7 +94,7 @@ export function ChannelBrandGrid({ onSelect }: Props) {
                   >
                     <span className="chip-name">{d.product_display_name}</span>
                     <span className={`chip-type chip-${d.plan_type}`}>
-                      {d.plan_type === "balance" ? "余额" : "窗口"}
+                      {d.plan_type === "balance" ? t("plan.balance") : t("plan.window")}
                     </span>
                   </button>
                 ))}

@@ -1,5 +1,6 @@
 import type { Metric } from "../types";
 import { metricHealth } from "../health";
+import { t } from "../i18n";
 
 /**
  * 重置倒计时文案(#829 R2): 纯倒计时, 去掉旧的动作后缀, 单单位 + 保留一位小数:
@@ -11,10 +12,10 @@ import { metricHealth } from "../health";
 export function resetText(resetAt?: number, nowSec: number = Math.floor(Date.now() / 1000)): string {
   if (!resetAt) return "";
   const s = resetAt - nowSec;
-  if (s <= 0) return "即将重置";
-  if (s >= 86400) return `${(s / 86400).toFixed(1)}天`;
-  if (s >= 3600) return `${(s / 3600).toFixed(1)}小时`;
-  return `${Math.round(s / 60)}分`;
+  if (s <= 0) return t("reset.soon");
+  if (s >= 86400) return t("reset.days", { n: (s / 86400).toFixed(1) });
+  if (s >= 3600) return t("reset.hours", { n: (s / 3600).toFixed(1) });
+  return t("reset.minutes", { n: Math.round(s / 60) });
 }
 
 /** 数字格式化: ≤1 位小数 + 去尾 .0(37.9415→"37.9", 40→"40"); 整数原样不进小数 */

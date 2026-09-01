@@ -1,4 +1,5 @@
 import { SCENARIOS, type ScenarioId } from "../mockData";
+import { t, tKey } from "../i18n";
 
 /**
  * dev 场景切换器: 仅开发环境渲染, 用于演示/验收四色托盘联动与各面板状态。
@@ -20,10 +21,10 @@ export function ScenarioBar({
           type="button"
           className={`btn${scenario === s.id ? " active" : ""}`}
           data-testid={`scenario-${s.id}`}
-          title={s.expectHealth !== "-" ? `期望托盘色: ${s.expectHealth}` : undefined}
+          title={s.expectHealth !== "-" ? t("scenario.expectHealth", { health: s.expectHealth }) : undefined}
           onClick={() => onChange(s.id)}
         >
-          {s.label}
+          {tKey(s.label)}
         </button>
       ))}
     </div>

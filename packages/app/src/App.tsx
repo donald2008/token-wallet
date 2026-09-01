@@ -5,6 +5,8 @@ import { getBootstrap, getSortConfig, getStoragePaths, persistConsent, setSortCo
 import { selectPanelProviders } from "./panelProviders";
 import type { ScenarioId } from "./mockData";
 import { useTheme, THEME_CYCLE } from "./theme";
+import { LangProvider } from "./i18nReact";
+import { t } from "./i18n";
 import { TitleBar } from "./components/TitleBar";
 import { SideBar } from "./components/SideBar";
 import { ProviderCard } from "./components/ProviderCard";
@@ -69,6 +71,14 @@ export function useRealEngine(instances: ReturnType<typeof useInstances>): {
 }
 
 export default function App() {
+  return (
+    <LangProvider>
+      <AppShell />
+    </LangProvider>
+  );
+}
+
+function AppShell() {
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [consented, setConsented] = useState(false);
@@ -150,9 +160,9 @@ export default function App() {
   const tooltip = useMemo(
     () =>
       collecting
-        ? "token-wallet — 数据采集中"
+        ? t("tray.collecting")
         : providers === null
-          ? "token-wallet — 加载中"
+          ? t("tray.loading")
           : tooltipSummary(providers),
     [collecting, providers],
   );
@@ -371,7 +381,7 @@ export default function App() {
             className="settings-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="设置"
+            aria-label={t("common.settings")}
             onClick={(e) => e.stopPropagation()}
           >
             <SettingsView
@@ -392,7 +402,7 @@ export default function App() {
             className="settings-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="添加 Provider"
+            aria-label={t("common.add")}
             onClick={(e) => e.stopPropagation()}
           >
             <AddProviderWizard variant="modal" onBack={closeAddModal} />
