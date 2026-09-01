@@ -109,7 +109,15 @@ export function BarsTemplate({ p }: { p: ProviderSnapshot }) {
 /* ---------------- 余额制: ticker 模板(§6.3) ---------------- */
 
 function fmtMoney(n: number): string {
-  return n.toLocaleString(currentLocale(), { maximumFractionDigits: 2 });
+  // 固定 2 位小数: 浮点尾巴(448.45000000000005)与长串都对不起来, 金额必须干净可读
+  const safe = Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+  return safe.toLocaleString(currentLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** 速率展示精度: 近 7 天日消耗, 两位内收敛(8.2 不显 8.2000000000001) */
+function fmtRate(n: number): string {
+  const safe = Number.isFinite(n) ? n : 0;
+  return safe.toLocaleString(currentLocale(), { maximumFractionDigits: 2 });
 }
 
 /** 币种符号: CNY/人民币 → ¥; 其他用 ISO 码兜底 */
@@ -166,7 +174,7 @@ export function TickerTemplate({ p }: { p: ProviderSnapshot }) {
       <div className="ticker-sub">
         {days !== null ? (
           <>
-            {t("tpl.rate7", { rate: String(m!.daily_rate) })} · <span data-testid="ticker-days">{t("tpl.eta", { days: fmtDays(days) })}</span>
+            {t("tpl.rate7", { rate: String(fmtRate(m!.daily_rate!)) })} · <span data-testid="ticker-days">{t("tpl.eta", { days: fmtDays(days) })}</span>
           </>
         ) : (
           t("tpl.noRate")

@@ -980,6 +980,7 @@ body {
 
 /* D-046: 关于区更新行 — 版本号 + 状态/按钮, 低调一行不占显眼位 */
 .about-update {
+  /* flex 行: 版本号与更新控件(btn 28px 高)垂直居中对齐 */
   display: flex;
   align-items: center;
   gap: 8px;
@@ -988,6 +989,7 @@ body {
 .about-version {
   color: var(--fg-dim);
   font-size: 12px;
+  line-height: 28px; /* 与 .btn 高一致, 版本号不与按钮 baseline 错位 */
   font-variant-numeric: tabular-nums;
 }
 .updater-state {
