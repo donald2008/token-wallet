@@ -51,7 +51,7 @@ const NOT_LOGINED_PATTERN = "NotLogined";
 
 /** 统一 setup_hint(卡片修复指引) */
 const SETUP_HINT = "运行 `bl auth login --console` 重新授权(控制台会话由 CLI 管理)";
-const INSTALL_HINT = "未检测到 bl CLI: 请安装(见 DESIGN.md D-023 一键安装)后重启应用";
+const INSTALL_HINT = "未检测到 bl CLI: 请安装 `npm i -g bailian-cli` 后重启应用";
 
 /** runCommandResult 注入点(测试传假 runner; 缺省走真实 spawn) */
 export type BailianRunner = (ctx: FetchContext) => Promise<CommandRunResult>;
