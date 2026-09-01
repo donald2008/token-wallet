@@ -10,15 +10,24 @@ import {
   updaterCheck,
   updaterDownload,
   updaterInstall,
+  setLangPersisted,
   type StoragePaths,
   type UpdaterState,
 } from "../ipc";
+import { t, tKey, type Lang } from "../i18n";
+import { useLang } from "../i18nReact";
 import { BrandLogo } from "./brand-logos";
 
-const THEME_OPTIONS: { id: ThemeMode; label: string }[] = [
-  { id: "system", label: "跟随系统" },
-  { id: "light", label: "浅色" },
-  { id: "dark", label: "深色" },
+const THEME_OPTIONS: { id: ThemeMode; labelKey: string }[] = [
+  { id: "system", labelKey: "theme.system" },
+  { id: "light", labelKey: "theme.light" },
+  { id: "dark", labelKey: "theme.dark" },
+];
+
+/** 语言选项: 用各语言自称(不经翻译, i18n 惯例); 顺序 = LANGS 声明序(zh 在前) */
+const LANG_OPTIONS: { id: Lang; label: string }[] = [
+  { id: "zh", label: "简体中文" },
+  { id: "en", label: "English" },
 ];
 
 interface Props {
@@ -32,15 +41,15 @@ interface Props {
   variant?: "page" | "modal";
 }
 
-const SORT_KEY_OPTIONS: { id: SortKey; label: string }[] = [
-  { id: "name", label: "名称" },
-  { id: "urgency", label: "紧要度" },
-  { id: "manual", label: "手动" },
+const SORT_KEY_OPTIONS: { id: SortKey; labelKey: string }[] = [
+  { id: "name", labelKey: "set.sortName" },
+  { id: "urgency", labelKey: "set.sortUrgency" },
+  { id: "manual", labelKey: "set.sortManual" },
 ];
 
-const SORT_DIR_OPTIONS: { id: SortDir; label: string }[] = [
-  { id: "asc", label: "正排" },
-  { id: "desc", label: "倒排" },
+const SORT_DIR_OPTIONS: { id: SortDir; labelKey: string }[] = [
+  { id: "asc", labelKey: "set.sortAsc" },
+  { id: "desc", labelKey: "set.sortDesc" },
 ];
 
 /**
@@ -62,6 +71,7 @@ export function SettingsView({
   onBack,
   variant = "page",
 }: Props) {
+  const { lang, setLang } = useLang();
   const [storagePaths, setStoragePaths] = useState<StoragePaths | null>(null);
   const [autoStart, setAutoStart] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
@@ -94,20 +104,20 @@ export function SettingsView({
   return (
     <div className="settings-view" data-testid="settings-view">
       <div className="settings-head">
-        <h3>设置</h3>
+        <h3>{t("common.settings")}</h3>
         {variant === "modal" ? (
           <button
             type="button"
             className="btn btn-icon"
             data-testid="settings-close"
-            aria-label="关闭设置"
+            aria-label={t("set.closeAria")}
             onClick={onBack}
           >
             ×
           </button>
         ) : (
           <button type="button" className="btn" data-testid="settings-back" onClick={onBack}>
-            ← 返回
+            {t("common.back")}
           </button>
         )}
       </div>
@@ -116,7 +126,7 @@ export function SettingsView({
           modal/page 两 variant 同结构生效 */}
       <div className="settings-body" data-testid="settings-body">
         <section className="settings-section">
-          <h4>主题</h4>
+          <h4>{t("set.theme")}</h4>
           <div className="seg" data-testid="theme-seg">
             {THEME_OPTIONS.map((o) => (
               <button
@@ -126,18 +136,37 @@ export function SettingsView({
                 data-testid={`theme-${o.id}`}
                 onClick={() => onThemeMode(o.id)}
               >
+                {tKey(o.labelKey)}
+              </button>
+            ))}
+          </div>
+          <p className="hint">{t("set.themeHint")}</p>
+        </section>
+
+        {/* Phase B(i18n, D-047): 界面语言 — 主题同款分段控件(zh/en), 切换即生效 + settings.json 持久化 */}
+        <section className="settings-section" data-testid="lang-sec">
+          <h4>{t("set.language")}</h4>
+          <div className="seg" data-testid="lang-seg">
+            {LANG_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`btn${lang === o.id ? " active" : ""}`}
+                data-testid={`lang-${o.id}`}
+                onClick={() => {
+                  setLang(o.id); // 模块级 + localStorage + Provider 重渲染(即时生效)
+                  void setLangPersisted(o.id); // 真壳 settings.json RMW(重启保持)
+                }}
+              >
                 {o.label}
               </button>
             ))}
           </div>
-          <p className="hint">
-            默认追随系统(prefers-color-scheme), 可在此覆盖(D-010)。侧栏底部 ☀ 钮可快切循环
-            (t_66b67453 契约2), 与此处三档同走一个主题状态。
-          </p>
+          <p className="hint">{t("set.languageHint")}</p>
         </section>
 
         <section className="settings-section" data-testid="sort-sec">
-          <h4>排序</h4>
+          <h4>{t("set.sort")}</h4>
           <div className="sort-controls">
             <div className="seg" data-testid="sort-key-seg">
               {SORT_KEY_OPTIONS.map((o) => (
@@ -148,7 +177,7 @@ export function SettingsView({
                   data-testid={`sort-key-${o.id}`}
                   onClick={() => onSortConfig({ ...sortConfig, key: o.id })}
                 >
-                  {o.label}
+                  {tKey(o.labelKey)}
                 </button>
               ))}
             </div>
@@ -163,19 +192,16 @@ export function SettingsView({
                   disabled={sortConfig.key === "manual"}
                   onClick={() => onSortConfig({ ...sortConfig, dir: o.id })}
                 >
-                  {o.label}
+                  {tKey(o.labelKey)}
                 </button>
               ))}
             </div>
           </div>
-          <p className="hint">
-            缺省: 名称正排。紧要度 = 按卡内最紧窗口剩余比例(剩余越少越靠前), 方向独立生效(#829 R1)。
-            手动 = 拖拽卡片顺序(D-039), 方向不适用。
-          </p>
+          <p className="hint">{t("set.sortHint")}</p>
         </section>
 
         <section className="settings-section" data-testid="autostart-sec">
-          <h4>开机自启</h4>
+          <h4>{t("set.autostart")}</h4>
           <label className="check-row">
             <input
               type="checkbox"
@@ -187,24 +213,24 @@ export function SettingsView({
                 void setLaunchAtLogin(next);
               }}
             />
-            <span>登录时自动启动(默认关,D-024)</span>
+            <span>{t("set.autostartHint")}</span>
           </label>
         </section>
 
         {storagePaths && (
           <section className="settings-section" data-testid="storage-paths">
-            <h4>存储路径</h4>
+            <h4>{t("set.storage")}</h4>
             <dl className="paths">
               <div className="path-row">
-                <dt>配置</dt>
+                <dt>{t("set.config")}</dt>
                 <dd data-testid="config-dir">{storagePaths.configDir}</dd>
               </div>
               <div className="path-row">
-                <dt>数据</dt>
+                <dt>{t("set.data")}</dt>
                 <dd data-testid="data-dir">{storagePaths.dataDir}</dd>
               </div>
             </dl>
-            <p className="hint">配置与数据分家(D-019), 运行时解析的真实路径。</p>
+            <p className="hint">{t("set.storageHint")}</p>
           </section>
         )}
 
@@ -213,7 +239,7 @@ export function SettingsView({
           <div className="about-row">
             <BrandLogo platform="token-wallet" size={20} className="about-logo" />
             <span className="about-name">token-wallet</span>
-            <span className="about-tag">AI 套餐/额度桌面仪表盘</span>
+            <span className="about-tag">{t("set.about")}</span>
           </div>
           <div className="about-update" data-testid="updater-area">
             <span className="about-version" data-testid="about-version">
@@ -221,7 +247,7 @@ export function SettingsView({
             </span>
             <UpdaterControl state={updater} />
           </div>
-          <p className="hint">内置单色品牌图标, 离线可渲染(currentColor 随主题自适应)。</p>
+          <p className="hint">{t("set.aboutHint")}</p>
         </section>
       </div>
     </div>
@@ -237,7 +263,7 @@ function UpdaterControl({ state }: { state: UpdaterState | null }) {
     // dev / 更新源不可用: 低调展示, 不给不可用的按钮
     return (
       <span className="updater-state" data-testid="updater-state" data-updater-status={state?.status ?? "unavailable"}>
-        更新功能仅安装版可用
+        {t("updater.unavailable")}
       </span>
     );
   }
@@ -245,7 +271,7 @@ function UpdaterControl({ state }: { state: UpdaterState | null }) {
     case "checking":
       return (
         <span className="updater-state" data-testid="updater-state" data-updater-status="checking">
-          正在检查更新…
+          {t("updater.checking")}
         </span>
       );
     case "up-to-date":
@@ -256,7 +282,7 @@ function UpdaterControl({ state }: { state: UpdaterState | null }) {
           data-testid="updater-check-btn"
           onClick={() => void updaterCheck()}
         >
-          检查更新
+          {t("updater.check")}
         </button>
       );
     case "available":
@@ -267,7 +293,7 @@ function UpdaterControl({ state }: { state: UpdaterState | null }) {
           data-testid="updater-download-btn"
           onClick={() => void updaterDownload()}
         >
-          更新到 v{state.version ?? "?"}
+          {t("updater.toVersion", { version: state.version ?? "?" })}
         </button>
       );
     case "downloading":
@@ -278,7 +304,7 @@ function UpdaterControl({ state }: { state: UpdaterState | null }) {
           data-updater-status="downloading"
           aria-live="polite"
         >
-          正在下载 {state.percent ?? 0}%
+          {t("updater.downloading", { percent: state.percent ?? 0 })}
         </span>
       );
     case "ready":
@@ -289,13 +315,13 @@ function UpdaterControl({ state }: { state: UpdaterState | null }) {
           data-testid="updater-install-btn"
           onClick={() => void updaterInstall()}
         >
-          重启安装 v{state.version ?? "?"}
+          {t("updater.installTo", { version: state.version ?? "?" })}
         </button>
       );
     case "error":
       return (
         <span className="updater-state updater-error" data-testid="updater-state" data-updater-status="error">
-          更新失败, 稍后重试
+          {t("updater.failed")}
         </span>
       );
   }

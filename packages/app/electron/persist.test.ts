@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { atomicWrite, consentSettingsJson, normalizeSortConfigValue, readSettingsFile, recordAlwaysOnTop, recordConsent, recordSortConfig } from "./persist";
+import { atomicWrite, consentSettingsJson, normalizeLangValue, normalizeSortConfigValue, readSettingsFile, recordAlwaysOnTop, recordConsent, recordLang, recordSortConfig } from "./persist";
 
 let dir: string;
 
@@ -228,5 +228,64 @@ describe("sortConfig(#829 R1 卡间排序, autostart 同款 RMW)", () => {
     expect(readSettingsFile(file).sortConfig).toEqual({ key: "manual", dir: "asc" });
     recordSortConfig(file, { key: "manual", dir: "asc", order: [] });
     expect(readSettingsFile(file).sortConfig).toEqual({ key: "manual", dir: "asc" });
+  });
+});
+
+describe("language(Phase B i18n 界面语言, autostart 同款 RMW)", () => {
+  it("缺省: 文件不存在 / 旧文件无 language 字段 / 非法值 → zh", () => {
+    const file = path.join(dir, "settings.json");
+    // 文件不存在(首开)
+    expect(normalizeLangValue(readSettingsFile(file).language)).toBe("zh");
+    // 旧版文件无 language 字段
+    fs.writeFileSync(file, JSON.stringify({ version: 1, consentAgreed: true }), "utf8");
+    expect(normalizeLangValue(readSettingsFile(file).language)).toBe("zh");
+    // 脏数据(非法值) → zh
+    fs.writeFileSync(file, JSON.stringify({ version: 1, language: "fr" }), "utf8");
+    expect(normalizeLangValue(readSettingsFile(file).language)).toBe("zh");
+    // 显式 en 保留
+    fs.writeFileSync(file, JSON.stringify({ version: 1, language: "en" }), "utf8");
+    expect(normalizeLangValue(readSettingsFile(file).language)).toBe("en");
+  });
+
+  it("写入 → 读回往返; RMW 保留 consent/autostart/sortConfig/未知字段", () => {
+    const file = path.join(dir, "settings.json");
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        version: 1,
+        consentAgreed: true,
+        autostart: true,
+        theme: "dark",
+        sortConfig: { key: "urgency", dir: "desc" },
+        futureField: "keep-me",
+      }),
+      "utf8",
+    );
+    recordLang(file, "en");
+    const settings = readSettingsFile(file);
+    expect(settings.language).toBe("en");
+    // RMW: 既有/未知字段不丢(与 sortConfig 落盘互不覆盖)
+    expect(settings.consentAgreed).toBe(true);
+    expect(settings.autostart).toBe(true);
+    expect(settings.theme).toBe("dark");
+    expect(settings.sortConfig).toEqual({ key: "urgency", dir: "desc" });
+    expect(settings.futureField).toBe("keep-me");
+  });
+
+  it("写入非法语言 → 归一化落 zh(防脏数据入盘); settings 损坏 → 回退重写不崩", () => {
+    const file = path.join(dir, "settings.json");
+    recordLang(file, "fr");
+    expect(readSettingsFile(file).language).toBe("zh");
+    fs.writeFileSync(file, "{ not json", "utf8");
+    recordLang(file, "en");
+    expect(readSettingsFile(file).language).toBe("en");
+  });
+
+  it("zh↔en 连续切换: 后写覆盖先写, 原子写无残留 tmp", () => {
+    const file = path.join(dir, "settings.json");
+    recordLang(file, "en");
+    recordLang(file, "zh");
+    expect(readSettingsFile(file).language).toBe("zh");
+    expect(fs.existsSync(`${file}.tmp`)).toBe(false);
   });
 });

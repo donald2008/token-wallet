@@ -249,6 +249,15 @@ const zh = {
     language: "语言",
     languageHint: "界面显示语言, 切换即生效, 重启后保持。",
   },
+  updater: {
+    unavailable: "更新功能仅安装版可用",
+    checking: "正在检查更新…",
+    check: "检查更新",
+    toVersion: "更新到 v{version}",
+    downloading: "正在下载 {percent}%",
+    installTo: "重启安装 v{version}",
+    failed: "更新失败, 稍后重试",
+  },
 } as const;
 
 /** Dict = zh 字典的宽松形态: 结构同 zh 但值放宽为 string(as const 的字面量类型会让 en 无法对齐) */
@@ -481,6 +490,15 @@ const en: Dict = {
     language: "Language",
     languageHint: "UI display language; applies immediately and persists across restarts.",
   },
+  updater: {
+    unavailable: "Updates are only available in the installed build",
+    checking: "Checking for updates…",
+    check: "Check for updates",
+    toVersion: "Update to v{version}",
+    downloading: "Downloading {percent}%",
+    installTo: "Restart & install v{version}",
+    failed: "Update failed, retry later",
+  },
 };
 
 const DICTS: Record<Lang, Dict> = { zh, en };
@@ -488,6 +506,7 @@ const DICTS: Record<Lang, Dict> = { zh, en };
 // ---------------- 当前语言状态(模块级, 非 React 场景共用) ----------------
 
 const LANG_KEY = "token-wallet.lang.v1";
+export { LANG_KEY };
 
 function isLang(v: unknown): v is Lang {
   return v === "zh" || v === "en";

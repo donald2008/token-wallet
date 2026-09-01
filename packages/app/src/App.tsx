@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Bootstrap } from "./types";
 import { globalHealth, sortProviders, tooltipSummary, type SortConfig } from "./health";
-import { getBootstrap, getSortConfig, getStoragePaths, persistConsent, setSortConfig as persistSortConfig, updateTrayStatus, winGetAlwaysOnTop, winSetAlwaysOnTop } from "./ipc";
+import {
+  getBootstrap,
+  getPersistedLang,
+  getSortConfig,
+  getStoragePaths,
+  persistConsent,
+  setSortConfig as persistSortConfig,
+  updateTrayStatus,
+  winGetAlwaysOnTop,
+  winSetAlwaysOnTop,
+} from "./ipc";
 import { selectPanelProviders } from "./panelProviders";
 import type { ScenarioId } from "./mockData";
 import { useTheme, THEME_CYCLE } from "./theme";
-import { LangProvider } from "./i18nReact";
-import { t } from "./i18n";
+import { LangProvider, useLang } from "./i18nReact";
+import { getLang, t } from "./i18n";
 import { TitleBar } from "./components/TitleBar";
 import { SideBar } from "./components/SideBar";
 import { ProviderCard } from "./components/ProviderCard";
@@ -80,6 +90,8 @@ export default function App() {
 
 function AppShell() {
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  // Phase B: 启动读回持久化语言(真壳 settings.json → setLang 对齐模块级+重渲染; 浏览器=/mock 同语义)
+  const { setLang: applyPersistedLang } = useLang();
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [consented, setConsented] = useState(false);
   // instances.yaml 损坏/校验失败 → fail-fast 错误页(§5.0.1, 不静默丢配置)
@@ -113,13 +125,16 @@ function AppShell() {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [b, instErr, paths, sortCfg] = await Promise.all([
+      const [b, instErr, paths, sortCfg, persistedLang] = await Promise.all([
         getBootstrap(),
         loadPersistedInstances(),
         getStoragePaths(),
         getSortConfig(),
+        getPersistedLang(),
       ]);
       if (!alive) return;
+      // Phase B: 持久化语言(settings.json/localStorage)与模块级初值不一致时对齐(localStorage 同 key 幂等)
+      if (persistedLang !== getLang()) applyPersistedLang(persistedLang);
       setSortConfig(sortCfg);
       // O1: configDir + 平台分隔符拼 instances.yaml 完整路径, 供配置错误页展示
       setInstancesPath(

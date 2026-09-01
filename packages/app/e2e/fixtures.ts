@@ -112,6 +112,24 @@ const ipcMocks: Record<string, IpcHandler> = {
     return null;
   },
   get_launch_at_login: () => false,
+  // Phase B 界面语言: localStorage 持久化(真壳 settings.json 跨重启存活, mock 同语义,
+  // 可测"切语言 → reload → 语言保持")
+  get_lang: () => {
+    try {
+      return localStorage.getItem("token-wallet.mock.lang.v1") ?? "zh";
+    } catch {
+      return "zh";
+    }
+  },
+  set_lang: (args) => {
+    try {
+      const lang = (args as { lang?: unknown } | undefined)?.lang;
+      if (lang === "en" || lang === "zh") localStorage.setItem("token-wallet.mock.lang.v1", lang);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  },
   set_launch_at_login: () => null,
   // ---- D-046: updater 三通道 + 事件桥(localStorage token-wallet.mock.updater 存状态;
   // 测试用 seedUpdaterState() 注入目标态, 覆盖四态渲染断言) ----

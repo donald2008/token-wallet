@@ -22,7 +22,7 @@ import { autoUpdater } from "electron-updater";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import YAML from "yaml";
-import { atomicWrite, consentSettingsJson, normalizeSortConfigValue, readSettingsFile, recordAlwaysOnTop, recordAutostart, recordSortConfig } from "./persist";
+import { atomicWrite, consentSettingsJson, normalizeLangValue, normalizeSortConfigValue, readSettingsFile, recordAlwaysOnTop, recordAutostart, recordLang, recordSortConfig } from "./persist";
 import { hostHttpGetJson } from "./host-http";
 import { SafeStorageLike, deleteSecret, getSecret, setSecret } from "./keyring";
 import { deriveStoragePaths, type StoragePaths } from "./paths";
@@ -290,6 +290,17 @@ function registerIpc(): void {
       recordSortConfig(settingsFilePath(), payload?.config);
     } catch {
       /* 写盘失败不阻断 UI(内存态仍生效, 下次启动按旧值恢复; 与置顶开关同策略) */
+    }
+  });
+
+  // Phase B(i18n): 界面语言(zh/en) — settings.json RMW(重启保持);
+  // 读取侧归一化(非法/缺失 → zh), 写入侧同样归一化防脏数据。
+  ipcMain.handle("get_lang", () => normalizeLangValue(readSettingsFile(settingsFilePath()).language));
+  ipcMain.handle("set_lang", (_event, payload: { lang?: unknown }) => {
+    try {
+      recordLang(settingsFilePath(), payload?.lang);
+    } catch {
+      /* 写盘失败不阻断 UI(内存态仍生效, 下次启动按旧值恢复; 与置顶/排序同策略) */
     }
   });
 

@@ -18,11 +18,15 @@ const ipcMocks = vi.hoisted(() => ({
   updaterCheck: vi.fn(),
   updaterDownload: vi.fn(),
   updaterInstall: vi.fn(),
+  // Phase B: 语言持久化(设置页切换时回写, 真壳 settings.json / 浏览器 localStorage)
+  setLangPersisted: vi.fn(),
 }));
 
 vi.mock("../ipc", () => ipcMocks);
 
 import { SettingsView } from "./SettingsView";
+import { LangProvider } from "../i18nReact";
+import { setLang } from "../i18n";
 import type { SortConfig } from "../health";
 
 declare global {
@@ -38,7 +42,9 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  // D-046 mock 缺省: 真壳形态(版本 0.2.0 / updater 初始 up-to-date)
+  // 语言态复位(模块级 + localStorage, 防跨用例串扰); D-046 mock 缺省: 真壳形态(版本 0.2.0 / updater 初始 up-to-date)
+  setLang("zh");
+  ipcMocks.setLangPersisted.mockResolvedValue(undefined);
   ipcMocks.getBootstrap.mockResolvedValue({ firstRun: false, theme: "system", version: "0.2.0" });
   ipcMocks.getStoragePaths.mockResolvedValue({ configDir: "/cfg/token-wallet", dataDir: "/data/token-wallet" });
   ipcMocks.getLaunchAtLogin.mockResolvedValue(false);
@@ -101,6 +107,10 @@ describe("设置页瘦身(D-038)", () => {
     }
     // 主题三态入口在设置页(标题栏入口已删, 此处是唯一入口)
     for (const id of ["theme-system", "theme-light", "theme-dark"]) {
+      expect(view.querySelector(`[data-testid="${id}"]`)).toBeTruthy();
+    }
+    // Phase B: 语言分段控件(zh/en)在设置页
+    for (const id of ["lang-sec", "lang-seg", "lang-zh", "lang-en"]) {
       expect(view.querySelector(`[data-testid="${id}"]`)).toBeTruthy();
     }
   });
@@ -275,5 +285,81 @@ describe("自动更新四态(D-046)", () => {
     act(() => cb({ status: "downloading", percent: 77 }));
     const state = view.querySelector('[data-testid="updater-state"]')!;
     expect(state.textContent).toContain("77%");
+  });
+});
+
+// ---- Phase B(i18n): 语言分段控件(zh/en, 主题同款 seg) + 切换即时生效 + settings.json 回写 ----
+describe("语言分段控件(Phase B i18n)", () => {
+  /** 语言测试必须包 LangProvider: 无 Provider 时 useLang 兜底不触发重渲染 */
+  async function renderWithLangProvider(): Promise<HTMLElement> {
+    await act(async () => {
+      root.render(
+        <LangProvider>
+          <SettingsView
+            variant="modal"
+            themeMode="system"
+            onThemeMode={() => {}}
+            sortConfig={{ key: "name", dir: "asc" }}
+            onSortConfig={() => {}}
+            onBack={() => {}}
+          />
+        </LangProvider>,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    return container.querySelector<HTMLElement>('[data-testid="settings-view"]')!;
+  }
+
+  it("默认 zh: lang-zh active, 标题文案中文", async () => {
+    setLang("zh");
+    const view = await renderWithLangProvider();
+    const zhBtn = view.querySelector<HTMLButtonElement>('[data-testid="lang-zh"]')!;
+    const enBtn = view.querySelector<HTMLButtonElement>('[data-testid="lang-en"]')!;
+    expect(zhBtn.className).toContain("active");
+    expect(enBtn.className).not.toContain("active");
+    expect(zhBtn.textContent).toBe("简体中文");
+    expect(enBtn.textContent).toBe("English");
+    // 设置页标题用字典键(zh)
+    expect(view.querySelector("h3")!.textContent).toBe("设置");
+  });
+
+  it("点击 en → Provider 重渲染立即生效(标题变 Theme) + setLangPersisted 回写", async () => {
+    setLang("zh");
+    const view = await renderWithLangProvider();
+    ipcMocks.setLangPersisted.mockClear();
+    act(() => {
+      view.querySelector<HTMLButtonElement>('[data-testid="lang-en"]')!.click();
+    });
+    // 即时生效: 语言段 active 转移 + 全页文案英文(LangProvider 重渲染)
+    expect(view.querySelector<HTMLButtonElement>('[data-testid="lang-en"]')!.className).toContain("active");
+    expect(view.querySelector<HTMLButtonElement>('[data-testid="lang-zh"]')!.className).not.toContain("active");
+    expect(view.querySelector("h3")!.textContent).toBe("Settings");
+    // 各 section 标题: 主题/语言/排序/自启 依序
+    const h4s = Array.from(view.querySelectorAll("h4")).map((el) => el.textContent);
+    expect(h4s[0]).toBe("Theme");
+    expect(h4s[1]).toBe("Language");
+    // 持久化回写(真壳 settings.json RMW 由 set_lang 通道完成)
+    expect(ipcMocks.setLangPersisted).toHaveBeenCalledWith("en");
+    // 主题/排序/更新控件文案同步英文
+    expect(view.querySelector('[data-testid="sort-key-name"]')!.textContent).toBe("Name");
+    expect(view.querySelector('[data-testid="updater-check-btn"]')!.textContent).toBe("Check for updates");
+    // 复位(防串扰后续用例)
+    setLang("zh");
+  });
+
+  it("再点 zh → 切回中文 + setLangPersisted('zh') 回写", async () => {
+    setLang("en");
+    const view = await renderWithLangProvider();
+    ipcMocks.setLangPersisted.mockClear();
+    act(() => {
+      view.querySelector<HTMLButtonElement>('[data-testid="lang-zh"]')!.click();
+    });
+    expect(view.querySelector<HTMLButtonElement>('[data-testid="lang-zh"]')!.className).toContain("active");
+    expect(view.querySelector("h3")!.textContent).toBe("设置");
+    expect(ipcMocks.setLangPersisted).toHaveBeenCalledWith("zh");
+    setLang("zh");
   });
 });

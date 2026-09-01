@@ -1,5 +1,6 @@
 import type { Bootstrap, HealthLevel } from "./types";
 import { DEFAULT_SORT_CONFIG, normalizeSortConfig, type SortConfig } from "./health";
+import { LANG_KEY, type Lang } from "./i18n";
 
 /**
  * 桌面壳 IPC 封装(D-033: Electron 壳) — 浏览器降级:
@@ -11,7 +12,7 @@ import { DEFAULT_SORT_CONFIG, normalizeSortConfig, type SortConfig } from "./hea
  * record_consent / keyring_get|set|delete / http_get_json / sqlite_batch|exec|query /
  * get_storage_paths / update_tray_status / get_launch_at_login / set_launch_at_login /
  * win_minimize / win_close(E1 新增) / win_get_always_on_top / win_set_always_on_top(P1 新增) /
- * get_sort_config / set_sort_config(P1 #829 R1 新增)。
+ * get_sort_config / set_sort_config(P1 #829 R1 新增) / get_lang / set_lang(Phase B i18n 新增)。
  */
 
 interface TokenWalletBridge {
@@ -292,6 +293,40 @@ export async function setSortConfig(config: SortConfig): Promise<void> {
   }
   try {
     localStorage.setItem(SORT_CONFIG_KEY, JSON.stringify(config));
+  } catch {
+    /* ignore */
+  }
+}
+
+// ---------------- Phase B(i18n): 界面语言(真壳 settings.json RMW / 浏览器 localStorage 降级) ----------------
+
+function normalizeLang(v: unknown): Lang {
+  return v === "en" ? "en" : "zh";
+}
+
+/**
+ * 读持久化语言; 真壳读 settings.json(主进程已归一化), 浏览器读 localStorage; 非法/缺失 → zh。
+ * 供启动流程注入 LangProvider(覆盖模块级初值, 见 i18n.ts loadInitialLang 注释)。
+ */
+export async function getPersistedLang(): Promise<Lang> {
+  const viaHost = await hostInvoke<unknown>("get_lang");
+  if (viaHost !== null) return normalizeLang(viaHost);
+  try {
+    return normalizeLang(localStorage.getItem(LANG_KEY));
+  } catch {
+    return "zh";
+  }
+}
+
+/** 写持久化语言; 真壳 RMW 落 settings.json, 浏览器降级 localStorage(i18nReact setLang 已写同一 key, 幂等) */
+export async function setLangPersisted(lang: Lang): Promise<void> {
+  const viaHost = hostInvoke<void>("set_lang", { lang });
+  if (viaHost) {
+    await viaHost;
+    return;
+  }
+  try {
+    localStorage.setItem(LANG_KEY, lang);
   } catch {
     /* ignore */
   }

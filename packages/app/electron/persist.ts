@@ -64,6 +64,8 @@ export interface SettingsFile {
   alwaysOnTop?: boolean;
   /** 卡间排序配置(P1 #829 R1, 缺省名称正排) */
   sortConfig?: SortConfigValue;
+  /** 界面语言(Phase B i18n, 缺省 zh); renderer 启动读回覆盖 localStorage 旧值 */
+  language?: Lang;
   /** 前瞻字段(theme/轮询等)透传位 */
   [extra: string]: unknown;
 }
@@ -245,4 +247,46 @@ export function recordSortConfig(filePath: string, config: unknown): void {
     existing = null; // 不存在/读失败 → 首开态
   }
   atomicWrite(filePath, sortConfigSettingsJson(existing, normalizeSortConfigValue(config)));
+}
+
+// ---- Phase B(i18n): 界面语言(zh/en)落盘, 与 autostart/sortConfig 同款 RMW 模式 ----
+
+/** 界面语言(Phase B); 与 renderer 侧 i18n.ts Lang 同值(双端各一份, 互不 import) */
+export type Lang = "zh" | "en";
+
+/** 语言归一化: 非法/缺失 → zh(当前缺省) */
+export function normalizeLangValue(raw: unknown): Lang {
+  return raw === "en" ? "en" : "zh";
+}
+
+/**
+ * language 落盘的 read-modify-write 核心(Phase B, 与 autostart/sortConfig 同款模式):
+ * 只改 language 字段, 既有/前瞻字段(consent/autostart/theme/sortConfig 等)JSON 合并透传;
+ * 损坏时保守回退仅含 language 的合法对象重写(不抛)。
+ */
+export function langSettingsJson(existing: string | null, lang: Lang): string {
+  let base: Record<string, unknown> = {};
+  if (existing) {
+    try {
+      const parsed: unknown = JSON.parse(existing);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        base = parsed as Record<string, unknown>;
+      }
+    } catch {
+      base = {}; // 损坏 → 仅保留本次字段
+    }
+  }
+  const merged = { ...base, version: 1, language: lang };
+  return JSON.stringify(merged, null, 2);
+}
+
+/** set_lang 全链路: RMW + 原子写(入参先归一化, 非法值落 zh) */
+export function recordLang(filePath: string, lang: unknown): void {
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(filePath, "utf8");
+  } catch {
+    existing = null; // 不存在/读失败 → 首开态
+  }
+  atomicWrite(filePath, langSettingsJson(existing, normalizeLangValue(lang)));
 }
