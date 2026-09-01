@@ -220,7 +220,7 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
       return {
         ...base,
         status: "error",
-        error_message: `arkcli usage 失败(exit=${res.code})`,
+        error_message: `arkcli usage 失败(exit=${res.code})${res.stderr.trim() ? `: ${res.stderr.trim().slice(0, 200)}` : ""}`,
       };
     }
 
