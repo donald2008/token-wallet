@@ -24,6 +24,8 @@ import type { AdapterContext, InstanceConfig } from "../src/generic-http.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(here, "..", "src", "channels", "__fixtures__");
 const HEALTHY = readFileSync(join(FIXTURES, "ark-usage-healthy.json"), "utf8");
+// 真机 golden(2026-09-01, 用户 Windows 1.0.23+SSO): percent 直接给值 + session 窗无 used/total/reset_at
+const HEALTHY_REAL = readFileSync(join(FIXTURES, "ark-usage-healthy-real.json"), "utf8");
 // 未登录形态: 真实 arkcli(干净 HOME)error body 写 **stderr**、stdout 空(exit=1)
 const AUTH_EXPIRED_STDERR = readFileSync(join(FIXTURES, "ark-usage-auth-expired.json"), "utf8");
 const NEVER_CONFIGURED = readFileSync(join(FIXTURES, "ark-auth-status-never-configured.json"), "utf8");
@@ -97,6 +99,25 @@ describe("volcengine-ark/coding-plan golden sample(D-044 三态)", () => {
     const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
     expect(snap.status).toBe("ok");
     expect(snap.metrics[0].used).toBeCloseTo(16, 5);
+  });
+
+  it("真机 golden(2026-09-01): percent 直接给值 + session 窗无 used/total/reset_at 不炸(主路径兼容)", async () => {
+    const adapter = new VolcengineArkCodingPlanAdapter(runnerReturning({ stdout: HEALTHY_REAL, code: 0 }));
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(snap.status).toBe("ok");
+    // 真机: monthly 已耗尽(percent=100) 必须原样透出 0-100, 不得 ×100 成 10000
+    const keys = snap.metrics.map((m) => m.key);
+    expect(keys.length).toBe(3);
+    expect(keys).toEqual(["rolling_5h", "weekly", "monthly"]);
+    const session = snap.metrics.find((m) => m.key === "rolling_5h")!;
+    expect(session.used).toBe(0);
+    expect(session.limit).toBe(100);
+    // session 窗无 reset_at → undefined 安全(不炸)
+    expect(session.reset_at).toBeUndefined();
+    const monthly = snap.metrics.find((m) => m.key === "monthly")!;
+    expect(monthly.used).toBe(100); // 已耗尽态
+    expect(monthly.reset_at).toBe(Math.floor(Date.parse("2026-09-04T23:59:59+08:00") / 1000));
   });
 
   it("个人版单 SKU: 仅 coding-plan 在场即取, 忽略其他 product", async () => {

@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "viewer": {
+    "auth_method": "sso",
+    "is_root": true,
+    "user_id": "2121790915",
+    "user_name": "2758手机用户#wYXpxl",
+    "account_id": "2121790915",
+    "profile": "coding-plan_cn-beijing_personal",
+    "tenant": "volc",
+    "region": "cn-beijing",
+    "project_name": "default"
+  },
+  "items": [
+    {
+      "product": "coding-plan",
+      "edition": "personal",
+      "subscribed": true,
+      "periods": [
+        { "label": "session", "percent": 0 },
+        { "label": "weekly", "percent": 0, "reset_at": "2026-09-07T00:00:00+08:00" },
+        { "label": "monthly", "percent": 100, "reset_at": "2026-09-04T23:59:59+08:00" }
+      ],
+      "updated_at": 1788246644
+    }
+  ]
+}
