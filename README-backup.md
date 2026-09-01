@@ -2,13 +2,9 @@
 
 把各家 AI Coding Plan 的窗口配额与按量余额，收进一个一瞥可读的 Windows 桌面部件。
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Electron](https://img.shields.io/badge/Electron-37-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-
-token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Electron）：统一展示
-多云 AI 平台的窗口制配额（5 小时滚动窗 / 周窗 / 月窗）与按量余额，按近期消耗速率
-估算可用天数，额度临近耗尽提前变色提醒 —— 别让正在跑的任务链死于额度悄悄耗尽。
+token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Electron）：统一展示多云 AI
+平台的窗口制配额（5 小时滚动窗 / 周窗 / 月窗）与按量余额，按近期消耗速率估算可用天数，
+额度临近耗尽提前变色提醒 —— 别让正在跑的任务链死于额度悄悄耗尽。
 
 | Dark | Light |
 |------|-------|
@@ -21,16 +17,16 @@ token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Elec
 正在执行的任务链就会中断。token-wallet 把所有套餐的剩余量、窗口重置倒计时、
 消耗速率集中到一个桌面部件上，一瞥可读。
 
-## 功能特点
+## 功能
 
-- 展示六家平台内置通道的额度余量，填 Key（或登录一次官方 CLI）即用
-- 统一视图呈现三种套餐原型：窗口制（多窗进度条 + 重置倒计时）/ 余额制（余额 + 预计可用天数）
-- 常驻系统托盘，弹出 360px 面板；托盘色点 = 全局最差状态
-- 卡片过滤（全部 / 可用 / 异常）+ 三种排序（名称 / 紧要度 / 拖拽手动）
+- **六家平台内置通道**，填 Key（或登录一次官方 CLI）即用，无需任何配置文件
+- **三种套餐原型**统一视图：窗口制（多窗进度条 + 重置倒计时）/ 余额制（余额 + 预计可用天数）/ 本地用量（规划中）
+- 系统托盘常驻 + 360px 弹出面板，托盘色点 = 全局最差状态
+- 卡片过滤（全部 / 可用 / 异常）+ 按平台筛选；名称 / 紧要度 / 拖拽手动三种排序
 - 异常显式化：key 失效、CLI 缺失、接口变更都给明确卡片与修复指引，绝不显示假数据
 - cache-first：快照落本地 SQLite，断网可看最后一次数据
 - 凭据存 OS 钥匙串（Windows 凭据管理器），配置文件永不落密钥
-- dark / light 主题默认跟随系统，支持手动切换
+- dark / light 主题，默认跟随系统
 - 零遥测、零上报、数据不出本机（首开须同意隐私声明）
 
 ## 支持的通道
@@ -38,11 +34,11 @@ token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Elec
 | 平台 | 产品 | 计费形态 | 接入方式 | 需要什么 |
 |------|------|----------|----------|----------|
 | DeepSeek | 按量余额 | 余额制 | 官方 API | API Key |
-| Kimi (Moonshot) | Coding | 窗口制 | 官方接口 | API Key |
+| Kimi（Moonshot） | Coding | 窗口制 | 官方接口 | API Key |
 | opencode | Go Coding | 窗口制 | 官方 API | API Key |
 | 智谱 bigmodel | GLM Coding Plan | 窗口制 | 官方 API | API Key |
-| 阿里云百炼 | Token Plan | 窗口制 | 官方 CLI `bl` | 免填 Key，登录一次 |
-| 火山方舟 | Coding Plan | 窗口制 | 官方 CLI `arkcli` | 免填 Key，SSO 登录一次 |
+| 阿里云百炼 | Token Plan | 窗口制 | 官方 CLI `bl` | 免填 Key，`bl auth login --console` 登录一次 |
+| 火山方舟 | Coding Plan | 窗口制 | 官方 CLI `arkcli` | 免填 Key，SSO 设备码登录一次 |
 
 > MiniMax、美团 LongCat、opencode zen 按量余额在规划中（见 docs/DESIGN.md §5.2）。
 > 接新通道 = 通道目录声明式注册，映射零代码（标准接口）；复杂接口用 TS 适配器。
@@ -51,18 +47,20 @@ token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Elec
 
 ### 下载安装包（推荐）
 
-当前版本 **v0.2.0**，从 [Gitee Releases](https://gitee.com/ITEater/token-wallet/releases) 下载：
+当前版本 **v0.2.0** 直链下载：
 
-```text
-https://gitee.com/ITEater/token-wallet/releases/download/v0.2.0/token-wallet_0.2.0_setup.exe
+```
+http://10.200.1.88:8889/token-wallet/token-wallet_0.2.0_setup.exe
 ```
 
 - Windows 10/11 x64，单文件全离线安装包（~93 MB，含 Chromium 运行时，无外部依赖）
-- 校验：Release 附件中的 `SHA256SUMS.txt` 与安装包比对
-- 首次安装：安装包未做代码签名，SmartScreen 提示「未知发布者」时点
-  「更多信息」→「仍要运行」即可（预期行为，签名将在后续版本解决）
-- 自动更新：v0.2.0 起应用内置自动更新，之后无需再手动下载重装；
-  旧版本更新 = 下载新安装包重装（配置与数据保留）
+- 校验：同目录 `<同名>.exe.sha256`
+- **首次安装**：安装包未做代码签名，SmartScreen 提示「未知发布者」时点
+  「更多信息」→「仍要运行」即可（预期行为，签名在后续版本解决）
+- **自动更新**：v0.2.0 起应用内置自动更新，之后无需再手动下载重装；
+  当前 v0.1.x 更新 = 下载新安装包重装（配置与数据保留）
+
+正式发布后安装包将挂 gitee release 页面，直链随之替换。
 
 ### 从源码运行
 
@@ -139,7 +137,3 @@ SQLite。应用无任何遥测/上报代码，网络请求只有你在设置页�
 - 本地 Agent token 消耗视图 + 「云 × 本地」对比（MCP 数据面，规划中）
 - 更多通道（MiniMax / 美团 LongCat / opencode zen 余额，见 docs/DESIGN.md §5.2）
 - 代码签名、CI、GitHub 镜像
-
-## License
-
-[Apache License 2.0](LICENSE)
