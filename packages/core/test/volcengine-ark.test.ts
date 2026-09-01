@@ -26,6 +26,8 @@ const FIXTURES = join(here, "..", "src", "channels", "__fixtures__");
 const HEALTHY = readFileSync(join(FIXTURES, "ark-usage-healthy.json"), "utf8");
 // 真机 golden(2026-09-01, 用户 Windows 1.0.23+SSO): percent 直接给值 + session 窗无 used/total/reset_at
 const HEALTHY_REAL = readFileSync(join(FIXTURES, "ark-usage-healthy-real.json"), "utf8");
+// STS 续期撞锁(2026-09-01 真机实锤): 并发刷新 sts.json 单飞锁, 后到者 exit=1
+const STS_LOCK = readFileSync(join(FIXTURES, "ark-usage-sts-lock.json"), "utf8");
 // 未登录形态: 真实 arkcli(干净 HOME)error body 写 **stderr**、stdout 空(exit=1)
 const AUTH_EXPIRED_STDERR = readFileSync(join(FIXTURES, "ark-usage-auth-expired.json"), "utf8");
 const NEVER_CONFIGURED = readFileSync(join(FIXTURES, "ark-auth-status-never-configured.json"), "utf8");
@@ -58,6 +60,20 @@ function runnerEnOent() {
     Promise.reject(
       new SpawnError("命令启动失败: arkcli: spawn arkcli ENOENT", Object.assign(new Error("spawn arkcli ENOENT"), { code: "ENOENT" })),
     );
+}
+
+/** 注入 runner: 按序返回预设结果序列(撞锁重试用: 每次调用弹出下一个; stdout 缺省空) */
+function runnerSequence(seq: Array<Omit<CommandRunResult, "stderr" | "stdout"> & { stderr?: string; stdout?: string }>) {
+  const full = seq.map((s) => ({ stderr: "", stdout: "", ...s }) as CommandRunResult);
+  let calls = 0;
+  return {
+    runner: () => {
+      const res = full[Math.min(calls, full.length - 1)];
+      calls += 1;
+      return Promise.resolve(res);
+    },
+    callCount: () => calls,
+  };
 }
 
 describe("volcengine-ark/coding-plan golden sample(D-044 三态)", () => {
@@ -118,6 +134,40 @@ describe("volcengine-ark/coding-plan golden sample(D-044 三态)", () => {
     const monthly = snap.metrics.find((m) => m.key === "monthly")!;
     expect(monthly.used).toBe(100); // 已耗尽态
     expect(monthly.reset_at).toBe(Math.floor(Date.parse("2026-09-04T23:59:59+08:00") / 1000));
+  });
+
+  it("STS 撞锁(2026-09-01 真机): 首呼撞锁 exit=1 → 退避重试 → 第二次成功出数(不算采集失败)", async () => {
+    const seq = runnerSequence([
+      { code: 1, stderr: STS_LOCK }, // 锁竞争(与手动 arkcli 并发)
+      { code: 0, stdout: HEALTHY_REAL },
+    ]);
+    const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0); // delay=0 跳过等待
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(seq.callCount()).toBe(2); // 首呼 + 1 次重试
+    expect(snap.status).toBe("ok");
+    expect(snap.metrics).toHaveLength(3);
+  });
+
+  it("STS 撞锁连续 3 次(长期锁占用): 重试 2 次后仍失败 → 可读文案 error, 不走 auth_expired", async () => {
+    const seq = runnerSequence([{ code: 1, stderr: STS_LOCK }]);
+    const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0);
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(seq.callCount()).toBe(3); // 首呼 + 2 次重试上限
+    expect(snap.status).toBe("error");
+    expect(snap.error_message).toContain("刷新");
+    // 撞锁判别与 auth_expired 互斥: 锁竞争 body 不因含 "SSO" 被误判为会话失效
+    expect(snap.alerts?.some((a) => a.code === "auth_expired")).toBeFalsy();
+  });
+
+  it("auth_expired 判别不因含 'SSO'/'refresh token' 串与撞锁混淆: 会话失效 body 不重试直接 auth_expired", async () => {
+    const seq = runnerSequence([{ code: 1, stderr: AUTH_EXPIRED_STDERR }]);
+    const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0);
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(seq.callCount()).toBe(1); // auth_expired 不重试
+    expect(snap.status).toBe("auth_expired");
   });
 
   it("个人版单 SKU: 仅 coding-plan 在场即取, 忽略其他 product", async () => {

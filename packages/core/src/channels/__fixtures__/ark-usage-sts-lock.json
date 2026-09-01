@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "type": "error",
+    "message": "auto-discover subscriptions: trade.list_subscribe: ark: ListSubscribeTrade: ark: ListSubscribeTrade requires Volcengine Ark SSO STS, please run `arkcli auth login volc-sso`: identity volc-2121790915 STS 续期失败: 另一个 arkcli 进程正在刷新 SSO 凭证，请稍后重试"
+  }
+}
