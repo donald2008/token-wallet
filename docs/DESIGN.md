@@ -120,6 +120,8 @@ channels/  (两层模型: platform → product, D-025)
 │   └── pay-as-you-go/    后置
 ├── deepseek/
 │   └── balance/          http, balance, params: { api_key }  (/user/balance 已实测)
+├── zai/                  智谱 bigmodel (D-045 已实测 2026-08-31)
+│   └── coding/           http, window,  params: { api_key }  (/api/monitor/usage/quota/limit, body_code 判态)
 ├── opencode/
 │   ├── go/               http, window,  params: { api_key }  (/zen/go/v1/usage 已实测, 订阅窗口制)
 │   └── zen/              http, balance, params: { api_key }  (按量付费, 余额端点待 spike)
@@ -138,7 +140,7 @@ channels/  (两层模型: platform → product, D-025)
 
 | 类型 | 机制 | 通道 | 会话/凭据归属 |
 |------|------|------|--------------|
-| http | 单次 HTTP + Bearer key + JSON 映射 | deepseek / kimi-code / opencode | app 管 key |
+| http | 单次 HTTP + Bearer key + JSON 映射 | deepseek / kimi-code / opencode-go / zai | app 管 key |
 | command | 包装官方 CLI 子进程, 解析 stdout JSON | aliyun(bl) / 火山方舟(arkcli) | CLI 自己管会话(SSO/登录态), app 零会话负担 |
 
 (local-agent 本地用量为 P3 预留的第三类, 不属于云端套餐采集。)
@@ -249,7 +251,7 @@ generic-http 只接"一次请求+静态映射"。
 安全约束: JSONPath 用 jsonpath-plus 纯求值; 状态断言用受限比较表达式,
 禁止 eval/new Function; 管道过滤器白名单(number/string/round/duration)。
 
-### 5.2 各平台采集方式初判(待 P2 spike 验证)
+### 5.2 各平台采集方式与实测结论(2026-09-01 现状: 六通道全部落地, 美团 LongCat 与 opencode zen 余额为 backlog)
 
 | Provider | 路径 | 风险 |
 |----------|------|------|
@@ -259,8 +261,11 @@ generic-http 只接"一次请求+静态映射"。
 | aliyun token-plan | **bl CLI 路线已实测通过(2026-08-30, D-041)**: `bl usage token-plan --output json`(bl 1.18.1), 控制台会话由 CLI 维护(`~/.bailian/config.json`)。健康态 golden 见 `packages/core/src/channels/__fixtures__/bailian-usage-healthy.json`(per1WeekPercentage 0-1 小数→percent, per1WeekResetTime 毫秒→秒; 5h 窗缺席=正常)。会话失效: exit=3 + `No console access token found`/`not logged in or has expired`/`NotLogined` → auth_expired(**判别覆盖 stdout+stderr**——真实 bl 未登录时错误 JSON 写 stderr、stdout 空, D-041 round3 实证); `bl auth status` exit code 不可信一律解析 body。已证伪: 子账号 AK/SK 路线(个人版不对子账号开放 Console 网关)。Cookie 重放方案已随 D-028 一并移除。探针模式(api_key)已后置(D-041, 不属本卡) | 低: 已实测定案 |
 | meituan LongCat | 待查 | 中 |
 | opencode | **go 已实测(2026-08-27)**: `GET https://opencode.ai/zen/go/v1/usage` 返回 rolling/weekly/monthly 三窗 {status, percent, resetsAt}。**zen 是按量付费(balance)**, 余额端点待 spike(/zen/v1/usage 返回 SPA 非 API)。注: zen/go key 打 go 端点返回一致数据(账户级), 推理被地域封锁但用量 API 可达 | go 低 / zen 中 |
+| zai (智谱 bigmodel) | **已实测通过(2026-08-31, D-045)**: `GET https://open.bigmodel.cn/api/monitor/usage/quota/limit` + Bearer(Coding Plan 套餐 key, 与 coding 推理 key 同一个), 双窗(5h/周)绝对值制(used=currentValue, limit=usage, unit=credits)。**HTTP 恒 200, auth 状态在 body.code** → GenericHttpMapping 走 `body_code` 判态(401=auth_expired / 200=ok / 其余=error), 非 HTTP 状态码; reset_at 用 `ms_epoch` pipe(毫秒 epoch, 对 ISO 用 iso_epoch 会拿到毫秒级错误值) | 低: 真 key 三态 fixture 全实证 |
 
-spike 产出 = YES/NO + 接口样本; NO 降级为 unsupported 卡片。
+spike 产出 = YES/NO + 接口样本; NO 降级为 unsupported 卡片。上表六通道均已按
+「实测定案」落地为内置通道(§5 通道树 + core `PRESET_CHANNELS` 单一真相源, D-036),
+「风险」列保留各通道实测中踩到的语义差异(单位/时区/判态), 接同类新通道前先读。
 
 ## 6. UI 设计
 
@@ -437,12 +442,13 @@ Windows 人肉只留"桌面外壳本身"(安装/托盘/WebView2)。
 - CI: P0~P2 worker 内测; P4 上 gitee Actions/自建 runner 全自动
 - 测试矩阵详见根目录 `TESTING.md`
 
-## 11. 阶段划分
+## 11. 阶段划分(2026-09-01 对齐现状)
 
-| 阶段 | 内容 |
-|------|------|
-| P0 | monorepo 骨架 + core(schema/缓存/调度/generic-http) + app(托盘+面板+bars/ticker+健康度排序) + mock 适配器 + 首开向导 + 设置页 |
-| P1 | deepseek 真实数据跑通 + 消耗速率/预计天数 + gauge/ring-stack/battery 模板 |
-| P2 | 五家接口 spike → kimi-code/ARK/百炼/龙猫/opencode-zen 适配器 |
-| P3 | mcp-server + LocalAgentAdapter + 云×本地对比行 + 通知(配置项) |
-| P4 | i18n(zh 先行) + 发布(LICENSE/README/截图/updater) → GitHub 镜像 |
+| 阶段 | 内容 | 现状 |
+|------|------|------|
+| P0 | monorepo 骨架 + core(schema/缓存/调度/generic-http) + app(托盘+面板+bars/ticker+排序) + mock 适配器 + 首开向导 + 设置页 | ✅ 完成(壳经 E1 换 Electron, D-033) |
+| E1~E3 | 换壳 Electron(D-033) + 主进程服务接真(D-034 node:sqlite / D-042 command 桥) + Windows NSIS 打包(D-035) | ✅ 完成(2026-08-29~30, Windows 真机可装可用) |
+| P1 | 真实数据跑通(deepseek 起步) + 消耗速率/预计天数 + gauge/ring-stack/battery 模板 + 真机 UI 打磨迭代(v0.1.2→v0.1.4: 过滤 chips/logo 网格/滚动条重设计) | ✅ 完成 |
+| P2 | 多通道适配器落地: kimi-code / 方舟(arkcli) / 百炼(bl) / opencode-go / zai(D-041~D-045 全实测); **美团 LongCat 与 opencode zen 余额 → backlog** | ✅ 完成(2026-08-31 六通道真数据) |
+| P3 | mcp-server 数据面 + LocalAgentAdapter + 云×本地对比行 + 通知(配置项) | ⏳ mcp-server 包骨架已建, local-agent 未接 |
+| P4 | 发布(README/截图 2026-09-01 就绪) + i18n(zh 先行) + updater(v0.2.0 目标) + 代码签名 + CI → GitHub 镜像 | ⏳ 门面就绪中 |

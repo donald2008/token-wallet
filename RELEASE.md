@@ -2,13 +2,16 @@
 
 安装实施定案见 `docs/DESIGN.md` §10.1(D-031)。本文件是操作手册:谁、在哪、怎么发。
 
-> ⚠️ D-033(2026-08-29): 壳已换 Electron, 旧 Rust/Webview 壳打包链(WebView2/旧 bundler)
-> 随之作废。**Electron 打包链(electron-builder/NSIS)由 E3 卡重建**; 本手册在 E3 落地前
-> 只保留发版流程骨架, 构建命令以 E3 落地后的本节为准。
+> D-033(2026-08-29): 壳已换 Electron, 旧 Rust/Webview 壳打包链(WebView2/旧 bundler)
+> 随之作废。**Electron 打包链(electron-builder/NSIS)已由 E3 落地(D-035)**, 构建命令见
+> 发版步骤第 3 步; Linux 侧构建前提见下方"发版人"。
 
 ## 发版人
 
-**Windows 本机**(唯一构建渠道)。Linux/WSL2 无可靠 cross,开发者日常维护代码即可,不需要构建环境。
+**Windows 本机为发版首选**(全量构建: 签名资源/图标嵌入行为以本机 ps1 为准);
+**Linux/WSL2 亦可出包**(D-035 于 2026-08-30 实证放宽: electron-builder 打包链纯 Node,
+njbx02 实测仅需 Node 22 + corepack + wine32, 见 docs/DESIGN.md D-035 补记),
+真机验收仍必须在 Windows。开发者日常维护代码即可,不需要构建环境。
 
 ## 前置环境(Windows 本机一次性准备)
 
@@ -35,8 +38,14 @@ node --version   # >= 22
    - `pnpm-lock.yaml`(`pnpm install` 自动同步)
    - 升级日志(如有 `CHANGELOG.md`)
 
-3. **构建**(E3 落地打包链后补具体命令; 当前 `pnpm -C packages/app build` 只产出
-   渲染层 dist/ + 主进程 dist-electron/, 未含安装包)。
+3. **构建**(D-035 打包链):
+
+   ```bash
+   pnpm build:win    # = pnpm -r build + electron-builder NSIS
+   ```
+
+   产物: `packages/app/release/token-wallet_<版本>_setup.exe`(~93MB, 单文件全离线)。
+   大小仅 ~174KB = 打包中断只出了 stub, 重跑。
 
 4. **计算 SHA256**(发布校验):
 
