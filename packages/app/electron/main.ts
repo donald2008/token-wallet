@@ -17,7 +17,7 @@
  * - E2 http 通道接真: host-http.ts(undici fetch + AbortController 超时,
  *   返回 {status, body 脱敏}, 非 2xx 不抛由引擎分类 — 对齐旧 Rust 实现)
  */
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from "electron";
 import { autoUpdater } from "electron-updater";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -28,6 +28,8 @@ import { SafeStorageLike, deleteSecret, getSecret, setSecret } from "./keyring";
 import { deriveStoragePaths, type StoragePaths } from "./paths";
 import { batch, closeAll, exec, query } from "./sqlite";
 import { runCommandFetch, type CommandRunPayload } from "./command-run";
+import { abortAllAuthSessions, finishAuthSession, startAuthSession } from "./auth-session";
+import { authDefFor } from "./auth-defs";
 import { AppUpdaterController } from "./updater";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
@@ -371,6 +373,30 @@ function registerIpc(): void {
     runCommandFetch(payload ?? {}),
   );
 
+  // ---- t_fb8c44d8: command 通道一键授权(autopay 2016-09-01) ----
+  // 用户点「授权」→ 主进程 spawn auth login 取 URL 自动开浏览器 → 用户粘贴 code
+  // → 自动回喂 → 授权完成。CLI 名从 renderer 的 setup_hint 提取(ep: arkcli/bl)。
+  ipcMain.handle(
+    "command_auth_start",
+    async (_event, payload: { cli?: string } | undefined) => {
+      const def = authDefFor(String(payload?.cli ?? ""));
+      if (!def) return { ok: false, message: `未知 CLI: ${String(payload?.cli)}` };
+      try {
+        const { sessionId, url } = await startAuthSession(def, (u) => {
+          void shell.openExternal(u);
+        });
+        return { ok: true, sessionId, url };
+      } catch (err) {
+        return { ok: false, message: `授权启动失败: ${String(err)}` };
+      }
+    },
+  );
+  ipcMain.handle(
+    "command_auth_finish",
+    (_event, payload: { sessionId?: string; code?: string } | undefined) =>
+      finishAuthSession(String(payload?.sessionId ?? ""), String(payload?.code ?? "")),
+  );
+
   // ---- D-046: 自动更新三通道(状态机在 updater.ts, node vitest 直测) ----
   // updater_check: 查当前态+触发检查; updater_download: 用户显式下载(进度走 updater_event);
   // updater_install: quitAndInstall(仅 ready 态生效)。dev 下三通道恒 unavailable。
@@ -416,6 +442,7 @@ if (!gotLock) {
     // 托盘常驻: 窗口全关不退出(退出走托盘菜单)
   });
   app.on("will-quit", () => {
+    abortAllAuthSessions(); // 授权会话残留子进程清理(t_fb8c44d8)
     closeAll(); // sqlite 连接统一关闭(见 sqlite.ts), 失败不阻断退出
   });
 }

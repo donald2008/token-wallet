@@ -236,6 +236,36 @@ export async function commandRun(payload: CommandRunPayload): Promise<unknown | 
   return viaHost;
 }
 
+/**
+ * t_fb8c44d8: command 通道一键授权 — 主进程 command_auth_start 桥。
+ * 传入 CLI 名(从 setup_hint 提取, ep: arkcli/bl); 返回 { ok, sessionId?, url?, message? }。
+ * 浏览器自动打开由主进程 shell.openExternal 完成(renderer 只拿 url 做展示)。
+ */
+export async function commandAuthStart(cli: string): Promise<{
+  ok: boolean;
+  sessionId?: string;
+  url?: string;
+  message?: string;
+}> {
+  const viaHost = await hostInvoke<{ ok: boolean; sessionId?: string; url?: string; message?: string }>(
+    "command_auth_start",
+    { cli },
+  );
+  return viaHost ?? { ok: false, message: "授权通道不可用(浏览器预览模式)" };
+}
+
+/** 一键授权收尾 — 用户已从浏览器复制 code, 回喂主进程等授权完成 */
+export async function commandAuthFinish(
+  sessionId: string,
+  code: string,
+): Promise<{ ok: boolean; message: string }> {
+  const viaHost = await hostInvoke<{ ok: boolean; message: string }>("command_auth_finish", {
+    sessionId,
+    code,
+  });
+  return viaHost ?? { ok: false, message: "授权通道不可用(浏览器预览模式)" };
+}
+
 // ---------------- E1 新增: 窗口控制(HTML TitleBar 的 min/close) ----------------
 
 /** 最小化窗口(无边框窗的 HTML TitleBar 按钮); 浏览器降级 no-op */

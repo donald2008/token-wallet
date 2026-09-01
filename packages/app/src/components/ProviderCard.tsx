@@ -5,6 +5,7 @@ import { getTemplateFor } from "../templates/registry";
 import { t } from "../i18n";
 import { BrandLogo } from "./brand-logos";
 import type { DragHandleProps } from "../useCardDragSort";
+import { commandAuthFinish, commandAuthStart } from "../ipc";
 
 /**
  * 从 setup_hint 提取可复制的完整命令原文(契约4): 提取首个 `…` 反引号包裹段;
@@ -65,6 +66,140 @@ function HintCopyButton({ hint }: { hint: string }) {
   );
 }
 
+/**
+ * t_fb8c44d8: command 通道一键授权(autopay 2026-09-01)。
+ * 消灭「开终端跑命令」: 点「一键授权」→ 主进程 spawn auth login 取 URL 自动开浏览器
+ * → 用户浏览器点同意 → 页面显示 code → 用户复制 → 本组件输入框粘贴 → 回喂 → 完成。
+ * 用户全程不碰命令行, 仅「浏览器点一次 + 粘贴 code」。
+ * (code 粘贴是 arkcli/bl 设备码协议天花板, 无法自动捕获; 见 auth-session.ts)
+ */
+export function extractCliFromHint(hint: string): string {
+  const cmd = extractCommandFromHint(hint);
+  // 命令首词 = CLI 名(ep: `arkcli auth login …` / `bl auth login --console`)
+  return cmd.trim().split(/\s+/)[0] ?? "";
+}
+
+function OneClickAuth({ hint }: { hint: string }) {
+  const [stage, setStage] = useState<"idle" | "starting" | "waiting" | "done" | "error">("idle");
+  const [sessionId, setSessionId] = useState("");
+  const [code, setCode] = useState("");
+  const [url, setUrl] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const cli = extractCliFromHint(hint);
+
+  const onStart = () => {
+    if (!cli) return;
+    setStage("starting");
+    setErrorMsg("");
+    void commandAuthStart(cli).then((res) => {
+      if (!res.ok || !res.sessionId) {
+        setErrorMsg(res.message ?? "授权启动失败");
+        setStage("error");
+        return;
+      }
+      setSessionId(res.sessionId);
+      setUrl(res.url ?? "");
+      setStage("waiting");
+    });
+  };
+
+  const onFinish = () => {
+    if (!code.trim()) return;
+    setStage("starting");
+    void commandAuthFinish(sessionId, code.trim()).then((res) => {
+      if (res.ok) {
+        setStage("done");
+        setCode("");
+      } else {
+        setErrorMsg(res.message ?? "授权失败");
+        setStage("error");
+      }
+    });
+  };
+
+  return (
+    <div className="oneclick-auth" data-testid="oneclick-auth">
+      {stage === "idle" || stage === "done" ? (
+        <button
+          type="button"
+          className="btn btn-sm oneclick-auth-btn"
+          data-testid="oneclick-auth-btn"
+          onClick={onStart}
+        >
+          {stage === "done" ? t("card.authDone") : t("card.authStart")}
+        </button>
+      ) : null}
+      {stage === "starting" ? (
+        <span className="oneclick-auth-note" data-testid="oneclick-auth-note">
+          {t("card.authWorking")}
+        </span>
+      ) : null}
+      {stage === "waiting" ? (
+        <div className="oneclick-auth-panel" data-testid="oneclick-auth-panel">
+          <div className="oneclick-auth-head">
+            <span>{t("card.authBrowserHint")}</span>
+            {url ? (
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="oneclick-auth-url"
+                data-testid="oneclick-auth-url"
+              >
+                {t("card.authOpenUrl")}
+              </a>
+            ) : null}
+          </div>
+          <div className="oneclick-auth-row">
+            <input
+              className="oneclick-auth-input"
+              data-testid="oneclick-auth-code"
+              placeholder={t("card.authCodePlaceholder")}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onFinish();
+              }}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="btn btn-sm oneclick-auth-confirm"
+              data-testid="oneclick-auth-confirm"
+              disabled={!code.trim()}
+              onClick={onFinish}
+            >
+              {t("card.authConfirm")}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm oneclick-auth-cancel"
+              data-testid="oneclick-auth-cancel"
+              onClick={() => setStage("idle")}
+            >
+              {t("card.authCancel")}
+            </button>
+          </div>
+          {errorMsg ? <div className="oneclick-auth-error">{errorMsg}</div> : null}
+        </div>
+      ) : null}
+      {stage === "error" ? (
+        <div className="oneclick-auth-error" data-testid="oneclick-auth-error">
+          {errorMsg}
+          <button
+            type="button"
+            className="btn btn-sm oneclick-auth-retry"
+            data-testid="oneclick-auth-retry"
+            onClick={() => setStage("idle")}
+          >
+            {t("card.authRetry")}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** 品牌色块(§6.1 第 4 条): 16px 平台识别色 — P1(t_696ec820)起由内置单色 SVG 品牌图标(BrandLogo)取代 */
 
 /** 值为 i18n 键(渲染时经 t() 取文案, D-047) */
@@ -106,6 +241,8 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
           <span className="setup-hint-text">⚑ {p.setup_hint}</span>
           {/* t_66b67453 契约4: 一键复制授权命令(反引号内完整原文), 免手抄易错 */}
           <HintCopyButton hint={p.setup_hint} />
+          {/* t_fb8c44d8: command 通道一键授权 — 自动开浏览器 + 粘贴 code 回喂, 消灭开终端 */}
+          <OneClickAuth hint={p.setup_hint} />
         </div>
       )}
       <div className="card-error-note">
