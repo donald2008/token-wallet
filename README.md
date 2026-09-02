@@ -52,8 +52,9 @@ token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Elec
 
 ## 功能特点
 
-- 展示六家平台内置通道的额度余量，填 Key（或登录一次官方 CLI）即用
+- 展示七家平台内置通道的额度余量，填 Key（或登录一次官方 CLI）即用
 - 统一视图呈现三种套餐原型：窗口制（多窗进度条 + 重置倒计时）/ 余额制（余额 + 预计可用天数）
+- CLI 通道一键授权：app 内点「授权」自动打开浏览器完成登录，不碰命令行
 - 常驻系统托盘，弹出 360px 面板；托盘色点 = 全局最差状态
 - 卡片过滤（全部 / 可用 / 异常）+ 三种排序（名称 / 紧要度 / 拖拽手动）
 - 异常显式化：key 失效、CLI 缺失、接口变更都给明确卡片与修复指引，绝不显示假数据
@@ -70,10 +71,11 @@ token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Elec
 | Kimi (Moonshot) | Coding | 窗口制 | 官方接口 | API Key |
 | opencode | Go Coding | 窗口制 | 官方 API | API Key |
 | 智谱 bigmodel | GLM Coding Plan | 窗口制 | 官方 API | API Key |
+| MiniMax | Token Plan | 窗口制（5h + 周窗） | 官方 API | Token Plan 订阅 Key（`sk-cp-` 前缀） |
 | 阿里云百炼 | Token Plan | 窗口制 | 官方 CLI `bl` | 免填 Key，登录一次 |
 | 火山方舟 | Coding Plan | 窗口制 | 官方 CLI `arkcli` | 免填 Key，SSO 登录一次 |
 
-> MiniMax、美团 LongCat、opencode zen 按量余额在规划中（见 docs/DESIGN.md §5.2）。
+> MiniMax（按量余额）、美团 LongCat、opencode zen 按量余额在规划中（见 docs/DESIGN.md §5.2）。
 > 接新通道 = 通道目录声明式注册，映射零代码（标准接口）；复杂接口用 TS 适配器。
 
 通道级前置：两个 CLI 通道需要额外装官方 CLI（app 内卡片会给出安装指引），
@@ -197,7 +199,7 @@ SQLite。应用无任何遥测/上报代码，网络请求只有你在设置页�
 
 ### 近期
 
-- MiniMax 通道（Token Plan 窗口制 + 按量余额双形态）
+- MiniMax 按量余额通道（`sk-api-` key，query_balance 端点已探明）
 - 火山方舟扩展：免费额度 / 媒资容量视角（usage balance 控制面命令）
 
 ### 中期
