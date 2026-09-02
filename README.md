@@ -117,18 +117,18 @@ token-wallet/
 
 ### 下载安装包（推荐）
 
-当前版本 **v0.2.0**，从 [Gitee Releases](https://gitee.com/ITEater/token-wallet/releases) 下载：
+当前版本 **v0.2.5**，固定直链（始终指向最新稳定版，发版自动更新）：
 
 ```text
-https://gitee.com/ITEater/token-wallet/releases/download/v0.2.0/token-wallet_0.2.0_setup.exe
+https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
 ```
 
 - Windows 10/11 x64，单文件全离线安装包（~93 MB，含 Chromium 运行时，无外部依赖）
 - 校验：Release 附件中的 `SHA256SUMS.txt` 与安装包比对
 - 首次安装：安装包未做代码签名，SmartScreen 提示「未知发布者」时点
   「更多信息」→「仍要运行」即可（预期行为，签名将在后续版本解决）
-- 自动更新：v0.2.0 起应用内置自动更新，之后无需再手动下载重装；
-  旧版本更新 = 下载新安装包重装（配置与数据保留）
+- 自动更新：应用内置自动更新（v0.2.4 起走 gitee 公共更新源），
+  装好后新版本在设置页一键更新，无需再手动下载重装
 
 ### 从源码运行
 
