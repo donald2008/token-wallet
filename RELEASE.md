@@ -76,6 +76,19 @@ node --version   # >= 22
    - 描述: 变更摘要 + **安装提示**(见下)
    - 附件: 安装包 + SHA256 文本(文件名 `SHA256SUMS.txt`)
 
+7. **更新 stable 更新源**(v0.2.4 起自更新走 gitee, 每次发版必做):
+
+   ```bash
+   # 固定名副本(latest.yml 里的 url 也用固定名 token-wallet_setup.exe)
+   cp packages/app/release/token-wallet_X.Y.Z_setup.exe /tmp/token-wallet_setup.exe
+   cp packages/app/release/token-wallet_X.Y.Z_setup.exe.blockmap /tmp/token-wallet_setup.exe.blockmap
+   sed 's/token-wallet_X.Y.Z_setup.exe/token-wallet_setup.exe/g' \
+     packages/app/release/latest.yml > /tmp/latest.yml
+   # 到 https://gitee.com/ITEater/token-wallet/releases → stable release →
+   # 删旧 3 附件 → 传上面 3 个固定名文件(latest.yml/token-wallet_setup.exe[.blockmap])
+   # 验证: curl -sL https://gitee.com/ITEater/token-wallet/releases/download/stable/latest.yml | grep version
+   ```
+
 ## 安装提示(每次发布描述里带上)
 
 > **首次安装**: 当前版本未做代码签名,SmartScreen 会提示"未知发布者"。
