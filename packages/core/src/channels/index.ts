@@ -10,4 +10,5 @@ export * from "./mappings.js";
 export * from "./deepseek.js";
 export * from "./opencode.js";
 export * from "./kimi.js";
+export * from "./minimax.js";
 export * from "./zai-coding.js";

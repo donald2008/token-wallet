@@ -74,6 +74,32 @@ export const KIMI_CODING: ChannelDescriptor = {
 };
 
 /**
+ * MiniMax Token Plan(2026-09-01 L3 实测): http 通道, Bearer Token Plan 订阅 key(`sk-cp-` 前缀)。
+ * 国内区域端点 api.minimaxi.com(cn key 在 api.minimax.io 报 2049)。双模型(general/video)
+ * 各自 5h 窗+周窗, 主卡取 general(首个); HTTP 恒 200 业务码在 body(zai 同款)。
+ */
+export const MINIMAX_TOKEN_PLAN: ChannelDescriptor = {
+  platform: "minimax",
+  product: "token-plan",
+  channel: "minimax/token-plan",
+  display_name: "MiniMax Token Plan",
+  product_display_name: "Token Plan",
+  platform_display_name: "MiniMax",
+  plan_type: "window",
+  adapter: "http",
+  logo: "minimax",
+  params_schema: [
+    {
+      key: "api_key",
+      label: "Token Plan Key",
+      type: "secret",
+      required: true,
+      help: "platform.minimaxi.com → 账户 → Token Plan 订阅(密钥 sk-cp- 前缀)",
+    },
+  ],
+};
+
+/**
  * 阿里云百炼 Token Plan(个人版): command 类首实例(D-041, 2026-08-30)
  * bl CLI 包装, 控制台会话由 CLI 自管(~/.bailian/config.json), app 零凭据。
  * health_check 只判"从未配置", 会话死活由采集失败信号(D-041 源码结论)。
@@ -149,6 +175,7 @@ export const PRESET_CHANNELS: readonly ChannelDescriptor[] = [
   DEEPSEEK_BALANCE,
   OPENCODE_GO,
   KIMI_CODING,
+  MINIMAX_TOKEN_PLAN,
   ALIYUN_BAILIAN_TOKEN_PLAN,
   VOLCENGINE_ARK_CODING_PLAN,
   ZAI_CODING,

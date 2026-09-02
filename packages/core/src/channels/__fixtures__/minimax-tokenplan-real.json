@@ -1,0 +1,42 @@
+{
+  "model_remains": [
+    {
+      "start_time": 1788278400000,
+      "end_time": 1788296400000,
+      "remains_time": 16044546,
+      "current_interval_total_count": 0,
+      "current_interval_usage_count": 0,
+      "model_name": "general",
+      "current_weekly_total_count": 0,
+      "current_weekly_usage_count": 0,
+      "weekly_start_time": 1788105600000,
+      "weekly_end_time": 1788710400000,
+      "weekly_remains_time": 430044546,
+      "current_interval_status": 1,
+      "current_interval_remaining_percent": 99,
+      "current_weekly_status": 1,
+      "current_weekly_remaining_percent": 98
+    },
+    {
+      "start_time": 1788278400000,
+      "end_time": 1788364800000,
+      "remains_time": 84444546,
+      "current_interval_total_count": 3,
+      "current_interval_usage_count": 0,
+      "model_name": "video",
+      "current_weekly_total_count": 21,
+      "current_weekly_usage_count": 0,
+      "weekly_start_time": 1788105600000,
+      "weekly_end_time": 1788710400000,
+      "weekly_remains_time": 430044546,
+      "current_interval_status": 1,
+      "current_interval_remaining_percent": 100,
+      "current_weekly_status": 1,
+      "current_weekly_remaining_percent": 100
+    }
+  ],
+  "base_resp": {
+    "status_code": 0,
+    "status_msg": "success"
+  }
+}
