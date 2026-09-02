@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: corepack pnpm install --frozen-lockfile
 
+      - name: Build core (workspace deps need dist/*.d.ts)
+        run: corepack pnpm -C packages/core build
+
       - name: Typecheck
         run: corepack pnpm -r typecheck
 
