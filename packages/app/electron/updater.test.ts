@@ -122,6 +122,50 @@ describe("AppUpdaterController(D-046)", () => {
     expect(upd.quitAndInstall).toHaveBeenCalledTimes(1);
   });
 
+  it("一键更新: 用户点 download 后, 下载完成自动 quitAndInstall(不要求第二次点击)", async () => {
+    vi.useFakeTimers();
+    try {
+      const c = makeController(true);
+      upd.emit("update-available", { version: "0.2.2" });
+      await c.download(); // 用户唯一的一次点击
+      upd.emit("download-progress", { percent: 100 });
+      upd.emit("update-downloaded", { version: "0.2.2" });
+      expect(upd.quitAndInstall).not.toHaveBeenCalled(); // 微延迟前不装
+      await vi.advanceTimersByTimeAsync(60);
+      expect(upd.quitAndInstall).toHaveBeenCalledTimes(1); // 自动装
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("一键更新: 下载失败不残留自动安装标记(下次成功不误装)", async () => {
+    vi.useFakeTimers();
+    try {
+      const c = makeController(true);
+      upd.emit("update-available", { version: "0.2.2" });
+      upd.downloadUpdate.mockRejectedValueOnce(new Error("connection reset"));
+      await c.download(); // 失败
+      upd.downloadUpdate.mockResolvedValue(undefined);
+      await c.download(); // 重试成功
+      // 重试路径: 用户第二次点击重新授权, downloaded 后应自动装
+      upd.emit("update-downloaded", { version: "0.2.2" });
+      await vi.advanceTimersByTimeAsync(60);
+      expect(upd.quitAndInstall).toHaveBeenCalledTimes(1);
+      // 仅一次: 失败残留的标记已清, 不双装
+      await vi.advanceTimersByTimeAsync(200);
+      expect(upd.quitAndInstall).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("非用户触发路径(启动静默 check 后收到 downloaded)不自动安装", () => {
+    makeController(true);
+    upd.emit("update-available", { version: "0.2.2" });
+    upd.emit("update-downloaded", { version: "0.2.2" }); // 罕见: check 就 downloaded(如缓存完成)
+    expect(upd.quitAndInstall).not.toHaveBeenCalled(); // 无用户授权不装(同步窗口内)
+  });
+
   it("getStatus 在 downloading 时带 percent(进程重启面板恢复展示不丢进度语义)", async () => {
     const c = makeController(true);
     upd.emit("download-progress", { percent: 55 });

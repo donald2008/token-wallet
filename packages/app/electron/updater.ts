@@ -1,10 +1,13 @@
 /**
- * D-046: 自动更新 = electron-updater generic 通道(自家 nginx 托管)。
- * 定案(卡 t_88fd4ed8, 勿改):
+ * D-046: 自动更新 = electron-updater generic 通道(v0.2.4 起托管于 gitee stable release)。
+ * 定案(卡 t_88fd4ed8 + 2026-09-02 用户反馈收敛, 勿改):
  * - 启动静默 CHECK ONLY: autoDownload=false / autoInstallOnAppQuit=false,
- *   下载与安装一律用户在设置页显式触发(借 hermes update 模式)
- * - 完整性: latest.yml SHA512 内建校验 + blockmap 差量(nginx Range 已实证 206),
- *   不做代码签名(D-031 边界延续)
+ *   更新一律用户在设置页显式触发(借 hermes update 模式)
+ * - **一键更新**(2026-09-02 用户拍板「不想点两下」): 点「更新到 vX」= 下载 + 完成后
+ *   自动重启安装 —— 点击本身就是显式授权, 下载完成自动 quitAndInstall 是同一授权的
+ *   延续; 「重启安装」钮仅保留在自动安装未生效的兜底场景(如下载完成前切走设置页后
+ *   回来看到 ready 态)
+ * - 完整性: latest.yml SHA512 内建校验 + blockmap 差量, 不做代码签名(D-031 边界延续)
  * - dev(app.isPackaged=false)返回 unavailable 态: update 通道物理不存在, 显式而非假装
  * - 纯逻辑模块(依赖注入 electron-updater 实例), main.ts 只做 IPC 注册;
  *   单测注入 fake updater 覆盖状态机, 真 autoUpdater 冒烟在 dist:win 产物侧验证
@@ -76,6 +79,8 @@ export class AppUpdaterController {
   }
 
   private lastMessage: string | undefined;
+  /** 一键更新: download() 由用户点击发起时置位, 下载完成后自动 install(见 wire) */
+  private autoInstallRequested = false;
 
   /** 接 autoUpdater 事件 → 状态机(仅打包态接线一次) */
   private wire(): void {
@@ -97,6 +102,13 @@ export class AppUpdaterController {
     this.updater.on("update-downloaded", (info) => {
       this.pendingVersion = info?.version ?? this.pendingVersion;
       this.setStatus("ready");
+      // 一键更新(2026-09-02): 用户点「更新到 vX」已显式授权整个更新动作,
+      // 下载完成即自动重启安装, 不要求第二次点击
+      if (this.autoInstallRequested) {
+        this.autoInstallRequested = false;
+        // 微延迟让 ready 态先渲染(事件循环下一拍), 安装即退出
+        setTimeout(() => this.install(), 50);
+      }
     });
     this.updater.on("error", (err) => this.fail(err?.message ?? "unknown updater error"));
   }
@@ -129,13 +141,15 @@ export class AppUpdaterController {
     return this.getStatus();
   }
 
-  /** 用户点「更新」: 下载(进度走 emit → updater_event), 完成落 ready */
+  /** 用户点「更新」: 下载(进度走 emit → updater_event), 完成后自动重启安装(一键更新) */
   async download(): Promise<UpdaterEvent> {
     if (!this.isPackaged) return { status: "unavailable" };
     if (this.status === "ready") return this.getStatus();
+    this.autoInstallRequested = true; // 用户已显式授权: 下载完成自动安装
     try {
       await this.updater.downloadUpdate();
     } catch (err) {
+      this.autoInstallRequested = false; // 失败不残留标记(下次点击重新授权)
       this.fail((err as Error)?.message ?? "download failed");
     }
     return this.getStatus();
