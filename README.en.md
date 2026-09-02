@@ -9,6 +9,7 @@
 [![React](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Platforms 7](https://img.shields.io/badge/Platforms-7-6E56CF)](#supported-channels)
 [![GitHub](https://img.shields.io/badge/GitHub-donald2008%2Ftoken--wallet-181717?logo=github&logoColor=white)](https://github.com/donald2008/token-wallet)
+[![CI](https://github.com/donald2008/token-wallet/actions/workflows/ci.yml/badge.svg)](https://github.com/donald2008/token-wallet/actions/workflows/ci.yml)
 [![中文](https://img.shields.io/badge/docs-%E4%B8%AD%E6%96%87-blue)](README.md)
 
 **DeepSeek · Kimi · opencode · Zhipu GLM · MiniMax · Alibaba Bailian · Volcengine Ark** — quota

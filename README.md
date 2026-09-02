@@ -9,6 +9,7 @@
 [![React](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![平台通道 7](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0%E9%80%9A%E9%81%93-7-6E56CF)](#支持的通道)
 [![GitHub](https://img.shields.io/badge/GitHub-donald2008%2Ftoken--wallet-181717?logo=github&logoColor=white)](https://github.com/donald2008/token-wallet)
+[![CI](https://github.com/donald2008/token-wallet/actions/workflows/ci.yml/badge.svg)](https://github.com/donald2008/token-wallet/actions/workflows/ci.yml)
 [![English](https://img.shields.io/badge/docs-English-blue)](README.en.md)
 
 **DeepSeek · Kimi · opencode · 智谱 GLM · MiniMax · 阿里云百炼 · 火山方舟** —— 七家 AI 平台的
