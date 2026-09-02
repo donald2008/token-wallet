@@ -63,10 +63,12 @@ describe("minimax/token-plan golden(真机 2026-09-01)", () => {
     // 5h 窗: general 剩余 99% → used 1, remaining 99
     expect(byKey["rolling_5h"]!.used).toBe(1);
     expect(byKey["rolling_5h"]!.remaining).toBe(99);
+    expect(byKey["rolling_5h"]!.limit).toBe(100); // 2026-09-02: percent 通道缺 limit → 进度条空条回归
     expect(byKey["rolling_5h"]!.reset_at).toBe(1788296400); // end_time 毫秒 → 秒
     // 周窗: 剩余 98% → used 2, remaining 98
     expect(byKey["weekly"]!.used).toBe(2);
     expect(byKey["weekly"]!.remaining).toBe(98);
+    expect(byKey["weekly"]!.limit).toBe(100);
     expect(byKey["weekly"]!.reset_at).toBe(1788710400);
   });
 

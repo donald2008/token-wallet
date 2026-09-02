@@ -42,13 +42,15 @@ export const MINIMAX_TOKEN_PLAN_MAPPING: GenericHttpMapping = {
   setup_hint: "Token Plan Key 无效或已过期 — 请检查 platform.minimaxi.com 的订阅密钥并更新",
   metrics: [
     {
-      // 5h 滚动窗: percent 直给剩余 → used=100-remaining, limit 缺省(卡百分比进度条语义正确)
+      // 5h 滚动窗: percent 直给剩余 → used=100-remaining; limit=100(percent 分母,
+      // 2026-09-02 真机截图修: 缺 limit 时 ProgressBar 空条 + "4/—", 与 aliyun limit:100 同款)
       key: "rolling_5h",
       kind: "window",
       unit: "percent",
       // 取 general 模型(首个), video 记 P2
       used: { path: "$.model_remains[0].current_interval_remaining_percent", pipes: ["number", "invert_percent"] },
       remaining: { path: "$.model_remains[0].current_interval_remaining_percent", pipes: ["number"] },
+      limit: { const: 100 },
       reset_at: { path: "$.model_remains[0].end_time", pipes: ["ms_epoch"] },
     },
     {
@@ -58,6 +60,7 @@ export const MINIMAX_TOKEN_PLAN_MAPPING: GenericHttpMapping = {
       unit: "percent",
       used: { path: "$.model_remains[0].current_weekly_remaining_percent", pipes: ["number", "invert_percent"] },
       remaining: { path: "$.model_remains[0].current_weekly_remaining_percent", pipes: ["number"] },
+      limit: { const: 100 },
       reset_at: { path: "$.model_remains[0].weekly_end_time", pipes: ["ms_epoch"] },
     },
   ],
