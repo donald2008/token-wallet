@@ -50,6 +50,20 @@ async function seedExisting(key: string, channel = "deepseek/balance"): Promise<
   return;
 }
 
+/** 轮询等待条件成立(webcrypto 线程池异步 → 不能用固定 setTimeout 等单帧); 默认 2s 超时 */
+async function waitFor(
+  cond: () => boolean,
+  timeoutMs = 2000,
+  intervalMs = 10,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (cond()) return;
+    if (Date.now() > deadline) throw new Error("waitFor 超时: 条件未成立");
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+
 function renderForm(channel = ds()): {
   root: Root;
   getByTestId: (id: string) => HTMLElement | null;
@@ -60,6 +74,9 @@ function renderForm(channel = ds()): {
   document.body.appendChild(host);
   const root = createRoot(host);
   const getByTestId = (id: string) => host.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+  // store 是否新增过(相对点击前长度)—— renderForm 创建即固定基线, 点击后轮询对比
+  const baseLen = getSharedStore().list().length;
+  const listChanged = () => getSharedStore().list().length !== baseLen;
   const type = (id: string, value: string) => {
     const el = getByTestId(id) as HTMLInputElement | null;
     if (!el) throw new Error(`no input ${id}`);
@@ -70,11 +87,12 @@ function renderForm(channel = ds()): {
     });
   };
   const clickSave = async () => {
-    await act(async () => {
+    act(() => {
       (getByTestId("save-instance") as HTMLButtonElement | null)?.click();
-      // 等 saveInstance/查重异步落定
-      await new Promise((r) => setTimeout(r, 0));
     });
+    // 等保存链路落定: 保存成功 → store.list 长度 +1; 被拦截 → key-error 出现。
+    // 不能在 act 里等(会阻塞 flush), 也不固定 sleep —— 轮询等任一信号。
+    await waitFor(() => Boolean(getByTestId("key-error")) || listChanged());
   };
   act(() => {
     root.render(<DynamicForm channel={channel} onSaved={() => {}} onBack={() => {}} />);
