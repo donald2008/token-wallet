@@ -21,6 +21,13 @@ njbx02 实测仅需 Node 22 + corepack + wine32, 见 docs/DESIGN.md D-035 补记
 
 Electron 自带 Chromium 运行时, 用户机器零额外依赖(告别 WebView2 运行时)。
 
+> **Linux/WSL2 出包必带**(2026-09-01 njbx02 实证): electron-builder 打包 win 会拉
+> `winCodeSign-2.6.0`(GitHub binary), 国内直连超时 600s 失败 → 用 npmmirror 镜像:
+> ```bash
+> export ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
+> ```
+> 缓存位于 `~/.cache/electron-builder/`(nsis/7zip 常有, winCodeSign 首次需镜像)。
+
 装好后验证:
 
 ```powershell
