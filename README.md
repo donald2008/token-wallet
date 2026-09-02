@@ -8,6 +8,7 @@
 [![Electron](https://img.shields.io/badge/Electron-37-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![平台通道 7](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0%E9%80%9A%E9%81%93-7-6E56CF)](#支持的通道)
+[![GitHub](https://img.shields.io/badge/GitHub-donald2008%2Ftoken--wallet-181717?logo=github&logoColor=white)](https://github.com/donald2008/token-wallet)
 
 **DeepSeek · Kimi · opencode · 智谱 GLM · MiniMax · 阿里云百炼 · 火山方舟** —— 七家 AI 平台的
 额度窗口，收进一枚 360px 的桌面部件：进度条、重置倒计时、按消耗速率估算的「还能用几天」。
@@ -143,6 +144,7 @@ https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_set
 无需原生模块编译，无 Rust / Visual Studio / WebView2 工具链。
 
 ```bash
+# 国内：gitee 主仓 ｜ 海外：GitHub 镜像 github.com/donald2008/token-wallet
 git clone git@gitee.com:ITEater/token-wallet.git
 cd token-wallet
 node start-dev.mjs           # 环境检查 → 装依赖 → 起 Electron 开发壳
