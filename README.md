@@ -9,6 +9,7 @@
 [![React](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![平台通道 7](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0%E9%80%9A%E9%81%93-7-6E56CF)](#支持的通道)
 [![GitHub](https://img.shields.io/badge/GitHub-donald2008%2Ftoken--wallet-181717?logo=github&logoColor=white)](https://github.com/donald2008/token-wallet)
+[![English](https://img.shields.io/badge/docs-English-blue)](README.en.md)
 
 **DeepSeek · Kimi · opencode · 智谱 GLM · MiniMax · 阿里云百炼 · 火山方舟** —— 七家 AI 平台的
 额度窗口，收进一枚 360px 的桌面部件：进度条、重置倒计时、按消耗速率估算的「还能用几天」。
@@ -118,7 +119,7 @@ token-wallet/
 
 ### 下载安装包（推荐）
 
-当前版本 **v0.2.5**，固定直链（始终指向最新稳定版，发版自动更新）：
+当前版本 **v0.2.6**，固定直链（始终指向最新稳定版，发版自动更新）：
 
 ```text
 https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
