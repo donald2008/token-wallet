@@ -132,6 +132,9 @@ https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_set
 ```
 
 - Windows 10/11 x64; single-file fully-offline installer (~93 MB, bundles Chromium runtime, no external dependencies)
+- Platform note: **officially supported on Windows** today. macOS / Linux are code-ready
+  (credentials via system safeStorage, platform-derived paths) but no installers are
+  published and no real-machine validation has been done — see [Roadmap](#roadmap)
 - Verify: compare the installer against `SHA256SUMS.txt` in the Release assets
 - First install: the installer is not code-signed; when SmartScreen says "Unknown publisher",
   click "More info" → "Run anyway" (expected behavior; signing is planned)
@@ -236,6 +239,7 @@ the only network requests are to the official endpoints of channels you added on
 ### Long term
 
 - Code signing (remove SmartScreen warning), CI automation, GitHub mirror
+- macOS / Linux installers: code-ready (safeStorage / derived paths), needs real-machine validation before publishing
 
 Full channel-level plan: [docs/DESIGN.md §5.2](docs/DESIGN.md).
 

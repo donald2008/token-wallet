@@ -127,6 +127,8 @@ https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_set
 ```
 
 - Windows 10/11 x64，单文件全离线安装包（~93 MB，含 Chromium 运行时，无外部依赖）
+- 平台说明：当前**官方支持 Windows**；macOS / Linux 的代码层已兼容（凭据走系统
+  safeStorage，路径按平台派生），但未发布安装包、未经真机验收——见 [Roadmap](#roadmap)
 - 校验：Release 附件中的 `SHA256SUMS.txt` 与安装包比对
 - 首次安装：安装包未做代码签名，SmartScreen 提示「未知发布者」时点
   「更多信息」→「仍要运行」即可（预期行为，签名将在后续版本解决）
@@ -227,6 +229,7 @@ SQLite。应用无任何遥测/上报代码，网络请求只有你在设置页�
 ### 远期
 
 - 代码签名（消除 SmartScreen 警告）、CI 自动化、GitHub 镜像
+- macOS / Linux 安装包：代码层已兼容（safeStorage / 路径派生），需要真机验收后发布
 
 完整通道级规划见 [docs/DESIGN.md §5.2](docs/DESIGN.md)。
 
