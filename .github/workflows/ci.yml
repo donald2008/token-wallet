@@ -20,16 +20,19 @@ jobs:
           cache: pnpm
 
       - name: Enable corepack (pnpm 9)
-        run: corepack enable
+        run: |
+          corepack enable
+          # corepack shim dir may not be on PATH on fresh runners; use corepack pnpm prefix
+          corepack pnpm --version
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: corepack pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm -r typecheck
+        run: corepack pnpm -r typecheck
 
       - name: Unit tests (core + app)
-        run: pnpm -r test
+        run: corepack pnpm -r test
 
       - name: Build (core + app)
-        run: pnpm build
+        run: corepack pnpm build
