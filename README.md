@@ -1,22 +1,35 @@
 <div align="center">
 
-# token-wallet
+# 💳 token-wallet
 
-把各家 AI Coding Plan 的窗口配额与按量余额，收进一个一瞥可读的 Windows 桌面部件。
+**你的 AI 额度，一瞥即知。** 别再让跑了三小时的任务链，死于一家平台的配额悄悄清零。
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Electron](https://img.shields.io/badge/Electron-37-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![React](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![平台通道 7](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0%E9%80%9A%E9%81%93-7-6E56CF)](#支持的通道)
 
-token-wallet 是一个零遥测、数据不出本机的开源桌面部件（Electron）：统一展示
-多云 AI 平台的窗口制配额（5 小时滚动窗 / 周窗 / 月窗）与按量余额，按近期消耗速率
-估算可用天数，额度临近耗尽提前变色提醒 —— 别让正在跑的任务链死于额度悄悄耗尽。
+**DeepSeek · Kimi · opencode · 智谱 GLM · MiniMax · 阿里云百炼 · 火山方舟** —— 七家 AI 平台的
+额度窗口，收进一枚 360px 的桌面部件：进度条、重置倒计时、按消耗速率估算的「还能用几天」。
+
+> **多 Agent 时代的隐形炸弹**：token 消耗散落在各家套餐里 —— 5 小时滚动窗、周窗、月窗、按量余额。
+> 深夜的长任务挂了，你翻遍终端才发现：某家的额度两小时前就没了。**token-wallet 把这种死法从你的工作流里删除。**
 
 | Dark | Light |
 |------|-------|
 | ![dark](docs/screenshots/panel-dark.png) | ![light](docs/screenshots/panel-light.png) |
 
+**填 Key 即用（HTTP 通道）· 点「授权」即用（CLI 通道，自动打开浏览器）· 零遥测 · 数据不出本机**
+
 </div>
+
+## 为什么是 token-wallet
+
+- **一瞥可读** —— 托盘色点 = 全局最差状态；弹出面板直接看每个窗口的剩余与倒计时，不打开任何一家控制台
+- **提前预警** —— 按近期消耗速率外推「预计可用天数」，额度临近耗尽提前变色，不是事后报错
+- **异常显式化** —— key 失效 / CLI 缺失 / 会话过期，卡片直接告诉你怎么修，绝不显示假数据
+- **cache-first** —— 快照落本地 SQLite，启动即出数、断网可看，UI 永远不等网络
+- **工程克制** —— 接新通道 = 声明式注册一份映射，零脚本零 eval；凭据只进 OS 钥匙串
 
 ## 解决什么问题
 
