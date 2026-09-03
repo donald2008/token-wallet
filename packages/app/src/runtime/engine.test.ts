@@ -398,7 +398,12 @@ describe("D-043 存量补写(首次采集成功回填 key_fingerprint)", () => {
       "inst-legacy",
       okSnapFor("inst-legacy"),
     );
-    await new Promise((r) => setTimeout(r, 0)); // 等补写链路(异步 keyring 读 + sha256)落定
+    // 等补写链路落定: keyring 读 + sha256(webcrypto 线程池, 非 microtask) → 轮询等指纹出现
+    const deadline = Date.now() + 2000;
+    while (!getSharedStore().list().find((i) => i.id === "inst-legacy")?.key_fingerprint) {
+      if (Date.now() > deadline) throw new Error("等 key_fingerprint 补写超时");
+      await new Promise((r) => setTimeout(r, 10));
+    }
 
     const updated = getSharedStore().list().find((i) => i.id === "inst-legacy");
     expect(updated?.key_fingerprint).toBeTruthy();
