@@ -36,8 +36,10 @@ export function progressText(metric: Metric): string {
   return `${metric.used}/${metric.limit ?? "—"}`;
 }
 
-/** bars 模板微部件: 手写进度条 + 压字(D-002, 不引组件库/Chart.js)。
- * tightest: 该窗口是"最紧窗口"(bars 模板标红不置顶, §6.3)。 */
+/** bars 模板微部件: 手写进度条 + 数值上行(t_66b67453 契约6 + 2026-09-03 视觉重构:
+ * 借鉴 token-monitor —— 条瘦身 8px, 数值从条内压字移到条上方一行(窗口名左/数值右),
+ * 信息层级 窗口名(10px muted) < 数值(10px 亮) < 重置(9px); tightest 标红左缘。
+ * 契约: 条内不再压字(去 text-shadow 糊感), aria 语义保留。 */
 export function ProgressBar({ metric, tightest = false }: { metric: Metric; tightest?: boolean }) {
   const pct =
     metric.limit !== undefined && metric.limit > 0
@@ -49,17 +51,23 @@ export function ProgressBar({ metric, tightest = false }: { metric: Metric; tigh
       <span className="bar-label" title={metric.key}>
         {metric.key}
       </span>
-      <div
-        className="progress"
-        role="progressbar"
-        aria-valuenow={Math.round(pct)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <div className="progress-fill" data-health={health} style={{ width: `${pct}%` }} />
-        <div className="progress-text">{progressText(metric)}</div>
+      <div className="bar-track-wrap">
+        <div className="bar-track">
+          <div
+            className="progress"
+            role="progressbar"
+            aria-valuenow={Math.round(pct)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div className="progress-fill" data-health={health} style={{ width: `${pct}%` }} />
+          </div>
+          <span className="bar-value" data-health={health}>
+            {progressText(metric)}
+          </span>
+        </div>
+        <span className="bar-reset">{resetText(metric.reset_at)}</span>
       </div>
-      <span className="bar-reset">{resetText(metric.reset_at)}</span>
     </div>
   );
 }

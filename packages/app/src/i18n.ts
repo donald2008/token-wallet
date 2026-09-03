@@ -238,6 +238,7 @@ const zh = {
   set: {
     closeAria: "关闭设置",
     theme: "主题",
+    glass: "玻璃特效(半透明面板 · 背景模糊)",
     themeHint:
       "默认追随系统(prefers-color-scheme), 可在此覆盖(D-010)。侧栏底部 ☀ 钮可快切循环\n            (t_66b67453 契约2), 与此处三档同走一个主题状态。",
     sort: "排序",
@@ -489,6 +490,7 @@ const en: Dict = {
   set: {
     closeAria: "Close settings",
     theme: "Theme",
+    glass: "Glass effect (translucent panel · blurred background)",
     themeHint:
       "Defaults to system (prefers-color-scheme); override here. The ☀ button at the bottom of the\n            sidebar cycles the same three modes sharing one theme state.",
     sort: "Sort order",

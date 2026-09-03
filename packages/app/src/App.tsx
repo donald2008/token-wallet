@@ -89,7 +89,7 @@ export default function App() {
 }
 
 function AppShell() {
-  const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { mode: themeMode, setMode: setThemeMode, glass, setGlass } = useTheme();
   // Phase B: 启动读回持久化语言(真壳 settings.json → setLang 对齐模块级+重渲染; 浏览器=/mock 同语义)
   const { setLang: applyPersistedLang } = useLang();
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
@@ -403,6 +403,8 @@ function AppShell() {
               variant="modal"
               themeMode={themeMode}
               onThemeMode={setThemeMode}
+              glass={glass}
+              onGlass={setGlass}
               sortConfig={sortConfig}
               onSortConfig={onSortConfig}
               onBack={closeSettings}

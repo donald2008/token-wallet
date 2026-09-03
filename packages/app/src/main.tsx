@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import { loadThemeMode } from "./theme";
+import { dataThemeAttr, loadGlass, loadThemeMode } from "./theme";
 import "./theme.css";
 import "./app.css";
 
@@ -18,7 +18,7 @@ import "./app.css";
       : window.matchMedia("(prefers-color-scheme: dark)").matches
         ? "dark"
         : "light";
-  document.documentElement.dataset.theme = effective;
+  document.documentElement.dataset.theme = dataThemeAttr(effective, loadGlass());
 })();
 
 createRoot(document.getElementById("root")!).render(

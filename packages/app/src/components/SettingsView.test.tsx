@@ -64,6 +64,8 @@ async function renderSettings(variant: "page" | "modal" = "modal"): Promise<HTML
         variant={variant}
         themeMode="system"
         onThemeMode={() => {}}
+        glass={false}
+        onGlass={() => {}}
         sortConfig={{ key: "name", dir: "asc" }}
         onSortConfig={() => {}}
         onBack={() => {}}
@@ -143,6 +145,8 @@ describe("排序第三档「手动」(D-039)", () => {
           variant="modal"
           themeMode="system"
           onThemeMode={() => {}}
+        glass={false}
+        onGlass={() => {}}
           sortConfig={sortConfig}
           onSortConfig={onSortConfig}
           onBack={() => {}}
@@ -199,6 +203,8 @@ describe("自动更新四态(D-046)", () => {
           variant="modal"
           themeMode="system"
           onThemeMode={() => {}}
+        glass={false}
+        onGlass={() => {}}
           sortConfig={{ key: "name", dir: "asc" }}
           onSortConfig={() => {}}
           onBack={() => {}}
@@ -299,6 +305,8 @@ describe("语言分段控件(Phase B i18n)", () => {
             variant="modal"
             themeMode="system"
             onThemeMode={() => {}}
+        glass={false}
+        onGlass={() => {}}
             sortConfig={{ key: "name", dir: "asc" }}
             onSortConfig={() => {}}
             onBack={() => {}}

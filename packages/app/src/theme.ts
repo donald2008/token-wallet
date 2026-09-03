@@ -28,6 +28,7 @@ export function themeLabel(m: ThemeMode): string {
 }
 
 const THEME_KEY = "token-wallet.theme.v1";
+const GLASS_KEY = "token-wallet.glass.v1";
 
 function systemTheme(): EffectiveTheme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -43,12 +44,28 @@ export function loadThemeMode(): ThemeMode {
   return "system";
 }
 
+export function loadGlass(): boolean {
+  try {
+    return localStorage.getItem(GLASS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** 落 <html data-theme>: 玻璃开关开启 → <base>-glass 变体(透明底 + backdrop-filter) */
+export function dataThemeAttr(effective: EffectiveTheme, glass: boolean): string {
+  return glass ? `${effective}-glass` : effective;
+}
+
 export function useTheme(): {
   mode: ThemeMode;
   effective: EffectiveTheme;
+  glass: boolean;
   setMode: (m: ThemeMode) => void;
+  setGlass: (g: boolean) => void;
 } {
   const [mode, setModeState] = useState<ThemeMode>(loadThemeMode);
+  const [glass, setGlassState] = useState<boolean>(loadGlass);
   const [sys, setSys] = useState<EffectiveTheme>(systemTheme);
 
   // 追随系统: 监听 OS 主题切换
@@ -62,8 +79,8 @@ export function useTheme(): {
   const effective: EffectiveTheme = mode === "system" ? sys : mode;
 
   useEffect(() => {
-    document.documentElement.dataset.theme = effective;
-  }, [effective]);
+    document.documentElement.dataset.theme = dataThemeAttr(effective, glass);
+  }, [effective, glass]);
 
   const setMode = useCallback((m: ThemeMode) => {
     setModeState(m);
@@ -74,5 +91,14 @@ export function useTheme(): {
     }
   }, []);
 
-  return { mode, effective, setMode };
+  const setGlass = useCallback((g: boolean) => {
+    setGlassState(g);
+    try {
+      localStorage.setItem(GLASS_KEY, g ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  return { mode, effective, glass, setMode, setGlass };
 }

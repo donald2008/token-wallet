@@ -12,7 +12,8 @@
   --font-size: 13px;
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+:root[data-theme="dark-glass"] {
   --bg: #14171c;
   --bg-elev: #1c2129;
   --bg-hover: #232a35;
@@ -35,7 +36,21 @@
   color-scheme: dark;
 }
 
-:root[data-theme="light"] {
+/**
+ * 玻璃特效(2026-09-03, 借鉴 token-monitor): 面板底色改半透明 + 桌面背景模糊。
+ * 窗口本来就 transparent(frame:false), backdrop-filter 直接透桌; 语义色不变。
+ * dark-glass / light-glass 复用上方暗/亮语义色, 仅覆盖底/边框/投影。
+ */
+:root[data-theme="dark-glass"] {
+  --bg: rgba(20, 23, 28, 0.72);
+  --bg-elev: rgba(28, 33, 41, 0.66);
+  --bg-hover: rgba(35, 42, 53, 0.8);
+  --border: rgba(44, 53, 66, 0.55);
+  --card-blur: blur(32px) saturate(115%);
+}
+
+:root[data-theme="light"],
+:root[data-theme="light-glass"] {
   --bg: #f6f7f9;
   --bg-elev: #ffffff;
   --bg-hover: #eef1f5;
@@ -56,4 +71,12 @@
   --unknown-fg: #6b7280;
 
   color-scheme: light;
+}
+
+:root[data-theme="light-glass"] {
+  --bg: rgba(246, 247, 249, 0.66);
+  --bg-elev: rgba(255, 255, 255, 0.6);
+  --bg-hover: rgba(238, 241, 245, 0.75);
+  --border: rgba(221, 227, 234, 0.6);
+  --card-blur: blur(32px) saturate(115%);
 }

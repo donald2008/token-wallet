@@ -33,6 +33,9 @@ const LANG_OPTIONS: { id: Lang; label: string }[] = [
 interface Props {
   themeMode: ThemeMode;
   onThemeMode: (m: ThemeMode) => void;
+  /** 玻璃特效开关(2026-09-03): 半透明面板 + 背景模糊, 正交于主题三态 */
+  glass: boolean;
+  onGlass: (g: boolean) => void;
   /** 卡间排序配置(#829 R1): key(名称|紧要度)×dir(正排|倒排), 由 App 持有并持久化 */
   sortConfig: SortConfig;
   onSortConfig: (c: SortConfig) => void;
@@ -66,6 +69,8 @@ const SORT_DIR_OPTIONS: { id: SortDir; labelKey: string }[] = [
 export function SettingsView({
   themeMode,
   onThemeMode,
+  glass,
+  onGlass,
   sortConfig,
   onSortConfig,
   onBack,
@@ -140,6 +145,15 @@ export function SettingsView({
               </button>
             ))}
           </div>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              data-testid="glass-toggle"
+              checked={glass}
+              onChange={(e) => onGlass(e.target.checked)}
+            />
+            <span>{t("set.glass")}</span>
+          </label>
           <p className="hint">{t("set.themeHint")}</p>
         </section>
 

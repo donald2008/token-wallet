@@ -67,6 +67,16 @@ body {
   overflow: hidden;
 }
 
+/* 玻璃特效(2026-09-03): data-theme=*-glass 时面板透桌面 + 背景模糊。
+   桌面背景模糊 = backdrop-filter, 需父级(body)透明且本元素自身不透明背景;
+   半透明底已在主题变量里, 这里只挂 filter。Windows 无「透明效果」开关时
+   backdrop-filter 自动降级为无模糊(半透明仍在, 不炸) */
+:root[data-theme="dark-glass"] .panel,
+:root[data-theme="light-glass"] .panel {
+  -webkit-backdrop-filter: var(--card-blur);
+  backdrop-filter: var(--card-blur);
+}
+
 /* t_66b67453 契约1: 标题栏之下的主体行 = 左侧窄功能侧栏 + 内容区(横向) */
 .panel-body {
   flex: 1;
@@ -720,27 +730,46 @@ body {
 .bar-label {
   width: 72px;
   flex: 0 0 auto;
-  font-size: 12px;
+  /* 2026-09-03 视觉重构: 窗口名降为最小层级(10px muted), 数值才用亮色 */
+  font-size: 10px;
   color: var(--fg-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* 条 + 数值 + 重置 包在一列里: 条(8px 细)在上, 数值贴条右侧同行, 重置 9px 垫底 */
+.bar-track-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bar-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .progress {
   position: relative;
   flex: 1;
-  height: 14px;
+  /* 2026-09-03: 14px 粗条 → 8px 细条(token-monitor 同款, 桌面部件语法) */
+  height: 8px;
   background: var(--bg-hover);
-  border-radius: 7px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .progress-fill {
   position: absolute;
   inset: 0 auto 0 0;
-  border-radius: 7px 0 0 7px;
-  transition: width 0.25s ease;
+  border-radius: 4px;
+  /* token-monitor 同款呼吸感: width 420ms cubic-bezier 缓出 */
+  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .progress-fill[data-health="ok"] { background: var(--ok); }
@@ -748,27 +777,27 @@ body {
 .progress-fill[data-health="bad"] { background: var(--bad); }
 .progress-fill[data-health="unknown"] { background: var(--unknown); }
 
-/* 压字(bars 模板): 百分比叠在进度条上, 浅色主题下 warn 压字用 --warn-fg 的反向深色 */
-.progress-text {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* 数值(条右侧同行): 亮色主信息, 状态色跟随 fill 语义(不压字不糊) */
+.bar-value {
+  flex: 0 0 auto;
   font-size: 10px;
   font-weight: 600;
-  color: #fff;
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
 }
+
+.bar-value[data-health="ok"] { color: var(--fg); }
+.bar-value[data-health="warn"] { color: var(--warn-fg); }
+.bar-value[data-health="bad"] { color: var(--bad-fg); }
+.bar-value[data-health="unknown"] { color: var(--fg-dim); }
 
 .bar-reset {
   flex: 0 0 auto;
-  font-size: 11px;
+  /* 2026-09-03: 重置降为最小层级(9px); 由右列固定宽改随行左对齐 */
+  align-self: flex-start;
+  font-size: 9px;
   color: var(--fg-dim);
-  /* 固定宽+右对齐(#829 R2 口径): 文案为单单位一位小数, 按最长预期"999.9天"预留,
-     多行进度条右列宽度稳定不漂移 */
-  min-width: 56px;
-  text-align: right;
+  line-height: 1.2;
 }
 
 /* bars 模板: 最紧窗口标红(§6.3, P1 起只标不置顶) — 薄红左缘 + 标签加粗红字, 一眼定位最先耗尽的风险窗。
