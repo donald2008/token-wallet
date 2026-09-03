@@ -46,7 +46,7 @@
   --bg-elev: rgba(28, 33, 41, 0.66);
   --bg-hover: rgba(35, 42, 53, 0.8);
   --border: rgba(44, 53, 66, 0.55);
-  --card-blur: blur(32px) saturate(115%);
+  --card-blur: blur(var(--glass-blur)) saturate(115%);
 }
 
 :root[data-theme="light"],
@@ -78,5 +78,5 @@
   --bg-elev: rgba(255, 255, 255, 0.6);
   --bg-hover: rgba(238, 241, 245, 0.75);
   --border: rgba(221, 227, 234, 0.6);
-  --card-blur: blur(32px) saturate(115%);
+  --card-blur: blur(var(--glass-blur)) saturate(115%);
 }

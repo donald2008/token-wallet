@@ -1,0 +1,195 @@
+/**
+ * design-tokens 生成映射(对照现有 --gap/--radius/--font-size 命名延续语义)
+ *
+ * 来源: docs/design-tokens/{primitives,semantic,components}.tokens.json
+ * 说明: 本文件是 tokens 的 CSS 落地, 语义与 theme.css 现有变量一一对应,
+ *       本次为「契约先行」版本(不含实现绑定), 未来由 app.css 引用这些变量驱动组件。
+ * 深/浅双套沿用 :root[data-theme] 结构(D-010), 默认跟随 prefers-color-scheme。
+ *
+ * 8px 网格制(用户 2026-09-03 拍板): margin/padding/gap/border-radius 必须 4/8 倍数;
+ * 唯二例外 = 1px 边框(--border-hairline)、50% 圆角。
+ */
+
+:root {
+  /* ---- primitives.spacing (8px 网格: 全为 4 的倍数) ---- */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-28: 28px;
+  --space-32: 32px;
+  --space-48: 48px;
+
+  /* ---- primitives.radius (全为 4 的倍数; pill 为例外) ---- */
+  --radius-4: 4px;
+  --radius-8: 8px;
+  --radius-12: 12px;
+  --radius-16: 16px;
+  --radius-pill: 999px;
+
+  /* ---- primitives.typography.fontSize ---- */
+  --font-10: 10px;
+  --font-11: 11px;
+  --font-12: 12px;
+  --font-13: 13px;
+  --font-14: 14px;
+  --font-16: 16px;
+  --font-22: 22px;
+
+  /* ---- primitives.lineHeight / fontFamily ---- */
+  --line-height-tight: 1.2;
+  --line-height-body: 1.5;
+  --line-height-loose: 1.6;
+  --font-sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+  /* ---- primitives.shadow / blur / motion / subtleBorder ---- */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.07);
+  --shadow-lg: 0 4px 16px rgb(0 0 0 / 0.08);
+  --glass-blur: 32px; /* primitives.blur.glass-blur, 32px 合规但保持 token */
+  --dur-fast: 100ms;
+  --dur-med: 150ms;
+  --dur-slow: 250ms;
+  --border-hairline: 1px; /* 唯一非 4/8 倍数例外(边框) */
+
+  /* ---- primitives.color 中性/强调/状态/品牌(暗默认) ---- */
+  --c-ink-900: #14171c;
+  --c-ink-800: #1c2129;
+  --c-ink-700: #232a35;
+  --c-ink-border: #2c3542;
+  --c-mist-50: #f6f7f9;
+  --c-white: #ffffff;
+  --c-mist-100: #eef1f5;
+  --c-mist-border: #dde3ea;
+  --c-fg-dark: #e5e9f0;
+  --c-fg-dim-dark: #9aa4b2;
+  --c-fg-light: #1c2330;
+  --c-fg-dim-light: #5d6778;
+  --c-accent-dark: #4f8cff;
+  --c-accent-light: #2f6fe4;
+  --c-ok: #22c55e;
+  --c-warn: #facc15;
+  --c-bad: #ef4444;
+  --c-unknown: #6b7280;
+  --c-unknown-light: #9ca3af;
+  --c-ok-text-dark: #4ade80;
+  --c-warn-text-dark: #fde047;
+  --c-bad-text-dark: #f87171;
+  --c-unknown-text-dark: #9ca3af;
+  --c-ok-text-light: #15803d;
+  --c-warn-text-light: #92600a; /* 浅底压深(D-016) */
+  --c-bad-text-light: #b91c1c;
+  --c-unknown-text-light: #6b7280;
+  --c-brand-deepseek: #4d6bfe;
+  --c-brand-kimi: #7c3aed;
+  --c-brand-aliyun: #ff6a00;
+  --c-brand-ark: #1668dc;
+  --c-brand-opencode: #0ea5e9;
+
+  /* 玻璃 alpha(theme-glass, primitives.color.glass) */
+  --c-glass-white-a08: rgba(255, 255, 255, 0.08);
+  --c-glass-white-a12: rgba(255, 255, 255, 0.12);
+  --c-glass-white-a16: rgba(255, 255, 255, 0.16);
+  --c-glass-highlight-a32: rgba(255, 255, 255, 0.32);
+  --c-glass-black-a42: rgba(0, 0, 0, 0.42);
+}
+
+/* ================= semantic ================= */
+
+/* ---- 深色主题(默认) ---- */
+:root[data-theme="dark"] {
+  /* background / surface / border / text / accent */
+  --bg: var(--c-ink-900);
+  --bg-elev: var(--c-ink-800);
+  --bg-hover: var(--c-ink-700);
+  --border: var(--c-ink-border);
+  --fg: var(--c-fg-dark);
+  --fg-dim: var(--c-fg-dim-dark);
+  --accent: var(--c-accent-dark);
+
+  /* 状态四色双 token(D-016): --X=填充/图形, --X-fg=文字 */
+  --ok: var(--c-ok);
+  --ok-fg: var(--c-ok-text-dark);
+  --warn: var(--c-warn);
+  --warn-fg: var(--c-warn-text-dark);
+  --bad: var(--c-bad);
+  --bad-fg: var(--c-bad-text-dark);
+  --unknown: var(--c-unknown);
+  --unknown-fg: var(--c-unknown-text-dark);
+
+  /* 语义间距/圆角/字号(别名延续现有命名) */
+  --gap: var(--space-8);
+  --radius: var(--radius-8);
+  --font-size: var(--font-13);
+
+  color-scheme: dark;
+}
+
+/* ---- 浅色主题 ---- */
+:root[data-theme="light"] {
+  --bg: var(--c-mist-50);
+  --bg-elev: var(--c-white);
+  --bg-hover: var(--c-mist-100);
+  --border: var(--c-mist-border);
+  --fg: var(--c-fg-light);
+  --fg-dim: var(--c-fg-dim-light);
+  --accent: var(--c-accent-light);
+
+  /* 填充色与 dark 一致(图形语义不变), 文字压深 */
+  --ok: var(--c-ok);
+  --ok-fg: var(--c-ok-text-light);
+  --warn: var(--c-warn);
+  --warn-fg: var(--c-warn-text-light);
+  --bad: var(--c-bad);
+  --bad-fg: var(--c-bad-text-light);
+  --unknown: var(--c-unknown-light);
+  --unknown-fg: var(--c-unknown-text-light);
+
+  --gap: var(--space-8);
+  --radius: var(--radius-8);
+  --font-size: var(--font-13);
+
+  color-scheme: light;
+}
+
+/* ================= component ================= */
+
+/* 卡片(手写, D-002) */
+.card {
+  background: var(--bg-elev);
+  border: var(--border-hairline) solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-8) var(--space-12);
+}
+.card-head { gap: var(--gap); margin-bottom: var(--space-4); }
+.brand-block { width: var(--space-16); height: var(--space-16); border-radius: var(--radius-4); }
+
+/* 进度条(bars 模板) */
+.progress { height: var(--space-8); border-radius: var(--radius-4); }
+.progress-fill { border-radius: var(--radius-4); transition: width var(--dur-slow) ease; }
+.bar-row { gap: var(--gap); margin-top: var(--space-4); }
+
+/* 按钮 */
+.btn { gap: var(--space-4); padding: var(--space-4) var(--space-8); border: var(--border-hairline) solid var(--border); border-radius: var(--radius); }
+.btn-icon { padding: var(--space-4) var(--space-8); }
+.btn-sm { padding: var(--space-4) var(--space-8); font-size: var(--font-12); }
+
+/* 设置 */
+.settings-section { padding: var(--space-8) var(--space-12); border-radius: var(--radius); }
+.dynamic-form { gap: var(--space-12); }
+.input { padding: var(--space-4) var(--space-8); border: var(--border-hairline) solid var(--border); border-radius: var(--radius); }
+.instance-list { gap: var(--space-4); }
+.count-badge { border-radius: var(--radius-pill); padding: 0 var(--space-8); font-size: var(--font-12); }
+
+/* 托盘(色点=全局最差状态, 图标由 Rust 承载) */
+.status-dot { border-radius: 50%; }
+
+/* 玻璃(theme-glass, 勿合 master) */
+.glass-panel {
+  /* light 用 --c-glass-white-a12; dark 用 alpha 更低的 black-a42 */
+  background: var(--c-glass-white-a12);
+  backdrop-filter: blur(var(--glass-blur)) saturate(115%);
+  border-radius: var(--radius-16);
+}

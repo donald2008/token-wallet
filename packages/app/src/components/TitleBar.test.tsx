@@ -119,15 +119,17 @@ describe("CSS 契约(D-038 + t_05271be0 #1/#2 回归)", () => {
     expect(ruleBlock(".sidebar")).toContain("-webkit-app-region: no-drag");
   });
 
-  it(".bar-row 恒有 2px 透明左缘 + 4px 左 padding(对齐占位)", () => {
+  it(".bar-row 无透明左缘占位(评审③④: 2px border 对齐漂移源已移除, audit §2.1 L300 收敛)", () => {
     const block = ruleBlock(".bar-row");
-    expect(block).toContain("border-left: 2px solid transparent");
-    expect(block).toContain("padding-left: 4px");
+    expect(block).toContain("gap: var(--gap)");
+    expect(block).not.toContain("border-left");
+    expect(block).not.toContain("padding-left");
   });
 
-  it(".bar-row[data-tightest] 只换 border-color, 不再独有不一致 padding", () => {
-    const block = ruleBlock(".bar-row[data-tightest]");
-    expect(block).toContain("border-left-color: var(--bad)");
+  it(".bar-row[data-tightest] 最紧窗标记 = 标签加粗变色(不再用 border/padding)", () => {
+    const block = ruleBlock(".bar-row[data-tightest] .bar-label");
+    expect(block).toContain("font-weight: 700");
+    expect(block).toContain("color: var(--bad-fg)");
     expect(block).not.toContain("padding-left");
   });
 

@@ -1,0 +1,119 @@
+{
+  "$schema": "https://tr.designtokens.org/format/2025-04-11#",
+  "$description": "语义层: 一律引用 primitives, 不落裸色值。深浅双套用 {theme}.<name> 命名(D-010)。双 token 先例(D-016): <status>.fill(图形) 与 <status>.text(文字)",
+  "color": {
+    "$type": "color",
+    "background": {
+      "dark": { "$value": "{color.neutral.ink-900}" },
+      "light": { "$value": "{color.neutral.mist-50}" }
+    },
+    "surface": {
+      "$description": "提升面(卡片/设置区块)",
+      "dark": { "$value": "{color.neutral.ink-800}" },
+      "light": { "$value": "{color.neutral.white}" }
+    },
+    "surfaceHover": {
+      "dark": { "$value": "{color.neutral.ink-700}" },
+      "light": { "$value": "{color.neutral.mist-100}" }
+    },
+    "border": {
+      "dark": { "$value": "{color.neutral.ink-border}" },
+      "light": { "$value": "{color.neutral.mist-border}" }
+    },
+    "text": {
+      "primary": {
+        "dark": { "$value": "{color.neutral.fg-dark}" },
+        "light": { "$value": "{color.neutral.fg-light}" }
+      },
+      "dim": {
+        "dark": { "$value": "{color.neutral.fg-dim-dark}" },
+        "light": { "$value": "{color.neutral.fg-dim-light}" }
+      }
+    },
+    "accent": {
+      "dark": { "$value": "{color.accent.blue-dark}" },
+      "light": { "$value": "{color.accent.blue-light}" }
+    },
+    "status": {
+      "$description": "状态四色双 token(D-016): fill=图形/填充, text=文字。ok/warn/bad/unknown, 无第五种强调色(§6.1)",
+      "ok": {
+        "fill": { "$value": "{color.status.ok-fill}", "$description": "两主题共用填充" },
+        "text": {
+          "dark": { "$value": "{color.status.ok-text-dark}" },
+          "light": { "$value": "{color.status.ok-text-light}" }
+        }
+      },
+      "warn": {
+        "fill": { "$value": "{color.status.warn-fill}" },
+        "text": {
+          "dark": { "$value": "{color.status.warn-text-dark}" },
+          "light": { "$value": "{color.status.warn-text-light}", "$description": "浅底压深#92600a 保证可读" }
+        }
+      },
+      "bad": {
+        "fill": { "$value": "{color.status.bad-fill}" },
+        "text": {
+          "dark": { "$value": "{color.status.bad-text-dark}" },
+          "light": { "$value": "{color.status.bad-text-light}" }
+        }
+      },
+      "unknown": {
+        "fill": {
+          "dark": { "$value": "{color.status.unknown-fill}" },
+          "light": { "$value": "{color.status.unknown-fill-light}" }
+        },
+        "text": {
+          "dark": { "$value": "{color.status.unknown-text-dark}" },
+          "light": { "$value": "{color.status.unknown-text-light}" }
+        }
+      }
+    },
+    "brand": {
+      "$description": "平台识别色(§6.1 第4条品牌色块); 用户新增平台时扩展此表",
+      "deepseek": { "$value": "{color.status.brand-block-deepseek}" },
+      "kimi-code": { "$value": "{color.status.brand-block-kimi}" },
+      "aliyun": { "$value": "{color.status.brand-block-aliyun}" },
+      "ark": { "$value": "{color.status.brand-block-ark}" },
+      "opencode-go": { "$value": "{color.status.brand-block-opencode}" }
+    }
+  },
+  "spacing": {
+    "$type": "dimension",
+    "gap": { "$value": "{spacing.space-8}", "$description": "基准间距(现有 --gap)" },
+    "gutter": { "$value": "{spacing.space-12}", "$description": "面板/卡片侧内边距(现有 titlebar/card padding 12px)" },
+    "card": { "$value": "{spacing.space-12}", "$description": "卡片内边距" },
+    "section": { "$value": "{spacing.space-24}", "$description": "区块级间距" }
+  },
+  "radius": {
+    "$type": "dimension",
+    "medium": { "$value": "{radius.radius-8}", "$description": "卡片/按钮/输入统一(现有 --radius)" },
+    "panel": { "$value": "{radius.radius-12}", "$description": "设置弹窗/面板" },
+    "small": { "$value": "{radius.radius-4}", "$description": "品牌色块/平台 logo 点" },
+    "pill": { "$value": "{radius.radius-pill}", "$description": "徽标/胶囊按钮" }
+  },
+  "typography": {
+    "$type": "fontSize",
+    "body": { "$value": "{typography.font-13}", "$description": "基准正文(现有 --font-size)" },
+    "caption": { "$value": "{typography.font-12}", "$description": "状态文字/标签/倒计时" },
+    "micro": { "$value": "{typography.font-11}", "$description": "实例通道/子标签" },
+    "badge": { "$value": "{typography.font-10}", "$description": "压字/圆点(文本角色)" },
+    "metric": { "$value": "{typography.font-22}", "$description": "大数字(ticker)" },
+    "heading": { "$value": "{typography.font-14}", "$description": "设置项标题" }
+  },
+  "shadow": {
+    "$type": "shadow",
+    "elevationSm": { "$value": "{shadow.shadow-sm}" },
+    "elevationMd": { "$value": "{shadow.shadow-md}" },
+    "elevationLg": { "$value": "{shadow.shadow-lg}" }
+  },
+  "motion": {
+    "$type": "duration",
+    "fast": { "$value": "{motion.dur-fast}" },
+    "medium": { "$value": "{motion.dur-med}" },
+    "slow": { "$value": "{motion.dur-slow}" }
+  },
+  "border": {
+    "$type": "dimension",
+    "hairline": { "$value": "{subtleBorder.hairline}", "$description": "唯一允许非 4/8 倍数(1px 边框例外)" }
+  }
+}

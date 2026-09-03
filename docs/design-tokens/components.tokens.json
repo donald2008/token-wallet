@@ -1,0 +1,135 @@
+{
+  "$schema": "https://tr.designtokens.org/format/2025-04-11#",
+  "$description": "组件级: 全部引用 semantic, 不落裸值。卡片/进度条/按钮/设置弹窗/托盘 五个交付组件 + 状态微部件",
+  "card": {
+"$description": "卡片(手写, D-002)",
+    "background": { "$value": "{color.surface.dark}" },
+    "borderColor": { "$value": "{color.border.dark}" },
+    "borderWidth": { "$value": "{border.hairline}" },
+    "radius": { "$value": "{radius.medium}" },
+    "paddingX": { "$value": "{spacing.gutter}" },
+    "paddingY": { "$value": "{spacing.space-8}" }
+  },
+  "card-head": {
+"$description": "卡片头: 品牌色块 + 平台名 + 状态文字",
+    "gap": { "$value": "{spacing.gap}", "$description": "期待收紧到 8px(现 6px 违背)" },
+    "marginBottom": { "$value": "{spacing.space-4}", "$description": "现 6px 违背, 收紧到 4px" },
+    "brandBlockRadius": { "$value": "{radius.small}" },
+    "brandBlockSize": { "$value": "{spacing.space-16}" }
+  },
+  "progress": {
+"$description": "手写进度条(bars 模板微部件, D-002)",
+    "trackColor": { "$value": "{color.surfaceHover.dark}" },
+    "trackHeight": { "$value": "{spacing.space-8}", "$description": "现 14px 违背, 收紧到 8px" },
+    "trackRadius": { "$value": "{radius.small}", "$description": "现 7px 违背, 收紧到 4px" },
+    "fillRadius": { "$value": "{radius.small}" },
+    "textSize": { "$value": "{typography.badge}" },
+    "textColor": { "$value": "#ffffff" },
+    "textShadow": { "$value": "0 0 2px rgba(0,0,0,0.5)" },
+    "transition": { "$value": "{motion.slow}" }
+  },
+  "bar-row": {
+"$description": "bars 单行(窗口指标)",
+    "gap": { "$value": "{spacing.gap}", "$description": "现 6px 违背(bar-row margin-top 6px)" },
+    "labelWidth": { "$value": "{spacing.space-20}", "$description": "现 72px 宽, 待收敛(建议空间 token)" },
+    "tightestBorderLeft": { "$value": "{border.hairline}", "$description": "最紧窗口标红左缘; 现 2px 违背, 收紧到 1px 或 4px 二选一定稿" },
+    "tightestPaddingLeft": { "$value": "{spacing.space-4}" }
+  },
+  "ticker": {
+"$description": "balance 模板大数字 + 速率(ticker)",
+    "numberFontSize": { "$value": "{typography.metric}" },
+    "numberWeight": { "$value": 700 },
+    "numberMargin": { "$value": "{spacing.space-4}", "$description": "现 2px 违背, 收紧到 4px" },
+    "subFontSize": { "$value": "{typography.caption}" }
+  },
+  "button": {
+"$description": "手写按钮(不引组件库)",
+    "paddingX": { "$value": "{spacing.space-8}" },
+    "paddingY": { "$value": "{spacing.space-4}" },
+    "gap": { "$value": "{spacing.space-4}" },
+    "borderWidth": { "$value": "{border.hairline}" },
+    "radius": { "$value": "{radius.medium}" },
+    "primaryBackground": { "$value": "{color.accent.dark}" },
+    "primaryTextColor": { "$value": "#ffffff" },
+    "iconPaddingX": { "$value": "{spacing.space-8}", "$description": "现 6px 违背, 收紧到 8px" },
+    "smallPaddingX": { "$value": "{spacing.space-8}", "$description": "btn-sm 现 2px 6px 违背" },
+    "smallFontSize": { "$value": "{typography.caption}" }
+  },
+  "segmented": {
+"$description": "分段选择(设置/主题)",
+    "gap": { "$value": "{spacing.space-4}" },
+    "radius": { "$value": "{radius.medium}" },
+    "activeBackground": { "$value": "{color.accent.dark}" },
+    "activeTextColor": { "$value": "#ffffff" }
+  },
+  "settings": {
+"$description": "设置区/设置面板",
+    "sectionGap": { "$value": "{spacing.space-12}" },
+    "sectionRadius": { "$value": "{radius.medium}" },
+    "panelRadius": { "$value": "{radius.panel}", "$description": "玻璃面板用 16px" },
+    "sectionPaddingX": { "$value": "{spacing.gutter}" },
+    "sectionPaddingY": { "$value": "{spacing.space-8}" },
+    "listGap": { "$value": "{spacing.space-4}", "$description": "instance-list 现 6px 违背" },
+    "headingGapBelow": { "$value": "{spacing.space-8}" }
+  },
+  "input": {
+"$description": "动态表单输入(D-017)",
+    "paddingY": { "$value": "{spacing.space-4}", "$description": "现 6px 违背" },
+    "paddingX": { "$value": "{spacing.space-8}" },
+    "radius": { "$value": "{radius.medium}" },
+    "borderWidth": { "$value": "{border.hairline}" },
+    "fieldGap": { "$value": "{spacing.space-4}" },
+    "formGap": { "$value": "{spacing.space-12}", "$description": "动态表单现 10px 违背, 收紧到 12px" }
+  },
+  "channel-tree": {
+"$description": "树形通道选择器(D-025)",
+    "itemGap": { "$value": "{spacing.space-4}", "$description": "现 6px(platform-btn gap), 收紧到 4px" },
+    "itemPaddingX": { "$value": "{spacing.space-8}", "$description": "现 6px 违背" },
+    "itemPaddingY": { "$value": "{spacing.space-4}", "$description": "现 5px 违背, 收紧到 4px" },
+    "indent": { "$value": "{spacing.space-24}", "$description": "子产品缩进(现 padding-left 24px 合规)" },
+    "caretSize": { "$value": "{spacing.space-8}" },
+    "logoDotSize": { "$value": "{spacing.space-8}", "$description": "现 12px/radius 3px 违背, 收紧到 8px/radius 2px→4px" }
+  },
+  "status-dot": {
+"$description": "托盘/标题栏全局状态点(§6.2)",
+    "size": { "$value": "{spacing.space-8}", "$description": "现默认 10px 违背, 收紧到 8px" },
+    "radius": { "$value": "50%", "$description": "圆点=50% 圆角例外之二" },
+    "traySize": { "$value": "{spacing.space-8}", "$description": "托盘图标色点, 随 OS 渲染" }
+  },
+  "lamp": {
+"$description": "auth_expired 自绘圆点(§2.1 亮黄灯)",
+    "size": { "$value": "{spacing.space-4}", "$description": "字体 10px 圆点" },
+    "marginRight": { "$value": "{spacing.space-4}", "$description": "现 6px 违背" },
+    "fill": { "$value": "{color.status.warn.fill}" },
+    "glowShadow": { "$value": "0 0 2px rgb(250 204 21 / 1), 0 0 6px rgb(250 204 21 / 1)", "$description": "光晕提示待处理(与 --warn #facc15 同值)" }
+  },
+  "setup-hint": {
+"$description": "auth_expired 恢复指引(§2.1)",
+    "radius": { "$value": "{radius.medium}" },
+    "paddingX": { "$value": "{spacing.space-8}" },
+    "paddingY": { "$value": "{spacing.space-4}" },
+    "marginTop": { "$value": "{spacing.space-4}" },
+    "fill": { "$value": "{color.status.warn.text.light}", "$description": "浅底压深文字" }
+  },
+  "count-badge": {
+"$description": "实例计数徽标",
+    "radius": { "$value": "{radius.pill}", "$description": "现 10px 违背, 用胶囊(getComputedStyle 需验证)" },
+    "paddingX": { "$value": "{spacing.space-8}", "$description": "现 6px 违背" },
+    "fontSize": { "$value": "{typography.caption}" }
+  },
+  "tray": {
+"$description": "系统托盘(D-003/§6.2): 图标色点=全局最差状态",
+    "iconRadius": { "$value": "50%" },
+    "backgroundColor": { "$value": "transparent" },
+    "healthMapping": {
+      "$description": "托盘色点由 Rust 侧 status-bad/ok/warn/unknown 图标承载; 前端只推 update_tray_status(status+tooltip)"
+    }
+  },
+  "glass-panel": {
+"$description": "theme-glass 玻璃容器(勿合 master, 契约先行)",
+    "background": { "$value": "{color.glass.white-a12}", "$description": "light; dark 用 {color.glass.black-a42}" },
+    "backdropBlur": { "$value": "blur(32px) saturate(115%)", "$description": "现有 --card-blur, 32px 合规但保持 token" },
+    "borderColor": { "$value": "{color.glass.white-a16}" },
+    "radius": { "$value": "{radius.radius-16}", "$description": "现 14px 违背, 收紧到 16px" }
+  }
+}

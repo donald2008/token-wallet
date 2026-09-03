@@ -28,7 +28,7 @@ export function TitleBar(props: Props) {
   return (
     <header className="titlebar">
       <span title={props.tooltip} style={{ display: "inline-flex" }} className="no-drag">
-        <StatusDot health={props.health} size={10} />
+        <StatusDot health={props.health} size={8} />
       </span>
       <span className="app-title no-drag">token-wallet</span>
       <span className="spacer" />

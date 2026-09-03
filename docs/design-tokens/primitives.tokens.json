@@ -1,0 +1,125 @@
+{
+  "$schema": "https://tr.designtokens.org/format/2025-04-11#",
+  "color": {
+    "$type": "color",
+    "neutral": {
+      "ink-900": { "$value": "#14171c", "$description": "dark 背景 deep(现有 --bg)" },
+      "ink-800": { "$value": "#1c2129", "$description": "dark 提升面(现有 --bg-elev)" },
+      "ink-700": { "$value": "#232a35", "$description": "dark 悬停面(现有 --bg-hover)" },
+      "ink-border": { "$value": "#2c3542", "$description": "dark 边框(现有 --border)" },
+      "mist-50": { "$value": "#f6f7f9", "$description": "light 背景(现有 --bg)" },
+      "white": { "$value": "#ffffff", "$description": "light 提升面(现有 --bg-elev)" },
+      "mist-100": { "$value": "#eef1f5", "$description": "light 悬停面(现有 --bg-hover)" },
+      "mist-border": { "$value": "#dde3ea", "$description": "light 边框(现有 --border)" },
+      "fg-dark": { "$value": "#e5e9f0", "$description": "dark 主文字(现有 --fg)" },
+      "fg-dim-dark": { "$value": "#9aa4b2", "$description": "dark 次级文字(现有 --fg-dim)" },
+      "fg-light": { "$value": "#1c2330", "$description": "light 主文字(现有 --fg)" },
+      "fg-dim-light": { "$value": "#5d6778", "$description": "light 次级文字(现有 --fg-dim)" }
+    },
+    "accent": {
+      "blue-dark": { "$value": "#4f8cff", "$description": "dark 强调色(现有 --accent)" },
+      "blue-light": { "$value": "#2f6fe4", "$description": "light 强调色(现有 --accent)" }
+    },
+    "status": {
+      "ok-fill": { "$value": "#22c55e", "$description": "健康绿, 两主题共用填充(图形角色)" },
+      "warn-fill": { "$value": "#facc15", "$description": "预警黄填充(图形角色)" },
+      "bad-fill": { "$value": "#ef4444", "$description": "危险红填充(图形角色)" },
+      "unknown-fill": { "$value": "#6b7280", "$description": "未知灰填充 dark(图形角色)" },
+      "unknown-fill-light": { "$value": "#9ca3af", "$description": "未知灰填充 light" },
+      "ok-text-dark": { "$value": "#4ade80", "$description": "健康绿 文字角色 dark" },
+      "warn-text-dark": { "$value": "#fde047", "$description": "预警黄 文字角色 dark" },
+      "bad-text-dark": { "$value": "#f87171", "$description": "危险红 文字角色 dark" },
+      "unknown-text-dark": { "$value": "#9ca3af", "$description": "未知灰 文字角色 dark" },
+      "ok-text-light": { "$value": "#15803d", "$description": "健康绿 文字角色 light" },
+      "warn-text-light": { "$value": "#92600a", "$description": "预警黄 文字角色 light(浅底压深)" },
+      "bad-text-light": { "$value": "#b91c1c", "$description": "危险红 文字角色 light" },
+      "unknown-text-light": { "$value": "#6b7280", "$description": "未知灰 文字角色 light" },
+      "brand-block-deepseek": { "$value": "#4d6bfe", "$description": "DeepSeek 平台识别色(现有 BRAND_COLORS)" },
+      "brand-block-kimi": { "$value": "#7c3aed", "$description": "Kimi Code 平台识别色" },
+      "brand-block-aliyun": { "$value": "#ff6a00", "$description": "阿里云 平台识别色" },
+      "brand-block-ark": { "$value": "#1668dc", "$description": "火山方舟 平台识别色" },
+      "brand-block-opencode": { "$value": "#0ea5e9", "$description": "OpenCode 平台识别色" }
+    },
+    "glass": {
+      "$description": "玻璃变体(theme-glass)透明度与白/黑 alpha",
+      "white-a08": { "$value": "#14ffffff", "$description": "白色 8% alpha 玻璃面" },
+      "white-a12": { "$value": "#1fffffff", "$description": "白色 12% alpha 玻璃面" },
+      "white-a16": { "$value": "#29ffffff", "$description": "白色 16% alpha 玻璃面" },
+      "black-a42": { "$value": "#6b000000", "$description": "黑色 42% alpha dark 玻璃底" },
+      "glass-highlight-a32": { "$value": "#52ffffff", "$description": "玻璃高光描边 白 32%" }
+    }
+  },
+  "spacing": {
+    "$type": "dimension",
+    "$description": "8px 网格制步进(全为 4 的倍数); 唯二例外=1px 边框、50% 圆角",
+    "space-4": { "$value": "4px", "$description": "最小间距/内边距(4px)" },
+    "space-8": { "$value": "8px", "$description": "基准间距(gap 默认, 现有 --gap)" },
+    "space-12": { "$value": "12px", "$description": "卡片内边距/面板 padding" },
+    "space-16": { "$value": "16px", "$description": "区块间距/品牌色块尺寸" },
+    "space-20": { "$value": "20px", "$description": "较大分组间距" },
+    "space-24": { "$value": "24px", "$description": "空态/大区块 padding(现有 placeholder)" },
+    "space-28": { "$value": "28px", "$description": "树形缩进/折叠区缩进(现有 local-body)" },
+    "space-32": { "$value": "32px", "$description": "最大分节间距" },
+    "space-48": { "$value": "48px", "$description": "8px 网格 48(大留白/封面级间距, DTCG)" }
+  },
+  "radius": {
+    "$type": "dimension",
+    "$description": "圆角标尺(全部 4 的倍数); 全域统一, 禁混搭",
+    "radius-4": { "$value": "4px", "$description": "小圆角: 品牌色块/logo 点" },
+    "radius-8": { "$value": "8px", "$description": "基准圆角(现有 --radius): 卡片/按钮/输入" },
+    "radius-12": { "$value": "12px", "$description": "大圆角: 弹窗/面板" },
+    "radius-16": { "$value": "16px", "$description": "特大圆角: 独立卡片玻璃" },
+    "radius-pill": { "$value": "999px", "$description": "全圆(药丸): 徽标/胶囊按钮(50% 圆角例外之一)" }
+  },
+  "typography": {
+    "$type": "fontSize",
+    "$description": "字阶; 13px 为基准(现有 --font-size), 数据用 tabular-nums",
+    "font-10": { "$value": "10px", "$description": "压字/圆点标记/极小子标签" },
+    "font-11": { "$value": "11px", "$description": "次级辅助文字(实例通道/授权类型/标签)" },
+    "font-12": { "$value": "12px", "$description": "小号正文/字段标签/状态文字/重置倒计时" },
+    "font-13": { "$value": "13px", "$description": "基准正文(现有 --font-size): body/按钮/输入" },
+    "font-14": { "$value": "14px", "$description": "小标题/设置项标题(h3/h4)" },
+    "font-16": { "$value": "16px", "$description": "区块标题/空态 h2" },
+    "font-22": { "$value": "22px", "$description": "大数字(ticker 模板余额)/主数值" }
+  },
+  "lineHeight": {
+    "$type": "number",
+    "tight": { "$value": 1.2, "$description": "标题/卡片头紧凑" },
+    "body": { "$value": 1.5, "$description": "正文/提示文本(现有 setup-hint line-height 1.5)" },
+    "loose": { "$value": 1.6, "$description": "长文本/空态 p(现有 placeholder p)" }
+  },
+  "fontFamily": {
+    "$type": "fontFamily",
+    "sans": {
+      "$value": ["Segoe UI", "PingFang SC", "Microsoft YaHei", "system-ui", "sans-serif"],
+      "$description": "主字体栈(现有 body)"
+    },
+    "numeric": { "$value": ["Segoe UI", "system-ui", "sans-serif"], "$description": "数值用字体, 配 tabular-nums 防跳动" }
+  },
+  "subtleBorder": { "$type": "dimension", "hairline": { "$value": "1px", "$description": "边框例外: 唯一允许非 4/8 倍数(1px)" } },
+  "shadow": {
+    "$type": "shadow",
+    "$description": "投影标尺: X 偏移=0, 同背景色相, 禁纯黑投影",
+    "shadow-sm": {
+      "$value": [{ "color": "#0a000000", "offsetX": "0px", "offsetY": "1px", "blur": "2px", "spread": "0px" }],
+      "$description": "细微抬升(按钮/行内)" },
+    "shadow-md": {
+      "$value": [{ "color": "#0f000000", "offsetX": "0px", "offsetY": "2px", "blur": "8px", "spread": "0px" }],
+      "$description": "面板/卡片抬升(二级)" },
+    "shadow-lg": {
+      "$value": [{ "color": "#14000000", "offsetX": "0px", "offsetY": "4px", "blur": "16px", "spread": "0px" }],
+      "$description": "弹窗/浮层(三级)" }
+  },
+  "blur": {
+    "$type": "number",
+    "$description": "玻璃模糊半径(theme-glass); 32px 是 8 的倍数, 合规但必须 token 化",
+    "glass-blur": { "$value": 32, "$description": "卡片玻璃背景模糊(现有 --card-blur blur(32px))" }
+  },
+  "motion": {
+    "$type": "duration",
+    "$description": "动效时长标尺; 交互反馈 ≤200ms",
+    "dur-fast": { "$value": "100ms", "$description": "极快: 开关/圆角反馈" },
+    "dur-med": { "$value": "150ms", "$description": "常态缓解(现有 chevron/transition 0.15s)" },
+    "dur-slow": { "$value": "250ms", "$description": "流畅过渡(进度条 transition 0.25s)" }
+  }
+}
