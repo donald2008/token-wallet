@@ -97,6 +97,8 @@ export const AUTH_DEFS: Record<string, AuthCommandDef> = {
     extractUrl: extractFirstUrl,
     // localhost 自闭环免回喂: 浏览器授权后 302 回跳, bl 自收 code 退出(等 close(0))
     finishMode: "callback",
+    // bl --console 自带开系统浏览器(xdg-open/start), app 不重复 openExternal(2026-09-02 真机: 两次授权页)
+    opensBrowserItself: true,
   },
 };
 

@@ -85,6 +85,8 @@ function blDef(script: string): AuthCommandDef {
       return m?.[0] ?? null;
     },
     finishMode: "callback",
+    // bl --console 自带开浏览器 → app 不重复 openExternal(2026-09-02: 两次授权页 bug)
+    opensBrowserItself: true,
   };
 }
 
@@ -134,12 +136,13 @@ describe("auth-session(授权会话驱动器, t_fb8c44d8 修正轮)", () => {
     await expect(startAuthSession(def)).rejects.toThrow(/提前退出\(exit=1\)/);
   });
 
-  it("bl callback: 浏览器授权后 CLI 自收 code exit 0 → 免回喂自动完成", async () => {
+  it("bl callback: 浏览器授权后 CLI 自收 code exit 0 → 免回喂自动完成; app 不开浏览器(bl 自带开)", async () => {
     const opened: string[] = [];
     const { sessionId, url, finishMode } = await startAuthSession(blDef(FAKE_BL_EXIT_0), (u) => opened.push(u));
     expect(url).toContain("bailian.console.aliyun.com");
     expect(finishMode).toBe("callback");
-    expect(opened).toEqual([url]);
+    // 2026-09-02 真机 bug 修复: bl --console 自带开浏览器, app 不重复 openExternal(否则两次授权页)
+    expect(opened).toEqual([]);
     // 免回喂: code 传空串, 等 bl 自闭环 close(0)(300ms 后)
     const res = await finishAuthSession(sessionId, "");
     expect(res.ok).toBe(true);

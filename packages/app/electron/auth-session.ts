@@ -31,6 +31,12 @@ export interface AuthCommandDef {
    *   "callback" — localhost 自闭环(bl): 浏览器授权后 CLI 自收 code 退出, 免回喂, 等 close(0)
    */
   finishMode: "code" | "callback";
+  /**
+   * CLI 是否自带「打开系统浏览器」行为(2026-09-02 真机 bug: bl 两次授权页)。
+   * true = CLI 自己会开(bl --console 实测 spawn xdg-open/start), app 不再重复 openExternal;
+   * false/缺省 = app 负责开浏览器(arkcli 官方 --no-browser 抑制自开, 由 app 统一开一次)。
+   */
+  opensBrowserItself?: boolean;
   /** finishMode="code": 组装 phase2 `--code` 参数(ep: ["auth","login","--no-browser","--code", code]) */
   buildCodeArgs?: (code: string) => string[];
   /** finishMode="code": 从 phase2 stdout+stderr 判定成功(解析 ok 字段, 不信任 exit code) */
@@ -152,7 +158,8 @@ export async function startAuthSession(
     completion = waitForClose(proc, waitTimeoutMs);
   }
   sessions.set(sessionId, { def, proc, url, completion });
-  openBrowser(url);
+  // CLI 自带开浏览器(bl)时 app 不重复 openExternal —— 否则真机开两次授权页(2026-09-02)
+  if (!def.opensBrowserItself) openBrowser(url);
   return { sessionId, url, finishMode: def.finishMode };
 }
 
