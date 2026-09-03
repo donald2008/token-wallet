@@ -1084,7 +1084,7 @@ body {
   font-size: var(--font-12);
   line-height: 16px;
 }
-.settings-section .btn {
+.settings-section > .btn {
   margin-top: 8px;
 }
 
