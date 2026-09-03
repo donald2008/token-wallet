@@ -2,12 +2,16 @@ import { expect as pwExpect } from "@playwright/test";
 import { test } from "./fixtures";
 
 /**
- * L2(完整四元素组件实例方案页, t_af01e265, feat/theme-glass 实验):
- * - 同意首开 → 设置 → 「额度组件实例方案」入口 → 方案页打开
- * - 竖排多个完整四元素实例(标题+重置+进度条+用量), 非表格矩阵
- * - 三态色(ok/warn/bad)齐全; 复用 e2e DOM 契约(.progress/.progress-fill[data-health]/role=progressbar)
+ * L2(四元素排版变体对比页, t_35ff3c1f, feat/theme-glass 实验):
+ * - 同意首开 → 设置 → 「排版变体方案」入口 → 方案页打开
+ * - 5 段排版(qvar-row/duo/hero/micro/ticker) × 每段 3 条完整四元素(标题+重置+条+用量)
+ * - 同一组数据喂所有排版(各段首条标题/用量一致, aria-valuenow=40)
+ * - 三态色 ok/warn/bad 各 5(3 数据 × 5 排版); 复用 e2e DOM 契约
+ *   (.progress/.progress-fill[data-health]/role=progressbar)
  * - 返回按钮回面板
  */
+
+const LAYOUTS = ["row", "duo", "hero", "micro", "ticker"] as const;
 
 /** 同意首开隐私声明 → 面板(侧栏出现) */
 async function agree(page: import("@playwright/test").Page) {
@@ -15,7 +19,7 @@ async function agree(page: import("@playwright/test").Page) {
   await pwExpect(page.getByTestId("settings-btn")).toBeVisible();
 }
 
-/** 打开设置 → 进入额度组件实例方案页 */
+/** 打开设置 → 进入排版变体方案页 */
 async function openGallery(page: import("@playwright/test").Page) {
   await page.getByTestId("settings-btn").click();
   await pwExpect(page.getByTestId("settings-view")).toBeVisible();
@@ -23,37 +27,50 @@ async function openGallery(page: import("@playwright/test").Page) {
   await pwExpect(page.getByTestId("quota-gallery")).toBeVisible();
 }
 
-test("方案页: 从设置打开, 竖排完整四元素实例, 三态色齐全, 契约复用", async ({ hostPage, page }) => {
+test("方案页: 同数据×5种排版, 每段 3 条完整四元素, 三态色齐全, 契约复用", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await openGallery(page);
 
   const gallery = page.getByTestId("quota-gallery");
 
-  // 竖排实例列表(非表格): N 条实例, 每条完整四元素
-  const instances = gallery.locator(".quota-instance");
-  await pwExpect(instances).toHaveCount(5);
-
-  // 每条实例 = 标题 + 重置 + 进度条 + 用量(四元素齐全)
-  for (let i = 0; i < 5; i++) {
-    const inst = instances.nth(i);
-    await pwExpect(inst.locator(".quota-title")).toHaveCount(1);
-    await pwExpect(inst.locator(".quota-reset")).toHaveCount(1);
-    await pwExpect(inst.locator('[role="progressbar"]')).toHaveCount(1);
-    await pwExpect(inst.locator(".quota-usage")).toHaveCount(1);
+  // 5 段排版齐; 每段画布内 3 条 meter, 每条四元素齐全
+  for (const layout of LAYOUTS) {
+    const canvas = page.getByTestId(`qvar-canvas-${layout}`);
+    await pwExpect(canvas).toBeVisible();
+    await pwExpect(canvas.locator("[data-testid='quota-meter']")).toHaveCount(3);
+    await pwExpect(canvas.locator(".quota-title")).toHaveCount(3);
+    await pwExpect(canvas.locator(".quota-reset")).toHaveCount(3);
+    await pwExpect(canvas.locator('[role="progressbar"]')).toHaveCount(3);
+    await pwExpect(canvas.locator(".quota-usage")).toHaveCount(3);
   }
 
-  // 进度条契约: 全部带 role=progressbar + aria-valuenow; 首条 flash_40 = 40% ok
-  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(5);
-  await pwExpect(gallery.locator(".progress")).toHaveCount(5);
-  await pwExpect(gallery.locator('[role="progressbar"]').first()).toHaveAttribute("aria-valuenow", "40");
+  // 同数据跨段: 每段第 1 条标题一致 = 闪购 40 次; 每段第 1 条 aria-valuenow = 40
+  const firstTitles: string[] = [];
+  for (const layout of LAYOUTS) {
+    const canvas = page.getByTestId(`qvar-canvas-${layout}`);
+    const firstTitle = (await canvas.locator(".quota-title").first().textContent()) ?? "";
+    firstTitles.push(firstTitle);
+    await pwExpect(canvas.locator('[role="progressbar"]').first()).toHaveAttribute("aria-valuenow", "40");
+  }
+  pwExpect(firstTitles).toEqual(Array(LAYOUTS.length).fill("闪购 40 次"));
 
-  // 三态色齐全(数据驱动 mock: flash_40/perf_23 ok, deep_58/week_72 warn, month_91 bad)
-  await pwExpect(gallery.locator('.progress-fill[data-health="ok"]')).toHaveCount(2);
-  await pwExpect(gallery.locator('.progress-fill[data-health="warn"]')).toHaveCount(2);
-  await pwExpect(gallery.locator('.progress-fill[data-health="bad"]')).toHaveCount(1);
+  // 总契约: 15 条 progressbar/进度条; 首条 40; 三态 ok/warn/bad 各 5(3 数据 × 5 排版)
+  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(15);
+  await pwExpect(gallery.locator(".progress")).toHaveCount(15);
+  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(5);
+  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(5);
+  await pwExpect(gallery.locator(".progress-fill[data-health='bad']")).toHaveCount(5);
 
-  // 非表格确认: 旧矩阵结构(.quota-table/.quota-row/.quota-vhead)不残留
+  // 每段 meter 的 data-layout 与 class 和所在段一致(容器层排版生效)
+  for (const layout of LAYOUTS) {
+    const canvas = page.getByTestId(`qvar-canvas-${layout}`);
+    const meters = canvas.locator("[data-testid='quota-meter']");
+    await pwExpect(meters.first()).toHaveAttribute("data-layout", layout);
+    await pwExpect(meters.first()).toHaveClass(new RegExp(`quota-meter--layout-${layout}`));
+  }
+
+  // 非表格确认: 旧矩阵结构不残留
   await pwExpect(gallery.locator(".quota-table, .quota-row, .quota-vhead")).toHaveCount(0);
 
   // 图例三态色
@@ -65,11 +82,17 @@ test("方案页: 从设置打开, 竖排完整四元素实例, 三态色齐全, 
   await pwExpect(page.getByTestId("settings-btn")).toBeVisible();
 });
 
-test("方案页截图取证(完整实例三态渲染, 落 /tmp)", async ({ hostPage, page }) => {
+test("方案页截图取证(5 种排版逐段落 /tmp)", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await openGallery(page);
   // 等 grow-in 动画落定避免截到半透明帧
   await page.waitForTimeout(700);
-  await page.getByTestId("quota-gallery").screenshot({ path: "/tmp/quota-instances-proof.png" });
+  await page.getByTestId("quota-gallery").screenshot({ path: "/tmp/quota-layouts-top.png" });
+  for (const layout of LAYOUTS) {
+    const section = page.getByTestId(`qvar-${layout}`);
+    await section.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(250);
+    await section.screenshot({ path: `/tmp/quota-layout-${layout}.png` });
+  }
 });
