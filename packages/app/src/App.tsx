@@ -33,6 +33,7 @@ import {
 import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { AddProviderWizard } from "./components/AddProviderWizard";
+import { QuotaGallery } from "./components/QuotaGallery";
 import { LocalAgentSection } from "./components/LocalAgentSection";
 import { FilterIcons, DEFAULT_FILTER, matchesFilter, type FilterSel } from "./components/FilterChips";
 import {
@@ -110,8 +111,8 @@ function AppShell() {
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", dir: "asc" });
   // P1(t_6484ecc6): 主页过滤 chips 选中态(单选, 默认「全部」= 现状零变化; 重启回「全部」)
   const [filter, setFilter] = useState<FilterSel>(DEFAULT_FILTER);
-  // 页内导航仅留给首开向导(D-021 一次性引导): view="add" = 添加向导页内形态
-  const [view, setView] = useState<"panel" | "add">("panel");
+  // 页内导航仅留给首开向导 + 方案页(D-021 一次性引导 view="add"; theme-glass 实验 view="quota")
+  const [view, setView] = useState<"panel" | "add" | "quota">("panel");
   // D-038: 设置弹窗(纯偏好) 与 添加向导弹窗(侧栏 ＋) 是两个独立模态
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -330,6 +331,15 @@ function AppShell() {
     );
   }
 
+  if (view === "quota") {
+    // theme-glass 实验: 进度条形态方案页(设置页入口打开, 页内导航回面板)
+    return (
+      <div className="panel">
+        <QuotaGallery onBack={() => setView("panel")} />
+      </div>
+    );
+  }
+
   return (
     <div className="panel">
       {/* t_66b67453 契约1: 标题栏独占第一行(全宽) —— 用户原始诉求「侧栏从窗口最上沿
@@ -408,6 +418,10 @@ function AppShell() {
               sortConfig={sortConfig}
               onSortConfig={onSortConfig}
               onBack={closeSettings}
+              onOpenQuota={() => {
+                closeSettings();
+                setView("quota");
+              }}
             />
           </div>
         </div>

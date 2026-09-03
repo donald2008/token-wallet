@@ -40,6 +40,8 @@ interface Props {
   sortConfig: SortConfig;
   onSortConfig: (c: SortConfig) => void;
   onBack: () => void;
+  /** theme-glass 实验入口: 打开进度条形态方案页(可选, 缺省不渲染入口) */
+  onOpenQuota?: () => void;
   /** page = 页内导航(保留形态); modal = 设置弹窗(P0-6), 头部渲染 × 关闭 */
   variant?: "page" | "modal";
 }
@@ -75,6 +77,7 @@ export function SettingsView({
   onSortConfig,
   onBack,
   variant = "page",
+  onOpenQuota,
 }: Props) {
   const { lang, setLang } = useLang();
   const [storagePaths, setStoragePaths] = useState<StoragePaths | null>(null);
@@ -263,6 +266,16 @@ export function SettingsView({
           </div>
           <p className="hint">{t("set.aboutHint")}</p>
         </section>
+
+        {/* theme-glass 实验(t_37416b22): 进度条形态方案页入口 */}
+        {onOpenQuota && (
+          <section className="settings-section" data-testid="quota-entry">
+            <h4>{t("set.quotaGallery")}</h4>
+            <button type="button" className="btn" data-testid="quota-open" onClick={onOpenQuota}>
+              {t("quota.open")}
+            </button>
+          </section>
+        )}
       </div>
     </div>
   );

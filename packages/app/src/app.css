@@ -1392,3 +1392,189 @@ body {
   margin: 0;
   word-break: break-all;
 }
+
+/* ================= QuotaMeter 最小组件(feat/theme-glass 实验, t_37416b22) =================
+ * 条本体: 数据契约 pct(0-1)+state(ok/warn/bad)。4 形态都是「条」的差异化(粗细/圆角/质感/动效),
+ * 不改变 .progress / .progress-fill[data-health] DOM 契约(e2e smoke/titlebar-bars 依赖, 一例不破)。
+ * 唯一数值来源 tokens.css; margin/padding/gap/border-radius 走 4/8 网格; 状态色吃 D-016 token,
+ * 零硬编码色 → dark/light/glass 三态天然自适应。含放弃 --space 4/8 例外见 tokens.css 注释。 */
+.quota-meter {
+  min-width: 0;
+}
+/* 基线: 8px 细条(≈ 现行卡片进度条本体槽) */
+.quota-meter .progress {
+  height: var(--space-8);
+  border-radius: var(--radius-4);
+}
+/* 填充本体: 挂载生长(scaleX 0→1) + 数据变化 width 渐变 = 过渡动画(零 JS 定时) */
+.quota-meter .progress-fill {
+  transition: width var(--dur-slow) ease;
+  transform-origin: left center;
+  animation: quota-grow var(--dur-slow) ease;
+}
+@keyframes quota-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* ① slim(默认): 已由基线覆盖, 无需额外规则 */
+
+/* ② thick: 12px 胶囊粗条(醒目强焦点), 半径 pill */
+.quota-meter--thick .progress,
+.quota-meter--thick .progress-fill {
+  height: var(--space-12);
+  border-radius: var(--radius-pill);
+}
+
+/* ③ segmented: 分段刻度(步进槽), 填充呈一格一格点亮(透明缝透出轨道色) */
+.quota-meter--segmented .progress-fill[data-health="ok"] {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ok) 0,
+    var(--ok) calc(10% - var(--border-hairline)),
+    transparent calc(10% - var(--border-hairline)),
+    transparent 10%
+  );
+}
+.quota-meter--segmented .progress-fill[data-health="warn"] {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--warn) 0,
+    var(--warn) calc(10% - var(--border-hairline)),
+    transparent calc(10% - var(--border-hairline)),
+    transparent 10%
+  );
+}
+.quota-meter--segmented .progress-fill[data-health="bad"] {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--bad) 0,
+    var(--bad) calc(10% - var(--border-hairline)),
+    transparent calc(10% - var(--border-hairline)),
+    transparent 10%
+  );
+}
+
+/* ④ flow: 流水动效, 填充叠半透明斜纹并流动(高频滚动窗口的活跃感) */
+.quota-meter--flow .progress-fill {
+  background-size: var(--space-16) var(--space-16);
+  animation: quota-flow var(--dur-slow) linear infinite;
+}
+.quota-meter--flow .progress-fill[data-health="ok"] {
+  background-color: var(--ok);
+  background-image: linear-gradient(
+    45deg,
+    var(--c-glass-highlight-a32) 25%,
+    transparent 25% 50%,
+    var(--c-glass-highlight-a32) 50% 75%,
+    transparent 75%
+  );
+}
+.quota-meter--flow .progress-fill[data-health="warn"] {
+  background-color: var(--warn);
+  background-image: linear-gradient(
+    45deg,
+    var(--c-glass-highlight-a32) 25%,
+    transparent 25% 50%,
+    var(--c-glass-highlight-a32) 50% 75%,
+    transparent 75%
+  );
+}
+.quota-meter--flow .progress-fill[data-health="bad"] {
+  background-color: var(--bad);
+  background-image: linear-gradient(
+    45deg,
+    var(--c-glass-highlight-a32) 25%,
+    transparent 25% 50%,
+    var(--c-glass-highlight-a32) 50% 75%,
+    transparent 75%
+  );
+}
+@keyframes quota-flow {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: var(--space-16) 0;
+  }
+}
+
+/* ================= QuotaGallery 方案页(feat/theme-glass 实验, t_37416b22) =================
+ * 复用 .settings-view(头固定+体滚动); 网格 列(形态)×行(窗口/状态)。全部 4/8 token。 */
+.quota-gallery .settings-body {
+  padding: var(--space-8) var(--space-12) var(--space-12);
+}
+.quota-table {
+  margin-top: var(--space-8);
+}
+.quota-row {
+  display: grid;
+  grid-template-columns: 72px repeat(4, 1fr);
+  gap: var(--space-8);
+  align-items: center;
+}
+.quota-cell {
+  min-width: 0;
+}
+.quota-vhead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.quota-vname {
+  font-size: var(--font-11);
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quota-vnote {
+  font-size: var(--font-10);
+  color: var(--fg-dim);
+}
+.quota-cell--label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.quota-mname {
+  font-size: var(--font-10);
+  color: var(--fg-dim);
+}
+.quota-mpct {
+  font-size: var(--font-10);
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.quota-legend {
+  display: flex;
+  gap: var(--space-16);
+  margin-top: var(--space-16);
+  padding-top: var(--space-8);
+  border-top: var(--border-hairline) solid var(--border);
+  align-items: center;
+}
+.quota-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--font-10);
+  color: var(--fg-dim);
+}
+.quota-swatch {
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-4);
+}
+.quota-swatch--ok {
+  background: var(--ok);
+}
+.quota-swatch--warn {
+  background: var(--warn);
+}
+.quota-swatch--bad {
+  background: var(--bad);
+}

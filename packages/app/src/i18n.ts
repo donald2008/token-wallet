@@ -268,6 +268,7 @@ const zh = {
     aboutHint: "内置单色品牌图标, 离线可渲染(currentColor 随主题自适应)。",
     language: "语言",
     languageHint: "界面显示语言, 切换即生效, 重启后保持。",
+    quotaGallery: "进度条形态方案(theme-glass 实验)",
   },
   updater: {
     unavailable: "更新功能仅安装版可用",
@@ -277,6 +278,27 @@ const zh = {
     downloading: "正在下载 {percent}%",
     installTo: "重启安装 v{version}",
     failed: "更新失败, 稍后重试",
+  },
+  quota: {
+    title: "进度条形态方案",
+    subtitle:
+      "「进度条最小组件」4 种候选形态并排对比, 数据契约 pct(0-1)+state(ok/warn/bad), 全部走 tokens.css / 8px 网格 / D-016 三态(dark/light/glass)。",
+    open: "查看方案页",
+    colWindow: "窗口",
+    window5h: "5 小时窗",
+    windowWeek: "周窗",
+    windowMonth: "月窗",
+    vSlim: "① 细条 8px",
+    vSlimNote: "纯色 · 圆角4 · 渐变过渡",
+    vThick: "② 胶囊 12px",
+    vThickNote: "纯色 · 圆角胶囊 · 醒目",
+    vSegmented: "③ 分段刻度",
+    vSegmentedNote: "分段 · 步进点亮",
+    vFlow: "④ 流水动效",
+    vFlowNote: "斜纹 · 流动",
+    legendOk: "ok(健康)",
+    legendWarn: "warn(偏低)",
+    legendBad: "bad(耗尽)",
   },
 } as const;
 
@@ -528,6 +550,7 @@ const en: Dict = {
     aboutHint: "Built-in monochrome brand logos render offline (currentColor follows theme).",
     language: "Language",
     languageHint: "UI display language; applies immediately and persists across restarts.",
+    quotaGallery: "Progress-bar variants (theme-glass experiment)",
   },
   updater: {
     unavailable: "Updates are only available in the installed build",
@@ -537,6 +560,27 @@ const en: Dict = {
     downloading: "Downloading {percent}%",
     installTo: "Restart & install v{version}",
     failed: "Update failed, retry later",
+  },
+  quota: {
+    title: "Progress-bar variants",
+    subtitle:
+      "Minimal progress-bar: 4 candidate shapes side by side. Contract pct(0-1)+state(ok/warn/bad), all via tokens.css / 8px grid / D-016 three states (dark/light/glass).",
+    open: "View gallery",
+    colWindow: "Window",
+    window5h: "5h window",
+    windowWeek: "Weekly",
+    windowMonth: "Monthly",
+    vSlim: "① slim 8px",
+    vSlimNote: "solid · radius-4 · ease",
+    vThick: "② pill 12px",
+    vThickNote: "solid · pill · bold",
+    vSegmented: "③ segmented",
+    vSegmentedNote: "stepped · fill-in",
+    vFlow: "④ flow",
+    vFlowNote: "stripes · animated",
+    legendOk: "ok (healthy)",
+    legendWarn: "warn (low)",
+    legendBad: "bad (exhausted)",
   },
 };
 
