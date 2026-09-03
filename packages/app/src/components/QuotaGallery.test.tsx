@@ -1,7 +1,8 @@
-// L1(QuotaGallery 方案页, t_37416b22): 画廊视图数据契约与三态渲染。
-// - 3 条典型窗口 × 4 形态 = 12 条进度条; 三种状态色(ok/warn/bad)各出现 4 次
-// - 数据驱动 mock(pct/state 硬编码常量), 每格都是「条本体」(QuotaMeter)
-// - 返回按钮回调
+// L1(QuotaGallery 方案页, t_af01e265): 完整四元素组件实例竖排展示。
+// - N 条完整实例, 每条 = 标题 + 重置时间 + 进度条 + 用量(四元素齐全, 非半成品/非表格)
+// - 三种状态色(ok/warn/bad)在数据集中各自出现(数据驱动)
+// - 不同实例喂不同形态(variant)的条
+// - e2e DOM 契约(.progress/.progress-fill[data-health]/role=progressbar)完整保留
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -32,37 +33,61 @@ function render(el: React.ReactElement) {
   act(() => root.render(el));
 }
 
-describe("QuotaGallery 方案页", () => {
-  it("渲染 4 形态 × 3 窗口 = 12 条进度条(role=progressbar)", () => {
+describe("QuotaGallery 方案页(完整实例竖排)", () => {
+  it("渲染多个完整四元素实例(role=progressbar = 实例数), 每实例四元素齐全", () => {
     render(<QuotaGallery onBack={() => {}} />);
-    expect(container.querySelectorAll('[role="progressbar"]').length).toBe(12);
-    // 4 个 variant 列头
-    expect(container.querySelectorAll(".quota-vhead").length).toBe(4);
-    // 3 行窗口
-    expect(container.querySelectorAll('.quota-row[data-metric]').length).toBe(3);
+    const instances = Array.from(container.querySelectorAll<HTMLElement>(".quota-instance"));
+    // 5 条实例(数据驱动)
+    expect(instances.length).toBe(5);
+    // 每条实例都有 1 根条 + 标题 + 重置 + 用量(四元素齐全, 非只渲染条)
+    for (const inst of instances) {
+      expect(inst.querySelectorAll('[role="progressbar"]').length).toBe(1);
+      expect(inst.querySelector(".quota-title")!.textContent!.length).toBeGreaterThan(0);
+      expect(inst.querySelector(".quota-reset")!.textContent!.length).toBeGreaterThan(0);
+      expect(inst.querySelector(".quota-usage")!.textContent!.length).toBeGreaterThan(0);
+    }
+    // progressbar 总数 = 实例数(不是矩阵的 12)
+    expect(container.querySelectorAll('[role="progressbar"]').length).toBe(5);
   });
 
-  it("三态色齐全: ok/warn/bad 填充各 4 条(数据驱动)", () => {
+  it("三态色齐全: ok/warn/bad 填充在数据集中各出现(数据驱动 mock 含 ok/warn/bad)", () => {
     render(<QuotaGallery onBack={() => {}} />);
     const fills = Array.from(container.querySelectorAll(".progress-fill"));
     const byHealth = (h: string) => fills.filter((f) => f.getAttribute("data-health") === h).length;
-    expect(byHealth("ok")).toBe(4);
-    expect(byHealth("warn")).toBe(4);
-    expect(byHealth("bad")).toBe(4);
+    expect(byHealth("ok")).toBeGreaterThan(0); // flash_40 / perf_23
+    expect(byHealth("warn")).toBeGreaterThan(0); // deep_58 / week_72
+    expect(byHealth("bad")).toBeGreaterThan(0); // month_91
   });
 
-  it("mock 数据: 5h 40% ok / 周 72% warn / 月 91% bad", () => {
+  it("mock 数据: 各实例宽度/状态与数据组合一致(非表格, 每实例独立完整)", () => {
     render(<QuotaGallery onBack={() => {}} />);
-    const rows = Array.from(container.querySelectorAll<HTMLElement>('.quota-row[data-metric]'));
-    const row = (key: string) => rows.find((r) => r.getAttribute("data-metric") === key)!;
+    const inst = (key: string) =>
+      Array.from(container.querySelectorAll<HTMLElement>(".quota-instance")).find(
+        (el) => el.getAttribute("data-instance") === key,
+      )!;
     const fill = (el: HTMLElement) => el.querySelector<HTMLElement>(".progress-fill");
-    // 使用 slim(default) 列的首格验证宽度与状态
-    expect(fill(row("rolling_5h"))!.getAttribute("data-health")).toBe("ok");
-    expect(fill(row("rolling_5h"))!.style.width).toBe("40%");
-    expect(fill(row("weekly"))!.getAttribute("data-health")).toBe("warn");
-    expect(fill(row("weekly"))!.style.width).toBe("72%");
-    expect(fill(row("monthly"))!.getAttribute("data-health")).toBe("bad");
-    expect(fill(row("monthly"))!.style.width).toBe("91%");
+    expect(fill(inst("flash_40"))!.getAttribute("data-health")).toBe("ok");
+    expect(fill(inst("flash_40"))!.style.width).toBe("40%");
+    expect(fill(inst("deep_58"))!.getAttribute("data-health")).toBe("warn");
+    expect(fill(inst("deep_58"))!.style.width).toBe("58%");
+    expect(fill(inst("month_91"))!.getAttribute("data-health")).toBe("bad");
+    expect(fill(inst("month_91"))!.style.width).toBe("91%");
+    // 用量行展示 used/limit/pct 派生文案
+    expect(inst("month_91").querySelector(".quota-usage")!.textContent).toBe("91 / 100 (91%)");
+  });
+
+  it("不同实例喂不同形态(variant)的条(形态保留在组件内部, 非表格行维度)", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    const inst = (key: string) =>
+      Array.from(container.querySelectorAll<HTMLElement>(".quota-instance")).find(
+        (el) => el.getAttribute("data-instance") === key,
+      )!;
+    const variantOf = (key: string) =>
+      inst(key).querySelector("[data-testid='quota-meter']")!.getAttribute("data-variant");
+    expect(variantOf("flash_40")).toBe("slim");
+    expect(variantOf("deep_58")).toBe("thick");
+    expect(variantOf("week_72")).toBe("segmented");
+    expect(variantOf("month_91")).toBe("flow");
   });
 
   it("返回钮回调 onBack", () => {
@@ -72,13 +97,8 @@ describe("QuotaGallery 方案页", () => {
     expect(back).toHaveBeenCalledTimes(1);
   });
 
-  it("种形态列头展示(名称 + 一句话)", () => {
+  it("确保非表格: 无 matrix/vhead/窗口行 残留结构", () => {
     render(<QuotaGallery onBack={() => {}} />);
-    const heads = Array.from(container.querySelectorAll(".quota-vhead"));
-    expect(heads.length).toBe(4);
-    for (const h of heads) {
-      expect(h.querySelector(".quota-vname")!.textContent!.length).toBeGreaterThan(0);
-      expect(h.querySelector(".quota-vnote")!.textContent!.length).toBeGreaterThan(0);
-    }
+    expect(container.querySelectorAll(".quota-table, .quota-row, .quota-vhead, .quota-cell").length).toBe(0);
   });
 });

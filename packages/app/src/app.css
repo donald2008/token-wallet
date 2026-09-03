@@ -1427,11 +1427,6 @@ body {
   border-radius: var(--radius-pill);
 }
 
-/* 返回按钮: dark 下 .btn 默认描边(--border)偏弱, 方案页内提亮为 --fg-dim(#9) */
-.quota-gallery .settings-head .btn {
-  border-color: var(--fg-dim);
-}
-
 /* ③ segmented: 分段刻度(步进槽), 填充呈一格一格点亮。
  * 段改为固定 8px 块 + 4px 透明缝(此前 10% 相对单元在低百分比如 40% 下只剩 ~2px 的
  * 细碎亮段, 与 4px 圆角轨道不统一)。离散 8px 步进块在圆角轨道内读作「进位格」,
@@ -1509,73 +1504,67 @@ body {
   }
 }
 
-/* ================= QuotaGallery 方案页(feat/theme-glass 实验, t_37416b22) =================
- * 复用 .settings-view(头固定+体滚动); 网格 列(形态)×行(窗口/状态)。全部 4/8 token。 */
+/* ================= QuotaGallery 方案页(feat/theme-glass 实验, t_37416b22 + t_af01e265) =================
+ * 复用 .settings-view(头固定+体滚动); 竖排完整四元素实例(标题+重置+条+用量), 非表格矩阵。全部 4/8 token。 */
 .quota-gallery .settings-body {
   padding: var(--space-8) var(--space-12) var(--space-12);
-  gap: var(--space-24); /* 说明段↔表格↔图例三处垂直间距统一同 token(#3) */
+  gap: var(--space-24); /* 说明段↔实例列表↔图例三处垂直间距统一同 token(#3) */
 }
 .quota-gallery .hint {
   margin: 0; /* 抵消 <p> 浏览器默认底边距, 只由 settings-body gap 控制节奏 */
 }
-.quota-table {
+/* 返回按钮: dark 下 .btn 默认描边(--border)偏弱, 方案页内提亮为 --fg-dim(#9) */
+.quota-gallery .settings-head .btn {
+  border-color: var(--fg-dim);
+}
+
+/* 实例列表: 竖排逐个展示完整四元素实例(非表格, 无窗口×形态矩阵) */
+.quota-instances {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
   margin-top: 0;
 }
-.quota-row {
-  display: grid;
-  grid-template-columns: 72px repeat(4, 1fr);
-  gap: var(--space-8);
-  align-items: center;
-}
-/* 数据行: 左列标签(主行窗口名+副行百分比)与各形态条垂直基线对齐 —— 
-   条底对齐百分比副行, 不再让条悬在窗口名与百分比之间(#2) */
-.quota-row[data-metric] {
-  align-items: end;
-}
-.quota-cell {
+.quota-instance {
   min-width: 0;
 }
-.quota-vhead {
+
+/* 四元素实例排版: 标题 → 重置时间 → 进度条 → 用量(全部扩展 slot 存在时启用) */
+.quota-meter--instance {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  padding: var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-8);
+  background: var(--bg);
 }
-.quota-vname {
+/* 实例内条: 与卡片同宽, 且不被列式 flex 的 flex:1(flex-basis:0)压塌 ——
+ * 显式 flex:0 0 auto 让 height:var(--space-8)(8px 条)生效 */
+.quota-meter--instance .progress {
+  width: 100%;
+  flex: 0 0 auto;
+}
+.quota-title {
   font-size: var(--font-11);
   font-weight: 600;
   color: var(--fg);
   line-height: var(--line-height-tight);
-  overflow-wrap: anywhere; /* 窄列允许换行 2 行, 形态名完整露出, 不再省略号截断(#1) */
+  overflow-wrap: anywhere;
 }
-.quota-vnote {
-  font-size: var(--font-11); /* 列头描述提字号提升可读性(#4) */
-  color: var(--fg-dim);
-}
-/* 动效形态(分段/流水)标注: 静态评审一眼识别「不是静态图」(#7) */
-.quota-vmotion {
-  font-size: var(--font-10);
-  font-weight: 600;
-  color: var(--accent);
-}
-.quota-cell--label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-.quota-mname {
+.quota-reset {
   font-size: var(--font-10);
   color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
 }
-.quota-mpct {
+.quota-usage {
   font-size: var(--font-10);
   font-weight: 600;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
-/* P3(#8): ≥90% bad(月窗 91%)「耗尽」行, 百分比文字加红色强调 —— 仅展示强调, 不改 D-016 语义 token */
-.quota-cell--label.is-exhaust .quota-mpct {
-  color: var(--bad-fg);
-}
+
 .quota-legend {
   display: flex;
   gap: var(--space-16);

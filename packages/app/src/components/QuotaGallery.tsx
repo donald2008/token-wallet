@@ -2,28 +2,87 @@ import { t } from "../i18n";
 import { QuotaMeter, type QuotaState, type QuotaVariant } from "./QuotaMeter";
 
 /**
- * QuotaGallery — 进度条形态方案页(t_37416b22, feat/theme-glass 实验视图)。
+ * QuotaGallery — 四元素组件实例方案页(t_af01e265, feat/theme-glass 实验视图)。
+ *
+ * 用户两次纠正(9/4): 不要「矩阵表格」(列=形态 × 行=窗口)。正确 = 一个完整四元素
+ * 「最小组件实例(标题 + 重置时间 + 进度条 + 用量)」, 按数据需要渲染**多个完整实例**。
  *
  * 数据契约(纯 mock 驱动, 无引擎无 store):
- *   METRICS = 3 条典型窗口(5h 40% ok / 周 72% warn / 月 91% bad) → 一眼看到三种状态色。
- *   VARIANTS = 4 种「条」的形态(slim/thick/segmented/flow), 并排矩阵对比。
- * 布局 = 行(窗口 × 状态) × 列(形态), 每格一个 QuotaMeter(条本体)。
- * 窗名/数值标签是**方案页说明层**(非 QuotaMeter 本体承载), 便于评审对照数据组合。
+ *   INSTANCES = N 条完整四元素数据组合, 每条 = 一个 QuotaMeter(四元素实例)。
+ *   不同实例喂不同数据: pct 状态色(40% ok / 58% warn / 72% warn / 91% bad …)、
+ *   不同形态的条(slim/thick/segmented/flow)、不同标题/重置时间/用量。
+ * 布局 = 竖排逐个展示完整实例(非表格; 形态对比保留在组件内部同一排版里)。
  *
- * 契约同源: tokens.css / 8px 网格 / D-016 三态(dark/light/glass 随主题自适应, 零硬编码色)。
- * e2e 契约: 复用 .progress / .progress-fill[data-health], 一例不破正文卡。
+ * 契约同源: tokens.css / 8px 网格 / D-016 三态(dark/light/glass 随主题自适应)。
+ * e2e 契约: 复用 .progress / .progress-fill[data-health] / role=progressbar —— 正文卡一例不破。
  */
-const METRICS: { key: string; labelKey: string; pct: number; state: QuotaState }[] = [
-  { key: "rolling_5h", labelKey: "quota.window5h", pct: 0.4, state: "ok" },
-  { key: "weekly", labelKey: "quota.windowWeek", pct: 0.72, state: "warn" },
-  { key: "monthly", labelKey: "quota.windowMonth", pct: 0.91, state: "bad" },
-];
+interface GalleryInstance {
+  key: string;
+  titleKey: string;
+  pct: number;
+  state: QuotaState;
+  variant: QuotaVariant;
+  resetTextKey: string;
+  used: number;
+  limit: number;
+}
 
-const VARIANTS: { id: QuotaVariant; labelKey: string; noteKey: string; motion?: boolean }[] = [
-  { id: "slim", labelKey: "quota.vSlim", noteKey: "quota.vSlimNote" },
-  { id: "thick", labelKey: "quota.vThick", noteKey: "quota.vThickNote" },
-  { id: "segmented", labelKey: "quota.vSegmented", noteKey: "quota.vSegmentedNote", motion: true },
-  { id: "flow", labelKey: "quota.vFlow", noteKey: "quota.vFlowNote", motion: true },
+const INSTANCES: GalleryInstance[] = [
+  // 40% ok / flash-回落滚动窗 / 细条
+  {
+    key: "flash_40",
+    titleKey: "quota.iFlash",
+    pct: 0.4,
+    state: "ok",
+    variant: "slim",
+    resetTextKey: "quota.iResetSoon",
+    used: 40,
+    limit: 100,
+  },
+  // 58% warn / 长窗已过半 / 瓶形粗条
+  {
+    key: "deep_58",
+    titleKey: "quota.iDeep",
+    pct: 0.58,
+    state: "warn",
+    variant: "thick",
+    resetTextKey: "quota.iResetWeek",
+    used: 58,
+    limit: 100,
+  },
+  // 72% warn / 周窗 / 分段刻度
+  {
+    key: "week_72",
+    titleKey: "quota.iWeek",
+    pct: 0.72,
+    state: "warn",
+    variant: "segmented",
+    resetTextKey: "quota.iResetDayFrac",
+    used: 72,
+    limit: 100,
+  },
+  // 91% bad / 月窗近耗尽 / 流水动效
+  {
+    key: "month_91",
+    titleKey: "quota.iMonth",
+    pct: 0.91,
+    state: "bad",
+    variant: "flow",
+    resetTextKey: "quota.iResetHours",
+    used: 91,
+    limit: 100,
+  },
+  // 全量尚可 / 更细颗粒(1000 记数制) / 细条
+  {
+    key: "perf_23",
+    titleKey: "quota.iPerf",
+    pct: 0.23,
+    state: "ok",
+    variant: "slim",
+    resetTextKey: "quota.iResetDayInt",
+    used: 2300,
+    limit: 10000,
+  },
 ];
 
 export function QuotaGallery({ onBack }: { onBack: () => void }) {
@@ -39,41 +98,19 @@ export function QuotaGallery({ onBack }: { onBack: () => void }) {
       <div className="settings-body">
         <p className="hint">{t("quota.subtitle")}</p>
 
-        <div className="quota-table" role="table" aria-label={t("quota.title")}>
-          {/* 表头 = 形态列(variant) */}
-          <div className="quota-row quota-row--head" role="row">
-            <div className="quota-cell quota-cell--corner" role="columnheader">
-              {t("quota.colWindow")}
-            </div>
-            {VARIANTS.map((v) => (
-              <div
-                className="quota-cell quota-vhead"
-                data-variant={v.id}
-                key={v.id}
-                role="columnheader"
-              >
-                <span className="quota-vname">{t(v.labelKey as Parameters<typeof t>[0])}</span>
-                <span className="quota-vnote">{t(v.noteKey as Parameters<typeof t>[0])}</span>
-                {v.motion && <span className="quota-vmotion">{t("quota.motion")}</span>}
-              </div>
-            ))}
-          </div>
-
-          {/* 每行 = 一个典型窗口(含状态色), 每列 = 条本体候选 */}
-          {METRICS.map((m) => (
-            <div className="quota-row" data-metric={m.key} key={m.key} role="row">
-              <div
-                className={`quota-cell quota-cell--label${m.pct >= 0.9 ? " is-exhaust" : ""}`}
-                role="rowheader"
-              >
-                <span className="quota-mname">{t(m.labelKey as Parameters<typeof t>[0])}</span>
-                <span className="quota-mpct">{Math.round(m.pct * 100)}%</span>
-              </div>
-              {VARIANTS.map((v) => (
-                <div className="quota-cell" role="cell" key={v.id}>
-                  <QuotaMeter pct={m.pct} state={m.state} variant={v.id} />
-                </div>
-              ))}
+        {/* 竖排逐个展示完整四元素实例(非表格, 无窗口×形态矩阵) */}
+        <div className="quota-instances" data-testid="quota-instances">
+          {INSTANCES.map((inst) => (
+            <div className="quota-instance" data-instance={inst.key} key={inst.key}>
+              <QuotaMeter
+                pct={inst.pct}
+                state={inst.state}
+                variant={inst.variant}
+                title={t(inst.titleKey as Parameters<typeof t>[0])}
+                resetText={t(inst.resetTextKey as Parameters<typeof t>[0])}
+                used={inst.used}
+                limit={inst.limit}
+              />
             </div>
           ))}
         </div>
