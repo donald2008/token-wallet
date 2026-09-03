@@ -201,7 +201,7 @@ export function SettingsView({
                 <button
                   key={o.id}
                   type="button"
-                  className={`btn${sortConfig.key !== "manual" && sortConfig.dir === o.id ? " active" : ""}`}
+                  className={`btn${sortConfig.dir === o.id ? " active" : ""}`}
                   data-testid={`sort-dir-${o.id}`}
                   disabled={sortConfig.key === "manual"}
                   onClick={() => onSortConfig({ ...sortConfig, dir: o.id })}

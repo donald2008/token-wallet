@@ -564,18 +564,23 @@ body {
   background: color-mix(in srgb, var(--warn) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
   border-radius: var(--radius);
-  padding: 4px 8px;
-  margin-top: 4px;
+  padding: var(--space-4) var(--space-8);
+  margin-top: var(--space-4);
   line-height: 1.5;
-  /* t_66b67453 契约4: 提示文字 + 复制小钮同行(文字可折行, 钮不被挤压) */
+  /* t_52e3a7fb: 改列式布局 —— 说明文字独占整行自然折行, 复制/一键授权钮换行并排。
+   * 原单行 flex 布局在等待态面板(flex:1 撑宽)展开时, 文字被挤压成单字符竖排一列
+   * + 面板溢出卡片(真机 P0 bug); 文字不再与面板抢同一横向宽度。 */
   display: flex;
+  flex-wrap: wrap; /* 保护: 任一元素过宽时自动换行, 不再单行溢出 */
   align-items: flex-start;
   gap: var(--space-8);
 }
 
 .setup-hint-text {
-  flex: 1;
-  word-break: break-all;
+  flex: 1 1 100%; /* 独占整行(100% basis + wrap) */
+  min-width: 0;
+  word-break: normal; /* 自然折行, 不把句子逐词打散 */
+  overflow-wrap: anywhere; /* 兜底超长 command 仍可安全折行, 不撑破卡片 */
 }
 
 /* 复制小钮: 紧凑、可折行区右侧; 成功态绿调反馈(复用 D-016 双 token, 不新增色) */
@@ -592,7 +597,8 @@ body {
 
 /* ---- t_fb8c44d8: command 通道一键授权(与复制钮同行, 简洁不喧宾) ---- */
 .oneclick-auth {
-  flex: 0 0 auto;
+  flex: 1 1 auto; /* 纽/面板换行到第二行后撑满剩余宽(与复制钮并排), 不再挤压说明文字 */
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--space-8);
@@ -614,18 +620,25 @@ body {
 .oneclick-auth-panel {
   flex: 1 1 auto;
   min-width: 0;
+  width: 100%; /* 面板填满所在行, 内部内容受限折行, 不再溢出卡片(t_52e3a7fb) */
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
 }
 
 .oneclick-auth-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-8);
+  flex-wrap: wrap; /* 窄行时提示文/重开链接可换行, 不撑破(t_52e3a7fb) */
+  min-width: 0;
   font-size: 12px;
   color: var(--fg-dim);
+}
+.oneclick-auth-head > span {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .oneclick-auth-url {
@@ -1028,6 +1041,17 @@ body {
   border-radius: 0;
 }
 
+/* t_52e3a7fb: 排序方向组在手动模式下被禁用(CSS disabled), 但选中项仍须亮蓝高亮,
+ * 用户能分辨当前选择(与主题/语言组一致)。未选中禁用项置灰只读。 */
+.seg .btn:disabled {
+  color: var(--fg-dim);
+  opacity: 1;
+}
+.seg .btn.active:disabled {
+  background: var(--accent);
+  color: #fff;
+}
+
 .seg .btn.active {
   background: var(--accent);
   color: #fff;
@@ -1252,6 +1276,15 @@ body {
   align-items: center;
   gap: var(--space-4);
   font-size: 12px;
+}
+/* t_52e3a7fb: 玻璃/自启复选框原原生描边过弱看不清勾选态 —— 加大命中区 + accent 蓝勾选
+ * (accent-color 让原生 checkbox 勾选态用主题强调色, 深浅主题均清晰)。 */
+.check-row input[type="checkbox"] {
+  width: var(--space-16);
+  height: var(--space-16);
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex: 0 0 auto;
 }
 .form-actions {
   display: flex;
