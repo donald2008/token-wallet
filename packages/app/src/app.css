@@ -719,12 +719,7 @@ body {
   align-items: center;
   gap: var(--gap);
   margin-top: 6px;
-  /* 对齐占位(t_05271be0 嫌疑①坐实): 所有行恒有 2px 透明左缘 + 4px 左 padding,
-     tightest 行只换 border-color —— 否则 tightest 行内容整体右移, 进度条左缘逐行错位。
-     嫌疑②核查结论: box-sizing 全局 border-box(见文件头), .bar-label 定宽 72px +
-     flex:0 0 auto 各行一致, 无额外 padding/border 差异, label 侧无漂移源。 */
-  border-left: 2px solid transparent;
-  padding-left: 4px;
+  /* 2026-09-03 评审③④: 移除历史 2px 透明左缘占位(tightest 红竖条已删, 无漂移源) */
 }
 
 .bar-label {
@@ -777,19 +772,17 @@ body {
 .progress-fill[data-health="bad"] { background: var(--bad); }
 .progress-fill[data-health="unknown"] { background: var(--unknown); }
 
-/* 数值(条右侧同行): 亮色主信息, 状态色跟随 fill 语义(不压字不糊) */
+/* 数值(条右侧同行): 统一亮色主信息(评审③④: 数值不再随状态变色, 避免条+数值+状态词三重报警);
+ * 定宽右对齐成列(评审④: 各窗口数值右缘在同一垂直线上, 扫读不乱) */
 .bar-value {
   flex: 0 0 auto;
+  min-width: 52px;
+  text-align: right;
   font-size: 10px;
   font-weight: 600;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
-
-.bar-value[data-health="ok"] { color: var(--fg); }
-.bar-value[data-health="warn"] { color: var(--warn-fg); }
-.bar-value[data-health="bad"] { color: var(--bad-fg); }
-.bar-value[data-health="unknown"] { color: var(--fg-dim); }
 
 .bar-reset {
   flex: 0 0 auto;
@@ -800,11 +793,8 @@ body {
   line-height: 1.2;
 }
 
-/* bars 模板: 最紧窗口标红(§6.3, P1 起只标不置顶) — 薄红左缘 + 标签加粗红字, 一眼定位最先耗尽的风险窗。
- * 只换 border-color: 2px 左缘+4px padding 是所有 .bar-row 的恒定占位(见 .bar-row 注释), 保证对齐 */
-.bar-row[data-tightest] {
-  border-left-color: var(--bad);
-}
+/* bars 模板: 最紧窗口标记(§6.3, P1 起只标不置顶) — 2026-09-03 收敛单一编码:
+ * 去掉红左缘(2px border 是历史对齐漂移源, 评审③④), 仅标签加粗变色 → 一眼定位但不破栅格 */
 .bar-row[data-tightest] .bar-label {
   font-weight: 700;
   color: var(--bad-fg);

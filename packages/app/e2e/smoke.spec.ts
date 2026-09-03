@@ -154,7 +154,8 @@ test("bars+ticker 模板: 进度条/倒计时/最紧标红 + 余额预计可用�
   await pwExpect(kimiBars).toHaveCount(1);
   await pwExpect(kimiBars.locator(".progress")).toHaveCount(2); // rolling_5h + weekly 两窗
   // 最紧窗口(rolling_5h 剩余<30%)标红 —— P1 起按时间窗升序排列, 只标不置顶(rolling_5h 为最短窗仍在首行)
-  await pwExpect(kimiBars.locator(".bar-row[data-tightest] .bar-label")).toContainText("rolling_5h");
+  // 2026-09-03 文案本地化(⑤): key 直出 → 友好窗名「5 小时窗」
+  await pwExpect(kimiBars.locator(".bar-row[data-tightest] .bar-label")).toContainText("5 小时窗");
   // 重置倒计时(#829 R2: 纯倒计时无旧后缀, 单单位一位小数 X.X天/X.X小时/X分)
   await pwExpect(kimiBars.locator(".bar-reset").first()).toContainText(/\d+\.\d+天|\d+\.\d+小时|\d+分/);
 });

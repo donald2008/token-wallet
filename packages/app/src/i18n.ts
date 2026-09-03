@@ -125,12 +125,21 @@ const zh = {
     rate7: "近 7 天 ~{rate}/天",
     eta: "预计可用约 {days} 天",
     noRate: "余额 · 预计可用天数待消耗速率数据(历史积累后显示)",
-    localUsage: "{name} · 本地用量(P3)",
+    localUsage: "{name} · 本地用量",
+  },
+  /* 2026-09-03 文案本地化(UI 重设计 ⑤): metric key 直出 → 友好窗名 */
+  metric: {
+    rolling_5h: "5 小时窗",
+    weekly: "周窗",
+    monthly: "月窗",
+    balance: "余额",
+    session: "会话窗",
+    fallback: "{key}",
   },
   local: {
     title: "本地 Agent",
-    tag: "P3 占位",
-    body: "per-agent 用量 + 云×本地对比行(P3 接入真实数据)",
+    tag: "即将推出",
+    body: "per-agent 用量 + 云×本地对比行(接入真实数据后显示)",
   },
   consent: {
     title: "欢迎使用 token-wallet",
@@ -378,12 +387,20 @@ const en: Dict = {
     rate7: "7-day ~{rate}/day",
     eta: "≈{days} days left",
     noRate: "Balance · estimated days pending usage-rate data (shown after history accumulates)",
-    localUsage: "{name} · local usage (P3)",
+    localUsage: "{name} · local usage",
+  },
+  metric: {
+    rolling_5h: "5h window",
+    weekly: "Weekly",
+    monthly: "Monthly",
+    balance: "Balance",
+    session: "Session",
+    fallback: "{key}",
   },
   local: {
     title: "Local agents",
-    tag: "P3 placeholder",
-    body: "Per-agent usage + cloud×local comparison rows (real data lands in P3)",
+    tag: "Coming soon",
+    body: "Per-agent usage + cloud×local comparison rows (shown once real data lands)",
   },
   consent: {
     title: "Welcome to token-wallet",

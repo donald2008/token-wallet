@@ -46,10 +46,13 @@ export function ProgressBar({ metric, tightest = false }: { metric: Metric; tigh
       ? Math.min(100, Math.max(0, (metric.used / metric.limit) * 100))
       : 0;
   const health = metricHealth(metric);
+  // 2026-09-03 文案本地化(⑤): rolling_5h/weekly/... 直出 → 友好窗名, 未知 key 回退原样
+  const metricKey = `metric.${metric.key}` as Parameters<typeof t>[0];
+  const label = t(metricKey).startsWith("metric.") ? t("metric.fallback", { key: metric.key }) : t(metricKey);
   return (
     <div className="bar-row" data-tightest={tightest || undefined}>
       <span className="bar-label" title={metric.key}>
-        {metric.key}
+        {label}
       </span>
       <div className="bar-track-wrap">
         <div className="bar-track">

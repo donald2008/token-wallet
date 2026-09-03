@@ -102,9 +102,10 @@ describe("BarsTemplate: 排序变更后 tightest 标红不回归", () => {
     act(() => root.render(<BarsTemplate p={snap(metrics)} />));
     const rows = Array.from(container.querySelectorAll(".bar-row"));
     const labels = rows.map((r) => r.querySelector(".bar-label")?.textContent);
-    expect(labels).toEqual(["rolling_5h", "weekly", "monthly"]);
+    // 2026-09-03 文案本地化(⑤): key 直出改为友好窗名
+    expect(labels).toEqual(["5 小时窗", "周窗", "月窗"]);
     const tightestRow = container.querySelector(".bar-row[data-tightest]");
-    expect(tightestRow?.querySelector(".bar-label")?.textContent).toBe("monthly");
+    expect(tightestRow?.querySelector(".bar-label")?.textContent).toBe("月窗");
   });
 
   it("全部健康(remaining>30%)时不误标红", () => {

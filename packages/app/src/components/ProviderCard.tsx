@@ -352,7 +352,7 @@ export function ProviderCard({
           {/* P1(t_696ec820): 内置单色 SVG 品牌图标; descriptor.logo 生效(未收录回退品牌色块) */}
           <BrandLogo platform={p.logo ?? p.provider_id} size={16} />
         </span>
-        <span className="card-name" title={p.provider_id}>
+        <span className="card-name" title={p.display_name}>
           {p.display_name}
         </span>
         <span className={`card-status-text text-${health}`}>{statusBadge(p)}</span>
