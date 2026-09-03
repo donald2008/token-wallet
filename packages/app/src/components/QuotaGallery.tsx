@@ -19,11 +19,11 @@ const METRICS: { key: string; labelKey: string; pct: number; state: QuotaState }
   { key: "monthly", labelKey: "quota.windowMonth", pct: 0.91, state: "bad" },
 ];
 
-const VARIANTS: { id: QuotaVariant; labelKey: string; noteKey: string }[] = [
+const VARIANTS: { id: QuotaVariant; labelKey: string; noteKey: string; motion?: boolean }[] = [
   { id: "slim", labelKey: "quota.vSlim", noteKey: "quota.vSlimNote" },
   { id: "thick", labelKey: "quota.vThick", noteKey: "quota.vThickNote" },
-  { id: "segmented", labelKey: "quota.vSegmented", noteKey: "quota.vSegmentedNote" },
-  { id: "flow", labelKey: "quota.vFlow", noteKey: "quota.vFlowNote" },
+  { id: "segmented", labelKey: "quota.vSegmented", noteKey: "quota.vSegmentedNote", motion: true },
+  { id: "flow", labelKey: "quota.vFlow", noteKey: "quota.vFlowNote", motion: true },
 ];
 
 export function QuotaGallery({ onBack }: { onBack: () => void }) {
@@ -54,6 +54,7 @@ export function QuotaGallery({ onBack }: { onBack: () => void }) {
               >
                 <span className="quota-vname">{t(v.labelKey as Parameters<typeof t>[0])}</span>
                 <span className="quota-vnote">{t(v.noteKey as Parameters<typeof t>[0])}</span>
+                {v.motion && <span className="quota-vmotion">{t("quota.motion")}</span>}
               </div>
             ))}
           </div>
@@ -61,7 +62,10 @@ export function QuotaGallery({ onBack }: { onBack: () => void }) {
           {/* 每行 = 一个典型窗口(含状态色), 每列 = 条本体候选 */}
           {METRICS.map((m) => (
             <div className="quota-row" data-metric={m.key} key={m.key} role="row">
-              <div className="quota-cell quota-cell--label" role="rowheader">
+              <div
+                className={`quota-cell quota-cell--label${m.pct >= 0.9 ? " is-exhaust" : ""}`}
+                role="rowheader"
+              >
                 <span className="quota-mname">{t(m.labelKey as Parameters<typeof t>[0])}</span>
                 <span className="quota-mpct">{Math.round(m.pct * 100)}%</span>
               </div>
