@@ -148,3 +148,85 @@ describe("QuotaMeter 四元素实例(扩展 slot, 纯增量)", () => {
     expect(wrap.querySelector(".quota-usage")).toBeNull();
   });
 });
+
+describe("QuotaMeter 排版变体(layout prop, t_35ff3c1f 容器层组合)", () => {
+  const LAYOUTS = ["row", "duo", "hero", "micro", "ticker"] as const;
+
+  it("完整实例 + layout → 挂 quota-meter--layout-<layout> modifier, 数据契约 slot 全保留", () => {
+    render(
+      <QuotaMeter
+        pct={0.4}
+        layout="row"
+        title="闪购 40 次"
+        resetText="即将重置"
+        used={40}
+        limit={100}
+      />,
+    );
+    const wrap = container.querySelector("[data-testid='quota-meter']")!;
+    expect(wrap.classList.contains("quota-meter--instance")).toBe(true);
+    expect(wrap.classList.contains("quota-meter--layout-row")).toBe(true);
+    expect(wrap.getAttribute("data-layout")).toBe("row");
+    // 四元素 slot 全部还在(排版只重排, 不删数据)
+    expect(wrap.querySelector(".quota-title")!.textContent).toBe("闪购 40 次");
+    expect(wrap.querySelector(".quota-reset")!.textContent).toBe("即将重置");
+    expect(wrap.querySelector(".quota-usage")!.textContent).toBe("40 / 100 (40%)");
+    expect(wrap.querySelector(".progress")).toBeTruthy();
+  });
+
+  it("5 种排版 modifier 全覆盖(data-layout 与 class 对齐)", () => {
+    for (const layout of LAYOUTS) {
+      freshRender(
+        <QuotaMeter
+          pct={0.72}
+          state="warn"
+          layout={layout}
+          title="周窗 72 次"
+          resetText="3.4 天后重置"
+          used={72}
+          limit={100}
+        />,
+      );
+      const wrap = container.querySelector("[data-testid='quota-meter']")!;
+      expect(wrap.classList.contains(`quota-meter--layout-${layout}`)).toBe(true);
+      expect(wrap.getAttribute("data-layout")).toBe(layout);
+      expect(wrap.querySelector('[role="progressbar"]')).toBeTruthy();
+    }
+  });
+
+  it("不传 layout = 默认竖排卡片(stack): 无 layout modifier, data-layout=stack", () => {
+    render(
+      <QuotaMeter pct={0.91} state="bad" title="月窗 91 次" resetText="6.4 小时后重置" used={91} limit={100} />,
+    );
+    const wrap = container.querySelector("[data-testid='quota-meter']")!;
+    expect(wrap.classList.contains("quota-meter--instance")).toBe(true);
+    expect(Array.from(wrap.classList).some((c) => c.startsWith("quota-meter--layout-"))).toBe(false);
+    expect(wrap.getAttribute("data-layout")).toBe("stack");
+  });
+
+  it("裸条传 layout 不挂排版类(排版只对完整实例有意义, 最小性保持)", () => {
+    render(<QuotaMeter pct={0.4} layout="hero" />);
+    const wrap = container.querySelector("[data-testid='quota-meter']")!;
+    expect(wrap.textContent).toBe("");
+    expect(wrap.classList.contains("quota-meter--instance")).toBe(false);
+    expect(wrap.classList.contains("quota-meter--layout-hero")).toBe(false);
+  });
+
+  it("DOM slots 顺序不变(排版差异全在 CSS 容器层 grid-area 重排)", () => {
+    render(
+      <QuotaMeter
+        pct={0.4}
+        layout="row"
+        title="闪购 40 次"
+        resetText="即将重置"
+        used={40}
+        limit={100}
+      />,
+    );
+    const wrap = container.querySelector("[data-testid='quota-meter']")!;
+    const slotOrder = Array.from(wrap.children).map(
+      (c) => c.className.split(" ")[0] || c.getAttribute("role") || "",
+    );
+    expect(slotOrder).toEqual(["quota-title", "quota-reset", "progress", "quota-usage"]);
+  });
+});

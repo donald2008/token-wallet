@@ -7,10 +7,17 @@
  *      渲染「标题 + 重置时间 + 进度条 + 用量」组成的完整四元素排版卡片。
  *      未传的 slot 不渲染 → B 用法是 A 的**纯增量**, 不破坏既有 .progress 契约。
  *
+ * 排版变体(t_35ff3c1f 征集, 布局是重点): 四元素「排版」不是组件新结构, 而是同一组
+ *   DOM slots 在**容器层**被 CSS 重排(gird-area / flex order)。QuotaMeter 只认
+ *   layout prop → 根元素追加 .quota-meter--layout-<layout> modifier, 各排版的具体
+ *   摆法全在 app.css(新增排版容器一律新 class, 不触碰 .progress 契约)。
+ *   不传 layout = 默认竖排卡片(stack, 即 t_af01e265 定案的实例排版)。
+ *
  * 数据契约(无状态, 纯受控):
  *   pct    : 已用比例 0-1(0%..100%), 非窗口专属。
  *   state  : 可选 ok|warn|bad —— 仅供着色; 阈值沿用 metricHealth(health.ts)。
  *   variant: 可选 slim|thick|segmented|flow —— 4 种「条」的形态, 全走 CSS modifier。
+ *   layout : 可选 row|duo|hero|micro|ticker —— 5 种排版(容器层重排 slots)。
  *   title   : 可选, 额度名(数据来自 metric key 的展示名, 组件不自造文案)。
  *   resetText: 可选, 重置倒计时文案(reset_at 派生, 复用 bar-reset 同规格式化)。
  *   used/limit: 可选, 用量数值 —— 两者齐传才渲染「用量」行。
@@ -24,6 +31,8 @@
  */
 export type QuotaState = "ok" | "warn" | "bad";
 export type QuotaVariant = "slim" | "thick" | "segmented" | "flow";
+/** 排版变体(t_35ff3c1f): 容器层重排同一组四元素 slots; 不传 = 默认竖排卡片(stack) */
+export type QuotaLayout = "row" | "duo" | "hero" | "micro" | "ticker";
 
 export interface QuotaMeterProps {
   /** 已用比例 0-1 */
@@ -32,6 +41,8 @@ export interface QuotaMeterProps {
   state?: QuotaState;
   /** 形态(粗细/圆角/质感/动效), 缺省 slim */
   variant?: QuotaVariant;
+  /** 排版(容器层 slots 摆法), 缺省默认竖排卡片 */
+  layout?: QuotaLayout;
   /** 可选 aria-label(via prop 传入; 组件不自造文案) */
   label?: string;
   /** 可选: 标题(四元素实例 slot) */
@@ -60,6 +71,7 @@ export function QuotaMeter({
   pct,
   state = "ok",
   variant = "slim",
+  layout,
   label,
   title,
   resetText,
@@ -69,11 +81,14 @@ export function QuotaMeter({
   const target = Math.round(clampPct(pct) * 100);
   // 四元素实例: 任意扩展 slot 出现即进入完整排版模式(纯增量, 不影响条契约)
   const hasMeta = title !== undefined || resetText !== undefined || (used !== undefined && limit !== undefined);
+  // 排版变体 = 容器层 modifier(layout 只在完整实例下有意义; 裸条不挂排版类)
+  const layoutMod = hasMeta && layout ? ` quota-meter--layout-${layout}` : "";
   return (
     <div
-      className={`quota-meter quota-meter--${variant}${hasMeta ? " quota-meter--instance" : ""}`}
+      className={`quota-meter quota-meter--${variant}${hasMeta ? " quota-meter--instance" : ""}${layoutMod}`}
       data-testid="quota-meter"
       data-variant={variant}
+      data-layout={layout ?? "stack"}
     >
       {title !== undefined && <div className="quota-title">{title}</div>}
       {resetText !== undefined && <div className="quota-reset">{resetText}</div>}

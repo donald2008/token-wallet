@@ -1594,3 +1594,270 @@ body {
 .quota-swatch--bad {
   background: var(--bad);
 }
+
+/* ================= 四元素排版变体(容器层重排, t_35ff3c1f) =================
+ * 同一份数据(标题/重置/条/用量)不改 DOM 顺序, 仅容器层 CSS grid-area 重摆:
+ *   row(三列单行带, A 窗口行) / duo(两行堆叠, E 通用明细) / hero(大数字主视觉, B 汇总) /
+ *   micro(无卡竖排超紧凑, C 托盘 tooltip) / ticker(数字优先, D 余额制)。
+ * .progress / .progress-fill[data-health] / role=progressbar 契约一例不破;
+ * 新增容器 class 一律 quota-meter--layout-* 前缀; 数值全 4/8 token 无稀值。
+ */
+/* flat 布局(行/两行/紧凑/滚动)不带卡 chrome, 由 QuotaGallery 画布承载; hero 自带卡 */
+.quota-meter--layout-row,
+.quota-meter--layout-duo,
+.quota-meter--layout-micro,
+.quota-meter--layout-ticker {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+/* V1 row(A ProviderCard 窗口行): 标题定宽左 / 条中 / 用量+重置右, 一行带两行小字 */
+.quota-meter--layout-row {
+  display: grid;
+  grid-template-areas:
+    "title bar usage"
+    ".     bar reset";
+  grid-template-columns: 72px minmax(0, 1fr) auto; /* 72px = 9×8 标题列定宽(对齐多行, 同 .bar-label 惯例) */
+  grid-template-rows: auto auto;
+  column-gap: var(--space-8);
+  row-gap: var(--space-4);
+  align-items: center;
+}
+.quota-meter--layout-row .quota-title {
+  grid-area: title;
+  font-size: var(--font-10);
+  font-weight: 600;
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quota-meter--layout-row .progress {
+  grid-area: bar;
+  width: 100%;
+}
+.quota-meter--layout-row .quota-usage {
+  grid-area: usage;
+  font-size: var(--font-10);
+  text-align: right;
+  white-space: nowrap;
+}
+.quota-meter--layout-row .quota-reset {
+  grid-area: reset;
+  font-size: var(--font-10);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* V2 duo(E 通用明细/两行堆叠): 上行标题+用量, 下行条+重置 */
+.quota-meter--layout-duo {
+  display: grid;
+  grid-template-areas:
+    "title usage"
+    "bar reset";
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: var(--space-12);
+  row-gap: var(--space-4);
+  align-items: center;
+}
+.quota-meter--layout-duo .quota-title {
+  grid-area: title;
+  font-size: var(--font-11);
+  font-weight: 600;
+}
+.quota-meter--layout-duo .progress {
+  grid-area: bar;
+  width: 100%;
+}
+.quota-meter--layout-duo .quota-usage {
+  grid-area: usage;
+  font-size: var(--font-11);
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+.quota-meter--layout-duo .quota-reset {
+  grid-area: reset;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* V3 hero(B 汇总区): 用量 22px 大数字主视觉, 标题/重置同一小字行, 条垫底; 自带卡 chrome */
+.quota-meter--layout-hero {
+  display: grid;
+  grid-template-areas:
+    "title reset"
+    "usage usage"
+    "bar bar";
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  column-gap: var(--space-8);
+  row-gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-12);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-12);
+  background: var(--bg-elev);
+}
+.quota-meter--layout-hero .quota-title {
+  grid-area: title;
+  font-size: var(--font-11);
+  font-weight: 600;
+}
+.quota-meter--layout-hero .quota-reset {
+  grid-area: reset;
+  font-size: var(--font-10);
+  text-align: right;
+  white-space: nowrap;
+}
+.quota-meter--layout-hero .quota-usage {
+  grid-area: usage;
+  font-size: var(--font-22);
+  font-weight: 700;
+  line-height: var(--line-height-tight);
+  text-align: left;
+  white-space: nowrap;
+}
+.quota-meter--layout-hero .progress {
+  grid-area: bar;
+  width: 100%;
+}
+
+/* V4 micro(C 托盘 tooltip / 本地 agent): 无卡竖排超紧凑, 条 4px, 重置并入用量行 */
+.quota-meter--layout-micro {
+  display: grid;
+  grid-template-areas:
+    "title title"
+    "bar bar"
+    "usage reset";
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  column-gap: var(--space-8);
+  row-gap: var(--space-4);
+  align-items: center;
+}
+.quota-meter--layout-micro .quota-title {
+  grid-area: title;
+  font-size: var(--font-10);
+  font-weight: 600;
+}
+.quota-meter--layout-micro .progress {
+  grid-area: bar;
+  width: 100%;
+  height: var(--space-4);
+}
+.quota-meter--layout-micro .quota-usage {
+  grid-area: usage;
+  font-size: var(--font-10);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+.quota-meter--layout-micro .quota-reset {
+  grid-area: reset;
+  font-size: var(--font-10);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* V5 ticker(D 余额制金额模板): 数字优先, 上行 caption(标题/重置), 下行大数字+右侧微条 */
+.quota-meter--layout-ticker {
+  display: grid;
+  grid-template-areas:
+    "title reset"
+    "usage bar";
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: var(--space-12);
+  row-gap: var(--space-4);
+  align-items: center;
+}
+.quota-meter--layout-ticker .quota-title {
+  grid-area: title;
+  font-size: var(--font-10);
+  color: var(--fg-dim);
+}
+.quota-meter--layout-ticker .quota-reset {
+  grid-area: reset;
+  font-size: var(--font-10);
+  text-align: right;
+  white-space: nowrap;
+}
+.quota-meter--layout-ticker .quota-usage {
+  grid-area: usage;
+  font-size: var(--font-16);
+  font-weight: 700;
+  line-height: var(--line-height-tight);
+  text-align: left;
+  white-space: nowrap;
+}
+.quota-meter--layout-ticker .progress {
+  grid-area: bar;
+  justify-self: end;
+  width: var(--space-48);
+  height: var(--space-4);
+}
+
+/* ============ QuotaGallery 排版对比页(t_35ff3c1f 征集, 重做) ============
+ * 同一 3 行数据集(ok/warn/bad)喂 5 种排版(容器层), 肉眼直接对比「同数据不同摆法」。
+ * 布局容器: .qvar-* 段(场景标 + 名称/说明 + 画布); 条统一 slim, 排除形态/颜色干扰。 */
+.qvar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.qvar-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.qvar-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.qvar-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-20);
+  height: var(--space-20);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg-dim);
+  font-size: var(--font-10);
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.qvar-name {
+  margin: 0;
+  font-size: var(--font-12);
+  font-weight: 600;
+  color: var(--fg);
+}
+.qvar-desc {
+  margin: 0;
+  font-size: var(--font-10);
+  color: var(--fg-dim);
+}
+/* 画布: flat 排版(行/两行/紧凑/滚动)的共同承载面板; hero 用透明画布只叠自家卡 */
+.qvar-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-12);
+  padding: var(--space-12);
+}
+.qvar-canvas--row {
+  gap: var(--space-4); /* 窗口行多行并存, 行距压到最紧 */
+}
+.qvar-canvas--hero {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  gap: var(--space-8);
+}
