@@ -2,7 +2,10 @@ import type { ComponentType } from "react";
 import type { Metric, PlanType, ProviderSnapshot } from "../types";
 import { metricHealth } from "../health";
 import { t, currentLocale } from "../i18n";
-import { ProgressBar } from "../components/ProgressBar";
+import { QuotaMeter } from "../components/QuotaMeter";
+// resetText 仍由 ProgressBar 导出(t_a398348b 兄弟卡活跃改动该文件, 不搬家避免互踩)
+import { resetText } from "../components/ProgressBar";
+import { BarRowTooltip } from "../components/BarRowTooltip";
 
 /**
  * 模板注册表(D-004): Template(信息结构与视觉形态)与 Theme(配色)分离。
@@ -87,11 +90,21 @@ export function tightestMetric(metrics: Metric[]): Metric | undefined {
 }
 
 /**
- * bars 模板: 多窗口嵌套, 每窗口一条进度条 + 压字 + 重置倒计时;
- * 窗口按时间窗升序排列(5h→周→月, P1 真机验收契约); 最紧窗口(剩余比例最小)仍标红,
- * 但只标不排序 —— 红色标记风险, 顺序归时间窗, 一眼定位最先耗尽的风险窗。
- * 状态微部件全手绘(D-002), 不引 Chart.js。
+ * bars 模板: 多窗口嵌套, 每窗口一行 QuotaMeter 四元素实例(t_23800bd4 起由旧 ProgressBar
+ * 切换为 QuotaMeter, layout=row 行式排版 —— 标题=窗口名本地化 / 重置=reset_at 派生 /
+ * 进度条=pct / 用量=used/limit 按真实 Metric.unit 格式化); 窗口按时间窗升序排列
+ * (5h→周→月, P1 真机验收契约); 最紧窗口(剩余比例最小)仍标红, 但只标不排序 ——
+ * 红色标记风险, 顺序归时间窗, 一眼定位最先耗尽的风险窗。
+ * .bar-row 瘦壳仅保留行距 + data-tightest 标记位; DOM 契约 .progress/
+ * .progress-fill[data-health]/role=progressbar 由 QuotaMeter 保证。
  */
+
+/** 窗口名本地化(2026-09-03 文案本地化⑤, 自旧 ProgressBar 收容): 未知 key 回退原样 */
+function windowTitle(key: string): string {
+  const metricKey = `metric.${key}` as Parameters<typeof t>[0];
+  return t(metricKey).startsWith("metric.") ? t("metric.fallback", { key }) : t(metricKey);
+}
+
 export function BarsTemplate({ p }: { p: ProviderSnapshot }) {
   const metrics = sortByWindowSpan(p.metrics);
   const tightest = tightestMetric(p.metrics);
@@ -100,7 +113,22 @@ export function BarsTemplate({ p }: { p: ProviderSnapshot }) {
       {metrics.map((m) => {
         // 最紧窗口(used/limit 最高)标红 —— 风险带(warn/bad)才标, 健康窗口不误标红(颜色即状态)
         const tight = m === tightest && metricHealth(m) !== "ok";
-        return <ProgressBar key={m.key} metric={m} tightest={tight} />;
+        return (
+          <div className="bar-row" data-tightest={tight || undefined} key={m.key}>
+            <QuotaMeter
+              layout="row"
+              pct={m.limit !== undefined && m.limit > 0 ? m.used / m.limit : 0}
+              state={metricHealth(m) === "unknown" ? "ok" : (metricHealth(m) as "ok" | "warn" | "bad")}
+              title={windowTitle(m.key)}
+              resetText={resetText(m.reset_at)}
+              used={m.used}
+              limit={m.limit}
+              unit={m.unit}
+            />
+            {/* t_a398348b 交接契约: 悬停 tooltip 挂 .bar-row 壳内末位(组件/CSS/测试零改) */}
+            <BarRowTooltip metric={m} />
+          </div>
+        );
       })}
     </div>
   );

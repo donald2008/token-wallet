@@ -2,12 +2,13 @@ import { expect as pwExpect } from "@playwright/test";
 import { test } from "./fixtures";
 
 /**
- * L2(四元素排版变体对比页, t_35ff3c1f, feat/theme-glass 实验):
+ * L2(四元素排版变体对比页, t_35ff3c1f + t_23800bd4 mock 修正, feat/theme-glass 实验):
  * - 同意首开 → 设置 → 「排版变体方案」入口 → 方案页打开
- * - 5 段排版(qvar-row/duo/hero/micro/ticker) × 每段 3 条完整四元素(标题+重置+条+用量)
- * - 同一组数据喂所有排版(各段首条标题/用量一致, aria-valuenow=40)
- * - 三态色 ok/warn/bad 各 5(3 数据 × 5 排版); 复用 e2e DOM 契约
- *   (.progress/.progress-fill[data-health]/role=progressbar)
+ * - 5 段排版(qvar-row/duo/hero/micro/ticker) × 每段 4 条完整四元素(标题+重置+条+用量)
+ * - 同一组数据喂所有排版(各段首条标题/用量一致, 首条 aria-valuenow=40)
+ * - 数据(t_23800bd4): 前 3 条百分制三态(40%/72%/91%, 真实 provider 风格名, 无「xx 次」误导),
+ *   第 4 条计数制演示(credits 2300/10000); 填充 ok 10 / warn 5 / bad 5
+ * - 复用 e2e DOM 契约(.progress/.progress-fill[data-health]/role=progressbar)
  * - 返回按钮回面板
  */
 
@@ -27,25 +28,26 @@ async function openGallery(page: import("@playwright/test").Page) {
   await pwExpect(page.getByTestId("quota-gallery")).toBeVisible();
 }
 
-test("方案页: 同数据×5种排版, 每段 3 条完整四元素, 三态色齐全, 契约复用", async ({ hostPage, page }) => {
+test("方案页: 同数据×5种排版, 每段 4 条完整四元素, 单位语义上屏, 契约复用", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await openGallery(page);
 
   const gallery = page.getByTestId("quota-gallery");
 
-  // 5 段排版齐; 每段画布内 3 条 meter, 每条四元素齐全
+  // 5 段排版齐; 每段画布内 4 条 meter, 每条四元素齐全
   for (const layout of LAYOUTS) {
     const canvas = page.getByTestId(`qvar-canvas-${layout}`);
     await pwExpect(canvas).toBeVisible();
-    await pwExpect(canvas.locator("[data-testid='quota-meter']")).toHaveCount(3);
-    await pwExpect(canvas.locator(".quota-title")).toHaveCount(3);
-    await pwExpect(canvas.locator(".quota-reset")).toHaveCount(3);
-    await pwExpect(canvas.locator('[role="progressbar"]')).toHaveCount(3);
-    await pwExpect(canvas.locator(".quota-usage")).toHaveCount(3);
+    await pwExpect(canvas.locator("[data-testid='quota-meter']")).toHaveCount(4);
+    await pwExpect(canvas.locator(".quota-title")).toHaveCount(4);
+    await pwExpect(canvas.locator(".quota-reset")).toHaveCount(4);
+    await pwExpect(canvas.locator('[role="progressbar"]')).toHaveCount(4);
+    await pwExpect(canvas.locator(".quota-usage")).toHaveCount(4);
   }
 
-  // 同数据跨段: 每段第 1 条标题一致 = 闪购 40 次; 每段第 1 条 aria-valuenow = 40
+  // 同数据跨段: 每段第 1 条标题一致 = OpenCode 5 小时窗(真实 provider 风格, 无「xx 次」误导);
+  // 每段第 1 条 aria-valuenow = 40
   const firstTitles: string[] = [];
   for (const layout of LAYOUTS) {
     const canvas = page.getByTestId(`qvar-canvas-${layout}`);
@@ -53,12 +55,17 @@ test("方案页: 同数据×5种排版, 每段 3 条完整四元素, 三态色�
     firstTitles.push(firstTitle);
     await pwExpect(canvas.locator('[role="progressbar"]').first()).toHaveAttribute("aria-valuenow", "40");
   }
-  pwExpect(firstTitles).toEqual(Array(LAYOUTS.length).fill("闪购 40 次"));
+  pwExpect(firstTitles).toEqual(Array(LAYOUTS.length).fill("OpenCode 5 小时窗"));
 
-  // 总契约: 15 条 progressbar/进度条; 首条 40; 三态 ok/warn/bad 各 5(3 数据 × 5 排版)
-  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(15);
-  await pwExpect(gallery.locator(".progress")).toHaveCount(15);
-  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(5);
+  // 单位语义: row 段首条百分制 "40% / 100%", 第 4 条计数制演示带 credits
+  const rowCanvas = page.getByTestId("qvar-canvas-row");
+  await pwExpect(rowCanvas.locator(".quota-usage").first()).toHaveText("40% / 100%");
+  await pwExpect(rowCanvas.locator(".quota-usage").nth(3)).toContainText("2300 / 10000 credits");
+
+  // 总契约: 20 条 progressbar/进度条(4 数据 × 5 排版); 填充 ok 10 / warn 5 / bad 5
+  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(20);
+  await pwExpect(gallery.locator(".progress")).toHaveCount(20);
+  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(10);
   await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(5);
   await pwExpect(gallery.locator(".progress-fill[data-health='bad']")).toHaveCount(5);
 

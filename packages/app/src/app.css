@@ -741,6 +741,19 @@ body {
   position: relative; /* t_a398348b: 悬停 tooltip(.bar-tooltip)的定位容器 */
 }
 
+/* t_23800bd4: 窗口行渲染切 QuotaMeter(layout=row) —— 行内 meter 占满行宽
+ * (tooltip 为 absolute 脱离流, 不参与 flex 布局); .bar-row 瘦壳保留 = tooltip 锚点 */
+.bar-row > .quota-meter {
+  flex: 1;
+  min-width: 0;
+}
+
+/* t_23800bd4: 最紧窗标记迁到 QuotaMeter 标题(同旧 .bar-label 语义: 加粗变色, 不破栅格) */
+.bar-row[data-tightest] .quota-title {
+  font-weight: 700;
+  color: var(--bad-fg);
+}
+
 .bar-label {
   width: 72px;
   flex: 0 0 auto;

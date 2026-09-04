@@ -1,5 +1,6 @@
 import { t } from "../i18n";
 import { QuotaMeter, type QuotaLayout, type QuotaState } from "./QuotaMeter";
+import type { MetricUnit } from "../types";
 
 /**
  * QuotaGallery — 四元素排版变体对比页(t_35ff3c1f, feat/theme-glass 实验视图)。
@@ -13,8 +14,10 @@ import { QuotaMeter, type QuotaLayout, type QuotaState } from "./QuotaMeter";
  *   C tooltip  -> micro   无卡竖排超紧凑(4px 条, 重置并入用量行)
  *   D 余额 ticker -> ticker 数字优先(上行 caption, 下行 16px 数字 + 微条)
  *
- * 数据契约: DATA = 同一 3 行数据(ok 40% / warn 72% / bad 91%), 全部喂每种排版;
- *   条统一默认 slim, 排除「形态/颜色」干扰(那些已另案征集), 只凸显排版差异。
+ * 数据契约(t_23800bd4 修正): DATA = 4 行 —— 前 3 行百分制(ok 40% / warn 72% / bad 91%,
+ *   unit=percent, 与主页窗口行真实形态一致), 标题用真实 provider 风格名(无「xx 次」误导);
+ *   第 4 行为**计数制演示**(unit=credits, 2300/10000, 形态参照 zai-coding 周窗 6837/10000),
+ *   专供对比「单位语义」在 5 种排版下的展示。条统一默认 slim, 排除「形态/颜色」干扰。
  * 硬约束: 四元素 slots DOM 顺序不变(容器层 grid-area 重排), .progress /
  *   .progress-fill[data-health] / role=progressbar 契约一例不破; 新增排版容器
  *   class = .quota-meter--layout-* / .qvar-* 新前缀。全 tokens.css / 8px 网格 /
@@ -28,13 +31,17 @@ interface GalleryData {
   state: QuotaState;
   used: number;
   limit: number;
+  /** 真实单位语义(t_23800bd4): 用量行按此格式化, 禁止硬编码单位词 */
+  unit: MetricUnit;
 }
 
-/** 同一组数据(全部排版共用): 三行 = 三态(ok/warn/bad), 条统一 slim */
+/** 同一组数据(全部排版共用): 前 3 行 = 三态百分制(ok/warn/bad), 第 4 行 = 计数制演示, 条统一 slim */
 const DATA: GalleryData[] = [
-  { key: "flash_40", titleKey: "quota.iFlash", pct: 0.4, state: "ok", resetTextKey: "quota.iResetSoon", used: 40, limit: 100 },
-  { key: "week_72", titleKey: "quota.iWeek", pct: 0.72, state: "warn", resetTextKey: "quota.iResetDayFrac", used: 72, limit: 100 },
-  { key: "month_91", titleKey: "quota.iMonth", pct: 0.91, state: "bad", resetTextKey: "quota.iResetHours", used: 91, limit: 100 },
+  { key: "oc_5h", titleKey: "quota.iWin5h", pct: 0.4, state: "ok", resetTextKey: "quota.iResetSoon", used: 40, limit: 100, unit: "percent" },
+  { key: "kimi_week", titleKey: "quota.iWeek", pct: 0.72, state: "warn", resetTextKey: "quota.iResetDayFrac", used: 72, limit: 100, unit: "percent" },
+  { key: "aly_month", titleKey: "quota.iMonth", pct: 0.91, state: "bad", resetTextKey: "quota.iResetHours", used: 91, limit: 100, unit: "percent" },
+  // 计数制演示行(非百分制): 参照 zai-coding 周窗 credits 绝对值形态, 展示单位语义差异
+  { key: "zai_count", titleKey: "quota.iCount", pct: 0.23, state: "ok", resetTextKey: "quota.iResetHours", used: 2300, limit: 10000, unit: "credits" },
 ];
 
 interface VariantDef {
@@ -100,6 +107,7 @@ export function QuotaGallery({ onBack }: { onBack: () => void }) {
                   resetText={t(d.resetTextKey as Parameters<typeof t>[0])}
                   used={d.used}
                   limit={d.limit}
+                  unit={d.unit}
                 />
               ))}
             </div>

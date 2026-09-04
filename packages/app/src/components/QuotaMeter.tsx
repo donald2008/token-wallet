@@ -21,6 +21,9 @@
  *   title   : 可选, 额度名(数据来自 metric key 的展示名, 组件不自造文案)。
  *   resetText: 可选, 重置倒计时文案(reset_at 派生, 复用 bar-reset 同规格式化)。
  *   used/limit: 可选, 用量数值 —— 两者齐传才渲染「用量」行。
+ *   unit    : 可选, 真实 Metric.unit(t_23800bd4)——用量行按单位语义格式化:
+ *             percent→百分比、requests/tokens/credits→计数(带单位标签)、cny→金额;
+ *             缺省保持旧契约 "used / limit (pct%)" 不动(向后兼容)。
  *
  * 过渡动画(纯 CSS, 零 JS 定时): 挂载 grow(scaleX) + 数据变化 width 渐变。
  *
@@ -29,6 +32,9 @@
  *   - D-016 状态色语义; dark/light/glass 三态零硬编码色
  *   - e2e DOM 契约(.progress/.progress-fill[data-health]/role=progressbar)一例不破
  */
+import type { MetricUnit } from "../types";
+import { t, currentLocale } from "../i18n";
+
 export type QuotaState = "ok" | "warn" | "bad";
 export type QuotaVariant = "slim" | "thick" | "segmented" | "flow";
 /** 排版变体(t_35ff3c1f): 容器层重排同一组四元素 slots; 不传 = 默认竖排卡片(stack) */
@@ -53,6 +59,8 @@ export interface QuotaMeterProps {
   used?: number;
   /** 可选: 用量分母 */
   limit?: number;
+  /** 可选: 真实 Metric.unit(t_23800bd4)——用量行按单位语义格式化, 缺省走旧契约 */
+  unit?: MetricUnit;
 }
 
 /** 归一: 数值钳到 [0,1], 任意非法值(Infinity/NaN/负/超界)都收敛为合法比例 */
@@ -61,10 +69,43 @@ export function clampPct(pct: number): number {
   return Math.min(1, Math.max(0, pct));
 }
 
-/** 用量行文案: `91 / 100 (91%)`, 纯展示(render 层派生, 非组件自造) */
-export function usageText(used: number, limit: number): string {
+/* ---- 格式化助手(t_23800bd4) ----
+ * 注: resetText(重置倒计时)仍在 ./ProgressBar(t_a398348b 兄弟卡正活跃改该文件,
+ * 避免双卡互踩); 窗口行由 registry 从 ProgressBar 导入 resetText 喂本组件 prop。 */
+
+/** 数字格式化: ≤1 位小数 + 去尾 .0(37.9415→"37.9", 40→"40"); 整数原样不进小数 */
+function fmt1(n: number): string {
+  const rounded = Math.round(n * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+/** 金额格式化(与 ticker 模板同规): 固定 2 位小数, 浮点尾巴不上屏 */
+function fmtMoney(n: number): string {
+  const safe = Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+  return safe.toLocaleString(currentLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/**
+ * 用量行文案。单位语义(t_23800bd4, 跟真实 Metric.unit, 禁止硬编码单位词):
+ *   percent                    → "37.9% / 100%"(fmt1 修浮点尾差, 数据层原始值不动)
+ *   requests/tokens/credits    → "2300 / 10000 credits (23%)"(单位标签走 i18n unit.*)
+ *   cny                        → "¥48.14 / ¥500.00"
+ *   缺省(未传 unit)            → "used / limit (pct%)"(旧契约不变, 向后兼容)
+ */
+export function usageText(used: number, limit: number, unit?: MetricUnit): string {
   const pct = Math.round(clampPct(limit > 0 ? used / limit : 0) * 100);
-  return `${used} / ${limit} (${pct}%)`;
+  switch (unit) {
+    case "percent":
+      return `${fmt1(used)}% / ${fmt1(limit)}%`;
+    case "requests":
+    case "tokens":
+    case "credits":
+      return `${fmt1(used)} / ${fmt1(limit)} ${t(`unit.${unit}`)} (${pct}%)`;
+    case "cny":
+      return `¥${fmtMoney(used)} / ¥${fmtMoney(limit)}`;
+    default:
+      return `${used} / ${limit} (${pct}%)`;
+  }
 }
 
 export function QuotaMeter({
@@ -77,6 +118,7 @@ export function QuotaMeter({
   resetText,
   used,
   limit,
+  unit,
 }: QuotaMeterProps) {
   const target = Math.round(clampPct(pct) * 100);
   // 四元素实例: 任意扩展 slot 出现即进入完整排版模式(纯增量, 不影响条契约)
@@ -103,7 +145,7 @@ export function QuotaMeter({
         <div className="progress-fill" data-health={state} style={{ width: `${target}%` }} />
       </div>
       {used !== undefined && limit !== undefined && (
-        <div className="quota-usage">{usageText(used, limit)}</div>
+        <div className="quota-usage">{usageText(used, limit, unit)}</div>
       )}
     </div>
   );

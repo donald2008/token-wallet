@@ -1,7 +1,7 @@
 // L1(t_a398348b): 窗口行悬停 tooltip —— micro 排版四元素微型展示。
 // - 每条 bar-row 内嵌 .bar-tooltip(role=tooltip), 内含 QuotaMeter layout=micro
 // - 四元素与行同源: quota-title(窗名) / quota-reset(重置) / progressbar(4px 条) / quota-usage(用量)
-// - percent 浮点尾差经 displayUsed 修正(37.941548… → "37.9 / 100 (38%)")
+// - percent 浮点尾差经 displayUsed+fmt1 修正(37.941548… → "37.9% / 100%", t_23800bd4 单位语义对齐)
 // - 无 reset_at → quota-reset slot 不渲染(不留空壳); 健康度着色与行一致
 // - CSS 揭示机制(hover/focus-within)在 e2e(bar-tooltip.spec.ts)验证, 这里只验 DOM 结构
 // @vitest-environment jsdom
@@ -62,13 +62,13 @@ describe("bar-row 悬停 tooltip(t_a398348b): micro 排版四元素", () => {
     expect(tip.querySelector(".quota-title")!.textContent).toBe("周窗");
     expect(tip.querySelector(".quota-reset")!.textContent).toBe("1.0天");
     expect(tip.querySelector("[role='progressbar']")!.getAttribute("aria-valuenow")).toBe("40");
-    expect(tip.querySelector(".quota-usage")!.textContent).toBe("40 / 100 (40%)");
+    expect(tip.querySelector(".quota-usage")!.textContent).toBe("40% / 100%");
   });
 
-  it("percent 浮点尾差修正: used=37.941548… → 用量行 '37.9 / 100 (38%)'(与压字同口径)", () => {
+  it("percent 浮点尾差修正: used=37.941548… → 用量行 '37.9% / 100%'(t_23800bd4 单位语义)", () => {
     renderRow(metricOf({ used: 0.37941548 * 100 }));
     const tip = container.querySelector(".bar-tooltip")!;
-    expect(tip.querySelector(".quota-usage")!.textContent).toBe("37.9 / 100 (38%)");
+    expect(tip.querySelector(".quota-usage")!.textContent).toBe("37.9% / 100%");
   });
 
   it("健康度着色与行一致(91% → bad), 条宽 = 用量比例", () => {

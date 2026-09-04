@@ -55,14 +55,32 @@ describe("clampPct(纯函数, 非法值收敛)", () => {
 });
 
 describe("usageText(纯函数, 用量行文案)", () => {
-  it("91/100 → '91 / 100 (91%)'", () => {
+  it("缺省 unit → 旧契约 '91 / 100 (91%)' 不变(向后兼容)", () => {
     expect(usageText(91, 100)).toBe("91 / 100 (91%)");
   });
-  it("2300/10000 → '2300 / 10000 (23%)'", () => {
+  it("缺省 unit: 2300/10000 → '2300 / 10000 (23%)'", () => {
     expect(usageText(2300, 10000)).toBe("2300 / 10000 (23%)");
   });
   it("limit=0 不除零, pct 归 0", () => {
     expect(usageText(5, 0)).toBe("5 / 0 (0%)");
+  });
+
+  // ---- t_23800bd4: 单位语义(跟真实 Metric.unit, 禁止硬编码单位词) ----
+  it("percent → 百分比格式, fmt1 修浮点尾差(37.941548… → 37.9%)", () => {
+    expect(usageText(40, 100, "percent")).toBe("40% / 100%");
+    expect(usageText(0.37941548 * 100, 100, "percent")).toBe("37.9% / 100%");
+    expect(usageText(12.35, 100, "percent")).toBe("12.4% / 100%"); // 一位小数四舍五入
+  });
+  it("requests → 计数 + 本地化单位标签(zh=次), 附 pct", () => {
+    expect(usageText(120, 1200, "requests")).toBe("120 / 1200 次 (10%)");
+  });
+  it("credits/tokens → 计数 + 单位标签(不硬编码「次」)", () => {
+    expect(usageText(2300, 10000, "credits")).toBe("2300 / 10000 credits (23%)");
+    expect(usageText(500, 1000, "tokens")).toBe("500 / 1000 tokens (50%)");
+  });
+  it("cny → 金额(固定 2 位小数, 浮点尾巴不上屏)", () => {
+    expect(usageText(48.14, 500, "cny")).toBe("¥48.14 / ¥500.00");
+    expect(usageText(448.45000000000005, 500, "cny")).toBe("¥448.45 / ¥500.00");
   });
 });
 
@@ -120,20 +138,20 @@ describe("QuotaMeter 最小组件(条本体)", () => {
 describe("QuotaMeter 四元素实例(扩展 slot, 纯增量)", () => {
   it("完整四元素: 标题/重置/条/用量 四行齐全", () => {
     render(
-      <QuotaMeter pct={0.91} state="bad" title="月窗 91 次" resetText="6.4 小时后重置" used={91} limit={100} />,
+      <QuotaMeter pct={0.91} state="bad" title="阿里云百炼 月窗" resetText="6.4 小时后重置" used={91} limit={100} unit="percent" />,
     );
     const wrap = container.querySelector("[data-testid='quota-meter']")!;
     expect(wrap.classList.contains("quota-meter--instance")).toBe(true);
-    expect(wrap.querySelector(".quota-title")!.textContent).toBe("月窗 91 次");
+    expect(wrap.querySelector(".quota-title")!.textContent).toBe("阿里云百炼 月窗");
     expect(wrap.querySelector(".quota-reset")!.textContent).toBe("6.4 小时后重置");
-    expect(wrap.querySelector(".quota-usage")!.textContent).toBe("91 / 100 (91%)");
+    expect(wrap.querySelector(".quota-usage")!.textContent).toBe("91% / 100%");
     // 条契约不破
     expect(wrap.querySelector(".progress")).toBeTruthy();
     expect(wrap.querySelector(".progress-fill")!.getAttribute("data-health")).toBe("bad");
   });
 
   it("部分 slot: 只传 title+used/limit → 渲染标题与用量, 无重置行", () => {
-    render(<QuotaMeter pct={0.4} title="闪购 40 次" used={40} limit={100} />);
+    render(<QuotaMeter pct={0.4} title="OpenCode 5 小时窗" used={40} limit={100} unit="percent" />);
     const wrap = container.querySelector("[data-testid='quota-meter']")!;
     expect(wrap.querySelector(".quota-title")).toBeTruthy();
     expect(wrap.querySelector(".quota-usage")).toBeTruthy();
@@ -157,10 +175,11 @@ describe("QuotaMeter 排版变体(layout prop, t_35ff3c1f 容器层组合)", () 
       <QuotaMeter
         pct={0.4}
         layout="row"
-        title="闪购 40 次"
+        title="OpenCode 5 小时窗"
         resetText="即将重置"
         used={40}
         limit={100}
+        unit="percent"
       />,
     );
     const wrap = container.querySelector("[data-testid='quota-meter']")!;
@@ -168,9 +187,9 @@ describe("QuotaMeter 排版变体(layout prop, t_35ff3c1f 容器层组合)", () 
     expect(wrap.classList.contains("quota-meter--layout-row")).toBe(true);
     expect(wrap.getAttribute("data-layout")).toBe("row");
     // 四元素 slot 全部还在(排版只重排, 不删数据)
-    expect(wrap.querySelector(".quota-title")!.textContent).toBe("闪购 40 次");
+    expect(wrap.querySelector(".quota-title")!.textContent).toBe("OpenCode 5 小时窗");
     expect(wrap.querySelector(".quota-reset")!.textContent).toBe("即将重置");
-    expect(wrap.querySelector(".quota-usage")!.textContent).toBe("40 / 100 (40%)");
+    expect(wrap.querySelector(".quota-usage")!.textContent).toBe("40% / 100%");
     expect(wrap.querySelector(".progress")).toBeTruthy();
   });
 
@@ -181,7 +200,7 @@ describe("QuotaMeter 排版变体(layout prop, t_35ff3c1f 容器层组合)", () 
           pct={0.72}
           state="warn"
           layout={layout}
-          title="周窗 72 次"
+          title="Kimi 周窗"
           resetText="3.4 天后重置"
           used={72}
           limit={100}
@@ -196,7 +215,7 @@ describe("QuotaMeter 排版变体(layout prop, t_35ff3c1f 容器层组合)", () 
 
   it("不传 layout = 默认竖排卡片(stack): 无 layout modifier, data-layout=stack", () => {
     render(
-      <QuotaMeter pct={0.91} state="bad" title="月窗 91 次" resetText="6.4 小时后重置" used={91} limit={100} />,
+      <QuotaMeter pct={0.91} state="bad" title="阿里云百炼 月窗" resetText="6.4 小时后重置" used={91} limit={100} />,
     );
     const wrap = container.querySelector("[data-testid='quota-meter']")!;
     expect(wrap.classList.contains("quota-meter--instance")).toBe(true);
@@ -217,7 +236,7 @@ describe("QuotaMeter 排版变体(layout prop, t_35ff3c1f 容器层组合)", () 
       <QuotaMeter
         pct={0.4}
         layout="row"
-        title="闪购 40 次"
+        title="OpenCode 5 小时窗"
         resetText="即将重置"
         used={40}
         limit={100}

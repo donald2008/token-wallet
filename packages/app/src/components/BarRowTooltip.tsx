@@ -22,7 +22,8 @@ import { displayUsed, resetText } from "./ProgressBar";
  *   标题 = 窗口名本地化(metric.<key>, 未知 key 回退原样)
  *   重置 = resetText(reset_at) 派生; 无 reset_at → slot 不渲染(无空壳)
  *   条   = used/limit 比例 + metricHealth 着色(与行一致)
- *   用量 = displayUsed(percent 修浮点尾差) / limit —— QuotaMeter micro 用法
+ *   用量 = unit 语义格式化(t_23800bd4/老大裁决#4: 补传 unit={m.unit} 与行用量格式对齐,
+ *          percent → "48% / 100%"); displayUsed 预修浮点尾差保留(displayUsed+fmt1 双保险同值)
  */
 export function BarRowTooltip({ metric }: { metric: Metric }) {
   const pct =
@@ -45,6 +46,7 @@ export function BarRowTooltip({ metric }: { metric: Metric }) {
         resetText={reset || undefined}
         used={displayUsed(metric)}
         limit={metric.limit}
+        unit={metric.unit}
       />
     </div>
   );

@@ -73,7 +73,7 @@ test("悬停窗口行 → micro tooltip 四元素揭示, 与行同源, 不溢出
   await pwExpect(meter).toHaveAttribute("data-layout", "micro");
   await pwExpect(meter).toHaveClass(/quota-meter--layout-micro/);
   await pwExpect(tip.locator(".quota-title")).toHaveText("月窗");
-  await pwExpect(tip.locator(".quota-usage")).toHaveText("48 / 100 (48%)");
+  await pwExpect(tip.locator(".quota-usage")).toHaveText("48% / 100%");
   await pwExpect(tip.locator(".quota-reset")).not.toBeEmpty(); // 重置倒计时(≥1天档)
   await pwExpect(tip.locator("[role='progressbar']")).toHaveAttribute("aria-valuenow", "48");
   await pwExpect(tip.locator(".progress-fill")).toHaveAttribute("data-health", "ok"); // 48% 剩余 52% → ok
@@ -100,7 +100,7 @@ test("悬停窗口行 → micro tooltip 四元素揭示, 与行同源, 不溢出
   await weeklyRow.hover();
   await pwExpect(wTip).toBeVisible();
   await pwExpect(wTip.locator(".quota-title")).toHaveText("周窗");
-  await pwExpect(wTip.locator(".quota-usage")).toHaveText("100 / 100 (100%)");
+  await pwExpect(wTip.locator(".quota-usage")).toHaveText("100% / 100%");
   await pwExpect(wTip.locator(".progress-fill")).toHaveAttribute("data-health", "bad");
 });
 
@@ -117,7 +117,7 @@ test("模板首行 tooltip 向下弹出(防吸顶裁剪), 仍含于面板", asyn
   await firstRow.hover();
   await pwExpect(tip).toBeVisible();
   await pwExpect(tip.locator(".quota-title")).toHaveText("5 小时窗");
-  await pwExpect(tip.locator(".quota-usage")).toHaveText("0 / 100 (0%)");
+  await pwExpect(tip.locator(".quota-usage")).toHaveText("0% / 100%");
   await pwExpect(tip.locator(".progress-fill")).toHaveAttribute("data-health", "ok");
 
   // 首行: tooltip 在行下方(top ≥ row.bottom - 1), 非上方

@@ -136,6 +136,12 @@ const zh = {
     session: "会话窗",
     fallback: "{key}",
   },
+  /* 计量单位标签(t_23800bd4): QuotaMeter 用量行按 Metric.unit 语义展示, 禁止硬编码单位词 */
+  unit: {
+    requests: "次",
+    tokens: "tokens",
+    credits: "credits",
+  },
   local: {
     title: "本地 Agent",
     tag: "即将推出",
@@ -284,9 +290,11 @@ const zh = {
     subtitle:
       "同一份四元素数据(标题 + 重置时间 + 进度条 + 用量), 分别用 5 种排版渲染, 供肉眼对比「同数据不同摆法」。A 行式(窗口行) / B 大数字(汇总 hero) / C 紧凑竖排(tooltip) / D 数字优先(ticker) / E 两行堆叠(通用明细)。条统一 slim, 排除形态/颜色干扰。全部走 tokens.css / 8px 网格 / D-016 三态(dark/light/glass)。",
     open: "查看方案页",
-    iFlash: "闪购 40 次",
-    iWeek: "周窗 72 次",
-    iMonth: "月窗 91 次",
+    // t_23800bd4: mock 标题改真实 provider 风格名 + 去掉「xx 次」误导(数据是百分制演示)
+    iWin5h: "OpenCode 5 小时窗",
+    iWeek: "Kimi 周窗",
+    iMonth: "阿里云百炼 月窗",
+    iCount: "智谱 GLM 周窗 · 计数制",
     iResetSoon: "即将重置",
     iResetDayFrac: "3.4 天后重置",
     iResetHours: "6.4 小时后重置",
@@ -422,6 +430,12 @@ const en: Dict = {
     balance: "Balance",
     session: "Session",
     fallback: "{key}",
+  },
+  /* unit labels (t_23800bd4): QuotaMeter usage line follows Metric.unit semantics, no hardcoded unit words */
+  unit: {
+    requests: "times",
+    tokens: "tokens",
+    credits: "credits",
   },
   local: {
     title: "Local agents",
@@ -570,9 +584,11 @@ const en: Dict = {
     subtitle:
       "The same four-element data (title + reset time + progress bar + usage) rendered in 5 layouts, to compare 'same data, different arrangements'. A row (window rows) / B big-number hero (summary) / C compact vertical (tooltip) / D number-first (ticker) / E two-line split (generic detail). All bars slim to rule out shape/color noise. All via tokens.css / 8px grid / D-016 three states (dark/light/glass).",
     open: "View gallery",
-    iFlash: "Flash 40 uses",
-    iWeek: "Weekly 72 uses",
-    iMonth: "Monthly 91 uses",
+    // t_23800bd4: mock titles use real provider-style names; no misleading "N uses" (data is percent-based)
+    iWin5h: "OpenCode 5h window",
+    iWeek: "Kimi weekly",
+    iMonth: "Aliyun Bailian monthly",
+    iCount: "Zhipu GLM weekly · count",
     iResetSoon: "resets soon",
     iResetDayFrac: "resets in 3.4d",
     iResetHours: "resets in 6.4h",

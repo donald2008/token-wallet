@@ -152,11 +152,15 @@ test("bars+ticker 模板: 进度条/倒计时/最紧标红 + 余额预计可用�
     .filter({ hasText: "Kimi-Code" })
     .getByTestId("bars-template");
   await pwExpect(kimiBars).toHaveCount(1);
-  // t_a398348b: 行内新增悬停 tooltip(含 micro meter 的 .progress), 计数收紧到行本体条
-  await pwExpect(kimiBars.locator(".bar-row .bar-track > .progress")).toHaveCount(2); // rolling_5h + weekly 两窗
+  // t_23800bd4: 窗口行渲染切 QuotaMeter(layout=row), 行本体条 = .bar-row 直接子级 meter 内的 .progress
+  // (t_a398348b tooltip 的 micro meter 在 .bar-tooltip 内, 不被直接子级选择器命中)
+  await pwExpect(kimiBars.locator(".bar-row > .quota-meter > .progress")).toHaveCount(2); // rolling_5h + weekly 两窗
+  // t_23800bd4 单位语义: kimi mock 窗口 unit=requests → 用量行带真实单位(次), 非误导性硬编码
+  await pwExpect(kimiBars.locator(".bar-row > .quota-meter > .quota-usage").first()).toContainText("次");
   // 最紧窗口(rolling_5h 剩余<30%)标红 —— P1 起按时间窗升序排列, 只标不置顶(rolling_5h 为最短窗仍在首行)
-  // 2026-09-03 文案本地化(⑤): key 直出 → 友好窗名「5 小时窗」
-  await pwExpect(kimiBars.locator(".bar-row[data-tightest] .bar-label")).toContainText("5 小时窗");
+  // 2026-09-03 文案本地化(⑤): key 直出 → 友好窗名「5 小时窗」; t_23800bd4 起标题元素 = .quota-title
+  // (直接子级 meter 限定: tooltip 内 micro meter 也有 .quota-title, 不收紧会 strict 双命中)
+  await pwExpect(kimiBars.locator(".bar-row[data-tightest] > .quota-meter > .quota-title")).toContainText("5 小时窗");
   // 重置倒计时(#829 R2: 纯倒计时无旧后缀, 单单位一位小数 X.X天/X.X小时/X分)
-  await pwExpect(kimiBars.locator(".bar-reset").first()).toContainText(/\d+\.\d+天|\d+\.\d+小时|\d+分/);
+  await pwExpect(kimiBars.locator(".bar-row > .quota-meter > .quota-reset").first()).toContainText(/\d+\.\d+天|\d+\.\d+小时|\d+分/);
 });

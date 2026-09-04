@@ -101,16 +101,52 @@ describe("BarsTemplate: 排序变更后 tightest 标红不回归", () => {
     const metrics = [wm("monthly", 99, 100), wm("rolling_5h", 10, 100), wm("weekly", 20, 100)];
     act(() => root.render(<BarsTemplate p={snap(metrics)} />));
     const rows = Array.from(container.querySelectorAll(".bar-row"));
-    const labels = rows.map((r) => r.querySelector(".bar-label")?.textContent);
+    const labels = rows.map((r) => r.querySelector(".quota-title")?.textContent);
     // 2026-09-03 文案本地化(⑤): key 直出改为友好窗名
     expect(labels).toEqual(["5 小时窗", "周窗", "月窗"]);
     const tightestRow = container.querySelector(".bar-row[data-tightest]");
-    expect(tightestRow?.querySelector(".bar-label")?.textContent).toBe("月窗");
+    expect(tightestRow?.querySelector(".quota-title")?.textContent).toBe("月窗");
   });
 
   it("全部健康(remaining>30%)时不误标红", () => {
     const metrics = [wm("rolling_5h", 10, 100), wm("weekly", 20, 100)];
     act(() => root.render(<BarsTemplate p={snap(metrics)} />));
     expect(container.querySelector(".bar-row[data-tightest]")).toBeNull();
+  });
+});
+
+describe("BarsTemplate: 窗口行 = QuotaMeter 四元素实例(t_23800bd4)", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("窗口行由 QuotaMeter layout=row 渲染, 四元素齐全 + .progress 契约保留", () => {
+    act(() => root.render(<BarsTemplate p={snap([wm("rolling_5h", 120, 1200)])} />));
+    const meter = container.querySelector(".bar-row > [data-testid='quota-meter']")!;
+    expect(meter).toBeTruthy();
+    expect(meter.getAttribute("data-layout")).toBe("row");
+    expect(meter.querySelector(".quota-title")!.textContent).toBe("5 小时窗");
+    expect(meter.querySelector(".quota-reset")!.textContent!.length).toBeGreaterThan(0);
+    expect(meter.querySelector("[role='progressbar']")).toBeTruthy();
+    expect(meter.querySelector(".progress-fill")!.getAttribute("data-health")).toBe("ok");
+    // requests 单位语义: 计数 + 本地化单位标签, 不是百分比
+    expect(meter.querySelector(".quota-usage")!.textContent).toBe("120 / 1200 次 (10%)");
+  });
+
+  it("percent 单位窗口 → 用量行百分比格式", () => {
+    const m: Metric = { key: "weekly", kind: "window", unit: "percent", used: 37.941548, limit: 100, reset_at: NOW + 3600 };
+    act(() => root.render(<BarsTemplate p={snap([m])} />));
+    // fmt1 修浮点尾差: 37.941548 → 37.9%
+    expect(container.querySelector(".quota-usage")!.textContent).toBe("37.9% / 100%");
   });
 });

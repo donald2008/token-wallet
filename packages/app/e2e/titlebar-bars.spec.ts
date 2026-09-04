@@ -93,8 +93,9 @@ test("进度条对齐: 三行进度条左缘 x 坐标差 ≤1px(tightest 占位�
 
   const card = page.getByTestId("provider-card").first();
   await pwExpect(card).toBeVisible({ timeout: 10_000 });
-  // t_a398348b: 行内新增悬停 tooltip(含 micro meter 的 .progress), 选择器收紧到行本体条
-  const bars = card.locator(".bar-row .bar-track > .progress");
+  // t_23800bd4: 行渲染切 QuotaMeter —— 行本体条 = .bar-row 直接子级 meter 的 .progress
+  // (t_a398348b tooltip 的 micro meter 在 .bar-tooltip 内, 不命中)
+  const bars = card.locator(".bar-row > .quota-meter > .progress");
   await pwExpect(bars).toHaveCount(3);
   // tightest 行(weekly 100% 耗尽)存在 —— 对齐断言必须覆盖它(历史漂移源)
   await pwExpect(card.locator(".bar-row[data-tightest]")).toHaveCount(1);
