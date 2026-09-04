@@ -33,9 +33,9 @@ async function seedOpencodeInstance(page: import("@playwright/test").Page) {
   await page.reload();
 }
 
-/** 窗口按时间窗升序: weekly(周,100%) → monthly(月,48%) → rolling(未识别,0%) */
-const ROW_WEEKLY = 0;
-const ROW_MONTHLY = 1;
+/** 窗口按时间窗升序: rolling_5h(5h,0%) → weekly(周,100%) → monthly(月,48%) */
+const ROW_WEEKLY = 1;
+const ROW_MONTHLY = 2;
 
 type Box = { x: number; y: number; width: number; height: number };
 
@@ -93,6 +93,15 @@ test("悬停窗口行 → micro tooltip 四元素揭示, 与行同源, 不溢出
   // 移出(悬停标题栏) → tooltip 隐藏
   await page.locator(".titlebar").hover();
   await pwExpect(tip).toBeHidden();
+
+  // 最紧窗口行(weekly 100% 耗尽, data-tightest): tooltip 同步 bad 着色 + 满格用量
+  const weeklyRow = rows.nth(ROW_WEEKLY);
+  const wTip = weeklyRow.getByTestId("bar-tooltip");
+  await weeklyRow.hover();
+  await pwExpect(wTip).toBeVisible();
+  await pwExpect(wTip.locator(".quota-title")).toHaveText("周窗");
+  await pwExpect(wTip.locator(".quota-usage")).toHaveText("100 / 100 (100%)");
+  await pwExpect(wTip.locator(".progress-fill")).toHaveAttribute("data-health", "bad");
 });
 
 test("模板首行 tooltip 向下弹出(防吸顶裁剪), 仍含于面板", async ({ hostPage, page }) => {
@@ -102,18 +111,18 @@ test("模板首行 tooltip 向下弹出(防吸顶裁剪), 仍含于面板", asyn
 
   const card = page.getByTestId("provider-card").first();
   await pwExpect(card).toBeVisible({ timeout: 10_000 });
-  const weeklyRow = card.locator(".bar-row").nth(ROW_WEEKLY);
-  const tip = weeklyRow.getByTestId("bar-tooltip");
+  const firstRow = card.locator(".bar-row").first();
+  const tip = firstRow.getByTestId("bar-tooltip");
 
-  await weeklyRow.hover();
+  await firstRow.hover();
   await pwExpect(tip).toBeVisible();
-  await pwExpect(tip.locator(".quota-title")).toHaveText("周窗");
-  await pwExpect(tip.locator(".quota-usage")).toHaveText("100 / 100 (100%)");
-  await pwExpect(tip.locator(".progress-fill")).toHaveAttribute("data-health", "bad"); // 耗尽 → bad
+  await pwExpect(tip.locator(".quota-title")).toHaveText("5 小时窗");
+  await pwExpect(tip.locator(".quota-usage")).toHaveText("0 / 100 (0%)");
+  await pwExpect(tip.locator(".progress-fill")).toHaveAttribute("data-health", "ok");
 
   // 首行: tooltip 在行下方(top ≥ row.bottom - 1), 非上方
   const tipBox = (await tip.boundingBox())!;
-  const rowBox = (await weeklyRow.boundingBox())!;
+  const rowBox = (await firstRow.boundingBox())!;
   pwExpect(tipBox.y).toBeGreaterThanOrEqual(rowBox.y + rowBox.height - 1);
 
   // 仍含于 card-list
