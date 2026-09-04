@@ -50,7 +50,7 @@ async function seedInstances(page: import("@playwright/test").Page, instances: S
 
 /** 添加一个 deepseek/balance 实例(D-038: 侧栏 ＋ → 添加向导弹窗 → 通道树 → 表单 → 保存) */
 async function addDeepseekInstance(page: import("@playwright/test").Page, name: string, secret: string) {
-  await page.getByTestId("sidebar-add").click();
+  await page.getByTestId("add-btn").click();
   const modal = page.getByTestId("add-overlay");
   await pwExpect(modal).toBeVisible();
   await modal.getByTestId("tree-product-deepseek-balance").click();
@@ -146,7 +146,7 @@ test("删除→立即重添加同名通道: 迟到采集响应不复活旧数据
 
   // 制造在途请求: 注入 4s 采集延迟 → 手动刷新(§3.1 立即同步)
   await page.evaluate(() => localStorage.setItem("token-wallet.mock.httpdelayms", "4000"));
-  await page.getByTestId("sidebar").getByTestId("refresh-btn").click();
+  await page.locator('.titlebar [data-testid="refresh-btn"]').click();
 
   // 在途期间删除 A(卡内删除): 停源 → purge → 摘卡(契约五步)
   await deleteProviderCard(page, "inst-a");

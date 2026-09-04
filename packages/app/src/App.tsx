@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Bootstrap } from "./types";
-import { globalHealth, sortProviders, tooltipSummary, type SortConfig } from "./health";
+import { globalHealth, sortProviders, tooltipSummary, DEFAULT_SORT_CONFIG, type SortConfig } from "./health";
 import {
   getBootstrap,
   getPersistedLang,
@@ -18,7 +18,7 @@ import { useTheme, THEME_CYCLE } from "./theme";
 import { LangProvider, useLang } from "./i18nReact";
 import { getLang, t } from "./i18n";
 import { TitleBar } from "./components/TitleBar";
-import { SideBar } from "./components/SideBar";
+import { BottomBar } from "./components/BottomBar";
 import { ProviderCard } from "./components/ProviderCard";
 import { useCardDragSort } from "./useCardDragSort";
 import {
@@ -36,13 +36,8 @@ import { AddProviderWizard } from "./components/AddProviderWizard";
 import { QuotaGallery } from "./components/QuotaGallery";
 import { LocalAgentSection } from "./components/LocalAgentSection";
 import { FilterIcons, DEFAULT_FILTER, matchesFilter, type FilterSel } from "./components/FilterChips";
-import {
-  getSharedKeyring,
-  getSharedStore,
-  loadPersistedInstances,
-  useInstances,
-  usePersistError,
-} from "./instances/store";
+import type { InstanceConfig } from "./instances/schema";
+import { getSharedKeyring, getSharedStore, loadPersistedInstances, useInstances, usePersistError } from "./instances/store";
 import { useDismissibleError } from "./instances/useDismissibleError";
 import { RuntimeEngine, type EngineOutput } from "./runtime/engine";
 
@@ -107,8 +102,9 @@ function AppShell() {
   const [refreshing, setRefreshing] = useState(false);
   // P1 窗口置顶态: 启动时读回(真壳=settings.json, 浏览器=localStorage 降级)
   const [pinned, setPinned] = useState(false);
-  // P1(#829 R1): 卡间排序配置(key×dir, 缺省名称正排); 启动读回, 切换即持久化
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", dir: "asc" });
+  // t_d086543b: 排序只留手动(用户拍板 2026-09-04); 缺省 manual + 无 order(尾部名称正排,
+  // 与旧缺省视觉一致); 启动读回旧配置经 normalize 归一为 manual(order 保留)
+  const [sortConfig, setSortConfig] = useState<SortConfig>(DEFAULT_SORT_CONFIG);
   // P1(t_6484ecc6): 主页过滤 chips 选中态(单选, 默认「全部」= 现状零变化; 重启回「全部」)
   const [filter, setFilter] = useState<FilterSel>(DEFAULT_FILTER);
   // 页内导航仅留给首开向导 + 方案页(D-021 一次性引导 view="add"; theme-glass 实验 view="quota")
@@ -200,12 +196,6 @@ function AppShell() {
     void winSetAlwaysOnTop(next); // 回写持久化(settings.json / localStorage 降级)
   }, [pinned]);
 
-  // 排序配置切换(#829 R1): 内存态即生效 + 回写持久化(真壳 settings.json / 浏览器 localStorage)
-  const onSortConfig = useCallback((next: SortConfig) => {
-    setSortConfig(next);
-    void persistSortConfig(next);
-  }, []);
-
   // P1(t_6484ecc6): 一层 filter(chips 选中态 → 命中子集), 排序仍走 sortProviders 原排序器。
   //   过滤在排序之前(先缩小视角再按配置排), 不改变排序器语义; 默认「全部」= 原 providers 全集。
   const filteredProviders = useMemo(
@@ -226,6 +216,19 @@ function AppShell() {
       [],
     ),
   });
+
+  // t_d086543b: 新 provider 置顶 —— 向导保存成功(携带新实例)后把新 id prepend 进
+  // 持久化 order(其余按既有自定义顺序保持; order 交集语义保证已删/幽灵 id 被忽略)。
+  // 双保险: 即便尚无 order, store.add 的 unshift 也让新卡在实例序第一位。
+  const onProviderSaved = useCallback(
+    (inst: InstanceConfig) => {
+      const rest = (sortConfig.order ?? []).filter((id) => id !== inst.id);
+      const next: SortConfig = { key: "manual", dir: "asc", order: [inst.id, ...rest] };
+      setSortConfig(next);
+      void persistSortConfig(next);
+    },
+    [sortConfig.order],
+  );
 
   // 托盘联动: 全局最差状态 → 托盘色点 + tooltip(D-003)
   useEffect(() => {
@@ -326,7 +329,11 @@ function AppShell() {
     // 首开向导(D-021): 一次性引导流程保持页内导航(不弹模态)
     return (
       <div className="panel">
-        <AddProviderWizard variant="page" onBack={() => setView("panel")} />
+        <AddProviderWizard
+          variant="page"
+          onBack={() => setView("panel")}
+          onSavedProvider={onProviderSaved}
+        />
       </div>
     );
   }
@@ -342,19 +349,18 @@ function AppShell() {
 
   return (
     <div className="panel">
-      {/* t_66b67453 契约1: 标题栏独占第一行(全宽) —— 用户原始诉求「侧栏从窗口最上沿
-          开始, 观感=侧栏把标题栏切短了」; 重排后侧栏从第二行左缘开始 */}
-      <TitleBar health={health} tooltip={tooltip} pinned={pinned} onTogglePin={onTogglePin} />
+      {/* 标题栏独占第一行(全宽, t_66b67453 契约1 语义保留) */}
+      <TitleBar
+        health={health}
+        tooltip={tooltip}
+        pinned={pinned}
+        onTogglePin={onTogglePin}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        themeMode={themeMode}
+        onCycleTheme={onCycleTheme}
+      />
       <div className="panel-body">
-        {/* D-038 左侧窄功能侧栏(全局动作), t_66b67453 契约2 增主题快切钮 */}
-        <SideBar
-          onAdd={openAddModal}
-          onRefresh={onRefresh}
-          onOpenSettings={openSettings}
-          refreshing={refreshing}
-          themeMode={themeMode}
-          onCycleTheme={onCycleTheme}
-        />
         <div className="panel-main" data-testid="panel-main">
           {visiblePersistError && (
             // W3: 写盘失败顶部错误条(内存态仍可用, 可关闭; 恢复后同消息再失败会重弹)
@@ -399,6 +405,8 @@ function AppShell() {
           {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}
         </div>
       </div>
+      {/* t_d086543b: 底边栏(侧栏取消后全局动作落位) —— 添加 / 设置 左右分布 */}
+      <BottomBar onAdd={openAddModal} onOpenSettings={openSettings} />
       {settingsOpen && (
         // 设置模态弹窗(P0-6): 半透明遮罩叠在面板上方, 点遮罩关闭; 弹层自身圆角+阴影(D-031 无边框窗口)
         <div className="settings-overlay" data-testid="settings-overlay" onClick={closeSettings}>
@@ -415,8 +423,6 @@ function AppShell() {
               onThemeMode={setThemeMode}
               glass={glass}
               onGlass={setGlass}
-              sortConfig={sortConfig}
-              onSortConfig={onSortConfig}
               onBack={closeSettings}
               onOpenQuota={() => {
                 closeSettings();
@@ -436,7 +442,11 @@ function AppShell() {
             aria-label={t("common.add")}
             onClick={(e) => e.stopPropagation()}
           >
-            <AddProviderWizard variant="modal" onBack={closeAddModal} />
+            <AddProviderWizard
+              variant="modal"
+              onBack={closeAddModal}
+              onSavedProvider={onProviderSaved}
+            />
           </div>
         </div>
       )}

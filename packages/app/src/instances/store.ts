@@ -109,7 +109,9 @@ export class MemoryInstanceStore {
     return [...this.items];
   }
   add(inst: InstanceConfig): void {
-    this.items = [...this.items, inst];
+    // t_d086543b: 新 provider 插入列表第一位(持久化顺序同步 —— instances.yaml 与启动
+    // hydrate 均以本列表顺序为准, 新卡重启后仍在首位; 拖拽 order 另有 App 侧 prepend 兜底)
+    this.items = [inst, ...this.items];
     // B-3: 新实例准入写库(必须先于 emit/引擎重建, 否则首轮采集会被守卫误丢)
     addLiveProvider(inst.id);
     this.emit();

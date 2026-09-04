@@ -100,7 +100,7 @@ test("混合: aliyun(暂未接入) + deepseek(数据卡) 同面板共存", async
   await agree(page);
   await seedUnsupportedInstance(page);
   // 再通过树形通道添加 deepseek(真实链路; D-038: 入口 = 侧栏 ＋ 添加向导)
-  await page.getByTestId("sidebar-add").click();
+  await page.getByTestId("add-btn").click();
   await pwExpect(page.getByTestId("add-wizard")).toBeVisible();
   await page.getByTestId("tree-product-deepseek-balance").click();
   await page.getByTestId("param-api_key").fill("sk-ds-valid");

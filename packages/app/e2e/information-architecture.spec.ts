@@ -2,16 +2,16 @@ import { expect as pwExpect } from "@playwright/test";
 import { test, getCapturedInvokes } from "./fixtures";
 
 /**
- * L2(D-038 信息架构改造): 操作分区 = **侧栏(全局动作) / 卡片(实例动作) / 设置(偏好)**
+ * L2(D-038 信息架构改造 + t_d086543b 布局重构): 操作分区 =
+ * **标题栏(窗口/全局态: 刷新/主题/图钉/最小化/关闭) / 底边栏(低频全局动作: 添加/设置) / 卡片(实例动作) / 设置(偏好)**
  *
- * 覆盖验收:
- *   - 侧栏三钮可点且行为正确: ＋ 添加 → 添加向导弹窗(流程本体不变) /
- *     ⟳ 刷新 → 真实触发采集 / ⚙ 设置 → 设置弹窗
- *   - 标题栏仅剩 4 控件(状态点 + 标题 + 图钉 + 最小化 + 关闭 中的可点控件为 3 个按钮),
- *     刷新/设置/主题三钮不在标题栏; 全部常显(hover 淡入语义见 pin-toolbar.spec)
+ * 覆盖验收(t_d086543b):
+ *   - 侧栏消失; 底边栏两钮(＋添加/⚙设置)可点且行为正确; 标题栏五钮(刷新/主题/图钉/最小化/关闭)全常显
+ *   - 刷新在标题栏 → 真实触发采集; 设置/添加在底边栏 → 开弹窗
  *   - 卡内删除流程走通(hover 淡入 → 确认气泡 → 取消保留 / 确认删除 + 清钥匙串 + 清库)
- *   - 设置页无 provider 增删元素, 通用偏好项齐全
- *   - 360px 宽下标题栏单行不换行; 侧栏 + 内容区无横向溢出
+ *   - 设置页无 provider 增删元素与排序选择控件, 通用偏好项齐全
+ *   - 360px 宽下标题栏单行不换行 + 内容区无横向溢出; 标题栏/底边栏都横贯整行
+ *   - 新添加 provider 出现在第一位, 重启后保持
  */
 
 /** 种子实例最小形状(避免 e2e tsconfig 不覆盖 app src 的模块解析) */
@@ -56,30 +56,41 @@ async function mockSqliteProviderIds(page: import("@playwright/test").Page): Pro
   });
 }
 
-/* ---------- 1. 侧栏三钮 ---------- */
+/** 经底边栏添加一个 deepseek/balance 实例(t_d086543b: 添加钮在底边栏 add-btn) */
+async function addDeepseekInstance(page: import("@playwright/test").Page, name: string, secret: string) {
+  await page.getByTestId("add-btn").click();
+  const modal = page.getByTestId("add-overlay");
+  await pwExpect(modal).toBeVisible();
+  await modal.getByTestId("tree-product-deepseek-balance").click();
+  await pwExpect(modal.getByTestId("dynamic-form")).toBeVisible();
+  await modal.getByTestId("inst-name").fill(name);
+  await modal.getByTestId("param-api_key").fill(secret);
+  await modal.getByTestId("save-instance").click();
+  // 保存即关向导回面板(新卡即时出现)
+  await pwExpect(page.getByTestId("add-overlay")).toHaveCount(0);
+}
 
-test("侧栏常驻三钮: ＋添加开向导弹窗 / ⚙设置开设置弹窗(顺序与常显)", async ({ hostPage, page }) => {
+/* ---------- 1. 底边栏两钮(添加/设置) ---------- */
+
+test("底边栏两钮: ＋添加开向导弹窗 / ⚙设置开设置弹窗(顺序与常显)", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
 
-  const sidebar = page.getByTestId("sidebar");
-  await pwExpect(sidebar).toBeVisible();
-  // 顺序 上→下: 添加 / 刷新 / 主题快切 / 设置(t_66b67453 契约2; 快切+设置被弹性空隙推到底部)
-  const ids = await sidebar.locator("button").evaluateAll((els) =>
+  const bottombar = page.getByTestId("bottombar");
+  await pwExpect(bottombar).toBeVisible();
+  // 顺序 左→右: 添加 / 设置(t_d086543b: 左右分布 space-between)
+  const ids = await bottombar.locator("button").evaluateAll((els) =>
     els.map((el) => (el as HTMLElement).dataset.testid),
   );
-  pwExpect(ids).toEqual(["sidebar-add", "refresh-btn", "theme-cycle-btn", "settings-btn"]);
-  // 常驻: 鼠标在面板外也全显(与标题栏同口径, 无 hover 显隐)
+  pwExpect(ids).toEqual(["add-btn", "settings-btn"]);
+  // 常驻: 鼠标在面板外也全显(无 hover 显隐)
   await page.mouse.move(2, 2);
   for (const id of ids) {
-    await pwExpect(sidebar.locator(`[data-testid="${id}"]`)).toHaveCSS("opacity", "1");
+    await pwExpect(bottombar.locator(`[data-testid="${id}"]`)).toHaveCSS("opacity", "1");
   }
-  // 宽 ~44px 定宽
-  const w = Math.round((await sidebar.boundingBox())!.width);
-  pwExpect(w).toBe(44);
 
   // ＋ 添加 → 添加向导弹窗(流程本体不变: 先选平台)
-  await sidebar.getByTestId("sidebar-add").click();
+  await bottombar.getByTestId("add-btn").click();
   await pwExpect(page.getByTestId("add-overlay")).toBeVisible();
   await pwExpect(page.getByTestId("add-wizard")).toBeVisible();
   await pwExpect(page.getByTestId("add-channel-step")).toBeVisible();
@@ -89,20 +100,20 @@ test("侧栏常驻三钮: ＋添加开向导弹窗 / ⚙设置开设置弹窗(�
   await pwExpect(page.getByTestId("add-overlay")).toHaveCount(0);
 
   // ⚙ 设置 → 设置弹窗
-  await sidebar.getByTestId("settings-btn").click();
+  await bottombar.getByTestId("settings-btn").click();
   await pwExpect(page.getByTestId("settings-overlay")).toBeVisible();
   await pwExpect(page.getByTestId("settings-view")).toBeVisible();
   await page.getByTestId("settings-close").click();
   await pwExpect(page.getByTestId("settings-overlay")).toHaveCount(0);
 
   // ESC 也能关添加向导(与设置弹窗同语义)
-  await sidebar.getByTestId("sidebar-add").click();
+  await bottombar.getByTestId("add-btn").click();
   await pwExpect(page.getByTestId("add-overlay")).toBeVisible();
   await page.keyboard.press("Escape");
   await pwExpect(page.getByTestId("add-overlay")).toHaveCount(0);
 });
 
-test("侧栏 ⟳ 刷新: 真实触发采集(http_get_json 调用次数增加)", async ({ hostPage, page }) => {
+test("标题栏 ⟳ 刷新: 真实触发采集(http_get_json 调用次数增加)", async ({ hostPage, page }) => {
   void hostPage;
   await seedInstances(page, [inst("inst-a", "DeepSeek-按量 #1", "deepseek/balance")]);
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(1, { timeout: 10_000 });
@@ -110,13 +121,13 @@ test("侧栏 ⟳ 刷新: 真实触发采集(http_get_json 调用次数增加)", 
   const httpCalls = async () =>
     (await getCapturedInvokes(page)).filter((c) => c.cmd === "http_get_json").length;
   const before = await httpCalls();
-  await page.getByTestId("sidebar").getByTestId("refresh-btn").click();
+  await page.locator('.titlebar [data-testid="refresh-btn"]').click();
   await pwExpect.poll(httpCalls, { timeout: 10_000 }).toBeGreaterThan(before);
 });
 
-/* ---------- 2. 标题栏瘦身 ---------- */
+/* ---------- 2. 标题栏五钮(t_d086543b 重排) ---------- */
 
-test("标题栏瘦身: 仅 app-title + 图钉/最小化/关闭 3 钮, 刷新与设置在侧栏", async ({
+test("标题栏五钮: 刷新/主题快切/图钉/最小化/关闭, 设置与添加在底边栏", async ({
   hostPage,
   page,
 }) => {
@@ -127,12 +138,21 @@ test("标题栏瘦身: 仅 app-title + 图钉/最小化/关闭 3 钮, 刷新与�
   const titlebarIds = await titlebar.locator("button").evaluateAll((els) =>
     els.map((el) => (el as HTMLElement).dataset.testid),
   );
-  pwExpect(titlebarIds).toEqual(["pin-btn", "win-min-btn", "win-close-btn"]);
+  pwExpect(titlebarIds).toEqual([
+    "refresh-btn",
+    "theme-cycle-btn",
+    "pin-btn",
+    "win-min-btn",
+    "win-close-btn",
+  ]);
   await pwExpect(titlebar.locator(".app-title")).toHaveText("token-wallet");
 
-  // 刷新/设置迁到侧栏(同 testid 换了位置), 主题切换钮彻底移除
-  await pwExpect(page.locator('.sidebar [data-testid="refresh-btn"]')).toHaveCount(1);
-  await pwExpect(page.locator('.sidebar [data-testid="settings-btn"]')).toHaveCount(1);
+  // 刷新/主题迁到标题栏(同 testid), 添加/设置落在底边栏; 侧栏彻底消失
+  await pwExpect(page.locator('[data-testid="sidebar"]')).toHaveCount(0);
+  await pwExpect(page.locator('.titlebar [data-testid="refresh-btn"]')).toHaveCount(1);
+  await pwExpect(page.locator('.titlebar [data-testid="theme-cycle-btn"]')).toHaveCount(1);
+  await pwExpect(page.locator('[data-testid="bottombar"] [data-testid="add-btn"]')).toHaveCount(1);
+  await pwExpect(page.locator('[data-testid="bottombar"] [data-testid="settings-btn"]')).toHaveCount(1);
   await pwExpect(page.getByTestId("theme-toggle")).toHaveCount(0);
   // hover 显隐类彻底消失
   await pwExpect(page.locator(".toolbar-btn")).toHaveCount(0);
@@ -200,7 +220,7 @@ test("dev 场景预览卡(无真实实例)不渲染删除钮 —— 不给可点
 
 /* ---------- 4. 设置页瘦身 ---------- */
 
-test("设置弹窗 = 纯偏好页: 无 provider 增删元素, 主题/排序/自启/存储路径齐全", async ({
+test("设置弹窗 = 纯偏好页: 无 provider 增删元素, 无排序选择控件, 通用偏好齐全", async ({
   hostPage,
   page,
 }) => {
@@ -218,15 +238,20 @@ test("设置弹窗 = 纯偏好页: 无 provider 增删元素, 主题/排序/自�
   await pwExpect(modal.locator('[data-testid^="del-"]')).toHaveCount(0);
   await pwExpect(modal).not.toContainText("实例管理");
 
+  // 排序只留手动: sort-sec 在但只剩提示文案, sort-key-*/sort-dir-* 选择控件零残留
+  await pwExpect(modal.getByTestId("sort-sec")).toBeVisible();
+  await pwExpect(modal.locator('[data-testid^="sort-key-"], [data-testid^="sort-dir-"]')).toHaveCount(0);
+  await pwExpect(modal.getByTestId("sort-sec")).toContainText("拖动");
+
   // 通用偏好全在
-  for (const id of ["theme-seg", "sort-key-seg", "sort-dir-seg", "autostart-toggle", "storage-paths"]) {
+  for (const id of ["theme-seg", "autostart-toggle", "storage-paths"]) {
     await pwExpect(modal.getByTestId(id)).toBeVisible();
   }
 });
 
 /* ---------- 5. 360px 布局 ---------- */
 
-test("360px: 标题栏单行不换行 + 侧栏与内容区无横向溢出", async ({ hostPage, page }) => {
+test("360px: 标题栏单行不换行 + 内容区无横向溢出 + 底边栏不被压缩", async ({ hostPage, page }) => {
   void hostPage;
   await page.setViewportSize({ width: 360, height: 600 });
   await seedInstances(page, [inst("inst-a", "DeepSeek-按量 #1", "deepseek/balance")]);
@@ -237,7 +262,6 @@ test("360px: 标题栏单行不换行 + 侧栏与内容区无横向溢出", asyn
   const titleH = Math.round((await page.locator(".app-title").boundingBox())!.height);
   pwExpect(titleH).toBeLessThanOrEqual(h360); // 单行(换两行必然高于标题栏内容行)
   // 硬指标: inline 元素换行会产生多个 client rect —— 单行 ⇔ 恰好 1 个
-  // (比高度比较更不易恒真: 整体等比撑高时高度断言仍会通过, rect 数不会)
   const titleRects = await page
     .locator(".app-title")
     .evaluate((el) => el.getClientRects().length);
@@ -247,28 +271,29 @@ test("360px: 标题栏单行不换行 + 侧栏与内容区无横向溢出", asyn
   await page.setViewportSize({ width: 800, height: 600 });
   pwExpect(Math.round((await titlebar.boundingBox())!.height)).toBe(h360);
 
-  // 回到 360: 无横向溢出(文档级 + 内容区级), 侧栏定宽 44 不被压缩
+  // 回到 360: 无横向溢出(文档级 + 内容区级)
   await page.setViewportSize({ width: 360, height: 600 });
   const overflow = await page.evaluate(() => {
     const doc = document.documentElement;
     const main = document.querySelector('[data-testid="panel-main"]') as HTMLElement;
     const list = document.querySelector('[data-testid="card-list"]') as HTMLElement | null;
-    const sidebar = document.querySelector('[data-testid="sidebar"]') as HTMLElement;
+    const bottombar = document.querySelector('[data-testid="bottombar"]') as HTMLElement;
     return {
       docOverflow: doc.scrollWidth - doc.clientWidth,
       mainOverflow: main.scrollWidth - main.clientWidth,
       listOverflow: list ? list.scrollWidth - list.clientWidth : 0,
-      sidebarWidth: Math.round(sidebar.getBoundingClientRect().width),
+      bottombarWidth: Math.round(bottombar.getBoundingClientRect().width),
     };
   });
-  // 360px: 标题栏单行不换行 + 侧栏与内容区无横向溢出 + 标题栏全宽(契约1)
   pwExpect(overflow.docOverflow).toBeLessThanOrEqual(0);
   pwExpect(overflow.mainOverflow).toBeLessThanOrEqual(0);
   pwExpect(overflow.listOverflow).toBeLessThanOrEqual(0);
-  pwExpect(overflow.sidebarWidth).toBe(44);
+  // 底边栏占满内容宽(不被压缩), 且侧栏不存在
+  pwExpect(overflow.bottombarWidth).toBe(360 - 16); // .panel margin 8px 两侧
+  await pwExpect(page.locator('[data-testid="sidebar"]')).toHaveCount(0);
 });
 
-test("t_66b67453 契约1: 标题栏横贯整行(全宽), 侧栏从第二行左缘开始", async ({ hostPage, page }) => {
+test("t_66b67453 契约1 语义延续: 标题栏横贯整行, 底边栏第二行也横贯整行", async ({ hostPage, page }) => {
   void hostPage;
   await page.setViewportSize({ width: 360, height: 600 });
   await agree(page);
@@ -276,26 +301,31 @@ test("t_66b67453 契约1: 标题栏横贯整行(全宽), 侧栏从第二行左�
   const geo = await page.evaluate(() => {
     const panel = document.querySelector(".panel") as HTMLElement;
     const titlebar = document.querySelector(".titlebar") as HTMLElement;
-    const sidebar = document.querySelector('[data-testid="sidebar"]') as HTMLElement;
+    const bottombar = document.querySelector('[data-testid="bottombar"]') as HTMLElement;
     const pr = panel.getBoundingClientRect();
     const tr = titlebar.getBoundingClientRect();
-    const sr = sidebar.getBoundingClientRect();
+    const br = bottombar.getBoundingClientRect();
     return {
       panelRight: pr.right,
+      panelBottom: pr.bottom,
       titlebarRight: tr.right,
       titlebarTop: tr.top,
-      sidebarTop: sr.top,
-      sidebarLeft: sr.left,
+      bottombarTop: br.top,
+      bottombarLeft: br.left,
+      bottombarRight: br.right,
+      bottombarBottom: br.bottom,
       panelLeft: pr.left,
     };
   });
 
-  // 标题栏横贯整行: 右缘 = 面板右缘(不被 44px 侧栏切短)
+  // 标题栏横贯整行: 右缘 = 面板右缘
   pwExpect(Math.round(geo.titlebarRight)).toBe(Math.round(geo.panelRight));
-  // 标题栏第一行, 侧栏第二行: titlebar.top < sidebar.top(垂直堆叠生效)
-  pwExpect(geo.titlebarTop).toBeLessThan(geo.sidebarTop);
-  // 侧栏从面板左缘开始(第二行左缘)
-  pwExpect(Math.round(geo.sidebarLeft)).toBe(Math.round(geo.panelLeft));
+  // 底边栏也在最底部横贯整行: 左缘=面板左缘, 右缘=面板右缘, 底缘=面板底缘
+  pwExpect(Math.round(geo.bottombarLeft)).toBe(Math.round(geo.panelLeft));
+  pwExpect(Math.round(geo.bottombarRight)).toBe(Math.round(geo.panelRight));
+  pwExpect(Math.round(geo.bottombarBottom)).toBe(Math.round(geo.panelBottom));
+  // 标题栏第一行, 底边栏在面板底部(titlebar.top < bottombar.top, 垂直堆叠)
+  pwExpect(geo.titlebarTop).toBeLessThan(geo.bottombarTop);
 });
 
 test("t_66b67453 契约4: auth_expired 卡 setup_hint 复制钮 → 剪贴板 = 反引号内命令原文", async ({
@@ -330,4 +360,29 @@ test("t_66b67453 契约4: auth_expired 卡 setup_hint 复制钮 → 剪贴板 = 
   pwExpect(copied).toBe("bl auth login --console");
   // 1.5s 后还原
   await pwExpect(hintBtn).toHaveText("复制", { timeout: 3000 });
+});
+
+/* ---------- 6. 新 provider 置顶(t_d086543b) ---------- */
+
+test("新添加 provider 出现在第一位, 重启后保持(t_d086543b)", async ({ hostPage, page }) => {
+  void hostPage;
+  await seedInstances(page, [
+    inst("inst-a", "Alpha 旧实例", "deepseek/balance"),
+    inst("inst-b", "Bravo 旧实例", "deepseek/balance"),
+  ]);
+  await pwExpect(page.getByTestId("provider-card")).toHaveCount(2, { timeout: 10_000 });
+
+  // 经底边栏添加新实例(Zeta 名字在名称正排下本应排最后 → 置顶语义必须压过它)
+  await addDeepseekInstance(page, "Zeta 新实例", "sk-zeta-new");
+  await pwExpect(page.getByTestId("provider-card")).toHaveCount(3, { timeout: 10_000 });
+  await pwExpect(
+    page.locator('[data-testid="provider-card"]').first().locator(".card-name"),
+  ).toContainText("Zeta 新实例");
+
+  // 重启后顺序保持: store.unshift(实例序) + order prepend(手动序)双保险
+  await page.reload();
+  await pwExpect(page.getByTestId("provider-card")).toHaveCount(3, { timeout: 10_000 });
+  await pwExpect(
+    page.locator('[data-testid="provider-card"]').first().locator(".card-name"),
+  ).toContainText("Zeta 新实例");
 });

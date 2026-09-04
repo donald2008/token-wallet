@@ -22,7 +22,7 @@ test("consent 持久化: 同意后重启不再弹隐私声明(§10)", async ({ h
   await page.reload();
   await pwExpect(page.getByTestId("consent-page")).toHaveCount(0);
   // D-038: 设置入口在侧栏底部(标题栏已瘦身)
-  await pwExpect(page.getByTestId("sidebar").getByTestId("settings-btn")).toBeVisible();
+  await pwExpect(page.getByTestId("bottombar").getByTestId("settings-btn")).toBeVisible();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
 });
 

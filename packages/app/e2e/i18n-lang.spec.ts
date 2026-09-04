@@ -37,7 +37,7 @@ test("语言切换即时生效 + reload 保持(zh→en→reload→en→zh)", asy
 
   // reload(模拟重启) → 语言保持 en: 主页英文 + 设置页仍英文
   await page.reload();
-  await pwExpect(page.getByTestId("sidebar")).toHaveAttribute("aria-label", "Action bar");
+  await pwExpect(page.getByTestId("bottombar")).toHaveAttribute("aria-label", "Action bar");
   // dev 默认 mixed 场景 → 卡片视图; 开设置确认仍英文
   await page.getByTestId("settings-btn").click();
   await pwExpect(page.getByTestId("settings-view")).toBeVisible();

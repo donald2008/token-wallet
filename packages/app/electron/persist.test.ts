@@ -148,33 +148,33 @@ describe("alwaysOnTop(P1 置顶开关, autostart 同款 RMW)", () => {
   });
 });
 
-describe("sortConfig(#829 R1 卡间排序, autostart 同款 RMW)", () => {
-  it("缺省: 文件不存在 / 旧文件无该字段 / 非法值 → 名称正排", () => {
+describe("sortConfig(t_d086543b 只留手动, autostart 同款 RMW)", () => {
+  it("缺省: 文件不存在 / 旧文件无该字段 / 非法值 → manual(旧 name 缺省归一化)", () => {
     const file = path.join(dir, "settings.json");
     // 文件不存在(首开)
     expect(normalizeSortConfigValue(readSettingsFile(file).sortConfig)).toEqual({
-      key: "name",
+      key: "manual",
       dir: "asc",
     });
     // 旧版文件无 sortConfig 字段
     fs.writeFileSync(file, JSON.stringify({ version: 1, consentAgreed: true }), "utf8");
     expect(normalizeSortConfigValue(readSettingsFile(file).sortConfig)).toEqual({
-      key: "name",
+      key: "manual",
       dir: "asc",
     });
-    // 脏数据(非法 key/dir) → 缺省
+    // 脏数据(非法 key/dir) → 缺省 manual
     fs.writeFileSync(
       file,
       JSON.stringify({ version: 1, sortConfig: { key: "size", dir: "up" } }),
       "utf8",
     );
     expect(normalizeSortConfigValue(readSettingsFile(file).sortConfig)).toEqual({
-      key: "name",
+      key: "manual",
       dir: "asc",
     });
   });
 
-  it("写入 → 读回: {key,dir} 整体往返, RMW 保留 consent/autostart/未知字段", () => {
+  it("旧持久化 name/urgency → 归一化 manual; RMW 保留 consent/autostart/未知字段", () => {
     const file = path.join(dir, "settings.json");
     fs.writeFileSync(
       file,
@@ -183,27 +183,27 @@ describe("sortConfig(#829 R1 卡间排序, autostart 同款 RMW)", () => {
     );
     recordSortConfig(file, { key: "urgency", dir: "desc" });
     const settings = readSettingsFile(file);
-    expect(settings.sortConfig).toEqual({ key: "urgency", dir: "desc" });
+    expect(settings.sortConfig).toEqual({ key: "manual", dir: "asc" });
     // RMW: 既有/未知字段不丢
     expect(settings.consentAgreed).toBe(true);
     expect(settings.autostart).toBe(true);
     expect(settings.theme).toBe("dark");
   });
 
-  it("写入非法配置 → 归一化落缺省(防脏数据入盘); settings 损坏 → 回退重写不崩", () => {
+  it("写入非法配置 → 归一化落缺省 manual(防脏数据入盘); settings 损坏 → 回退重写不崩", () => {
     const file = path.join(dir, "settings.json");
     recordSortConfig(file, { key: "bogus", dir: "sideways" });
-    expect(readSettingsFile(file).sortConfig).toEqual({ key: "name", dir: "asc" });
+    expect(readSettingsFile(file).sortConfig).toEqual({ key: "manual", dir: "asc" });
     fs.writeFileSync(file, "{ not json", "utf8");
     recordSortConfig(file, { key: "urgency", dir: "asc" });
-    expect(readSettingsFile(file).sortConfig).toEqual({ key: "urgency", dir: "asc" });
+    expect(readSettingsFile(file).sortConfig).toEqual({ key: "manual", dir: "asc" });
   });
 
   it("manual + order 写入 → 读回整体往返(order 落盘, D-039)", () => {
     const file = path.join(dir, "settings.json");
     recordSortConfig(file, { key: "manual", dir: "desc", order: ["c", "a", "b"] });
     const settings = readSettingsFile(file);
-    // dir 强制 asc(契约 §3: manual 持久化 {key:manual,dir:asc,order})
+    // dir 强制 asc(契约: manual 持久化 {key:manual,dir:asc,order})
     expect(settings.sortConfig).toEqual({ key: "manual", dir: "asc", order: ["c", "a", "b"] });
     expect(normalizeSortConfigValue(settings.sortConfig)).toEqual({
       key: "manual",
@@ -212,11 +212,11 @@ describe("sortConfig(#829 R1 卡间排序, autostart 同款 RMW)", () => {
     });
   });
 
-  it("非 manual 模式写 order → order 也落盘(切回 manual 可恢复, 契约 §3)", () => {
+  it("旧 name 模式带 order 写入 → 归一化 manual 且 order 保留(自定义顺序不丢, t_d086543b)", () => {
     const file = path.join(dir, "settings.json");
     recordSortConfig(file, { key: "name", dir: "asc", order: ["c", "a", "b"] });
     expect(readSettingsFile(file).sortConfig).toEqual({
-      key: "name",
+      key: "manual",
       dir: "asc",
       order: ["c", "a", "b"],
     });
@@ -256,7 +256,7 @@ describe("language(Phase B i18n 界面语言, autostart 同款 RMW)", () => {
         consentAgreed: true,
         autostart: true,
         theme: "dark",
-        sortConfig: { key: "urgency", dir: "desc" },
+        sortConfig: { key: "manual", dir: "asc", order: ["a"] },
         futureField: "keep-me",
       }),
       "utf8",
@@ -268,7 +268,7 @@ describe("language(Phase B i18n 界面语言, autostart 同款 RMW)", () => {
     expect(settings.consentAgreed).toBe(true);
     expect(settings.autostart).toBe(true);
     expect(settings.theme).toBe("dark");
-    expect(settings.sortConfig).toEqual({ key: "urgency", dir: "desc" });
+    expect(settings.sortConfig).toEqual({ key: "manual", dir: "asc", order: ["a"] });
     expect(settings.futureField).toBe("keep-me");
   });
 

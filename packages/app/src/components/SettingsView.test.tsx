@@ -27,7 +27,6 @@ vi.mock("../ipc", () => ipcMocks);
 import { SettingsView } from "./SettingsView";
 import { LangProvider } from "../i18nReact";
 import { setLang } from "../i18n";
-import type { SortConfig } from "../health";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -66,8 +65,7 @@ async function renderSettings(variant: "page" | "modal" = "modal"): Promise<HTML
         onThemeMode={() => {}}
         glass={false}
         onGlass={() => {}}
-        sortConfig={{ key: "name", dir: "asc" }}
-        onSortConfig={() => {}}
+
         onBack={() => {}}
       />,
     );
@@ -92,13 +90,11 @@ describe("设置页瘦身(D-038)", () => {
     expect(view.textContent).not.toContain("实例管理");
   });
 
-  it("通用偏好全在: 主题 / 排序(key×dir) / 开机自启 / 存储路径", async () => {
+  it("通用偏好全在: 主题 / 排序(仅手动提示, 无选择控件) / 开机自启 / 存储路径", async () => {
     const view = await renderSettings();
     for (const id of [
       "theme-seg",
       "sort-sec",
-      "sort-key-seg",
-      "sort-dir-seg",
       "autostart-sec",
       "autostart-toggle",
       "storage-paths",
@@ -107,7 +103,14 @@ describe("设置页瘦身(D-038)", () => {
     ]) {
       expect(view.querySelector(`[data-testid="${id}"]`), `${id} 必须保留`).toBeTruthy();
     }
-    // 主题三态入口在设置页(标题栏入口已删, 此处是唯一入口)
+    // t_d086543b: 排序只留手动 —— 选择控件(sort-key-*/sort-dir-*)全部移除
+    expect(view.querySelector('[data-testid="sort-key-seg"]')).toBeNull();
+    expect(view.querySelector('[data-testid="sort-dir-seg"]')).toBeNull();
+    expect(view.querySelector('[data-testid^="sort-key-"]')).toBeNull();
+    expect(view.querySelector('[data-testid^="sort-dir-"]')).toBeNull();
+    // 排序区只有提示性文案(手动 = 拖拽排序)
+    expect(view.textContent).toContain("拖动卡片");
+    // 主题三态入口在设置页(标题栏 ☀ 快切与此处同 state)
     for (const id of ["theme-system", "theme-light", "theme-dark"]) {
       expect(view.querySelector(`[data-testid="${id}"]`)).toBeTruthy();
     }
@@ -133,22 +136,17 @@ describe("设置页瘦身(D-038)", () => {
   });
 });
 
-// ---- D-039: 排序第三档「手动」+ manual 时方向禁用 + order 保留切换恢复 ----
-describe("排序第三档「手动」(D-039)", () => {
-  async function renderWithConfig(
-    sortConfig: SortConfig,
-    onSortConfig: (c: SortConfig) => void,
-  ): Promise<HTMLElement> {
+// ---- t_d086543b: 排序只留手动 —— 设置页排序区只有提示性文案, 无选择控件 ----
+describe("排序区只留手动提示(t_d086543b)", () => {
+  async function renderSort(): Promise<HTMLElement> {
     await act(async () => {
       root.render(
         <SettingsView
           variant="modal"
           themeMode="system"
           onThemeMode={() => {}}
-        glass={false}
-        onGlass={() => {}}
-          sortConfig={sortConfig}
-          onSortConfig={onSortConfig}
+          glass={false}
+          onGlass={() => {}}
           onBack={() => {}}
         />,
       );
@@ -160,37 +158,23 @@ describe("排序第三档「手动」(D-039)", () => {
     return container.querySelector<HTMLElement>('[data-testid="settings-view"]')!;
   }
 
-  it("排序键控件含第三档「手动」", async () => {
-    const view = await renderWithConfig({ key: "name", dir: "asc" }, () => {});
-    const manualBtn = view.querySelector<HTMLButtonElement>('[data-testid="sort-key-manual"]')!;
-    expect(manualBtn).toBeTruthy();
-    expect(manualBtn.textContent).toBe("手动");
-  });
-
-  it("manual 激活时方向控件禁用(manual 按拖拽顺序, dir 无意义)", async () => {
-    const view = await renderWithConfig({ key: "manual", dir: "asc" }, () => {});
-    expect(view.querySelector<HTMLButtonElement>('[data-testid="sort-key-manual"]')!.className).toContain(
-      "active",
-    );
-    for (const id of ["sort-dir-asc", "sort-dir-desc"]) {
-      expect(view.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)!.disabled).toBe(true);
+  it("排序段保留(sort-sec), 提示文案含「手动/拖动」; 无任何排序选择控件", async () => {
+    const view = await renderSort();
+    const sec = view.querySelector('[data-testid="sort-sec"]')!;
+    expect(sec).toBeTruthy();
+    expect(sec.textContent).toContain("排序");
+    expect(sec.textContent).toContain("拖动");
+    for (const id of [
+      "sort-key-seg",
+      "sort-dir-seg",
+      "sort-key-name",
+      "sort-key-urgency",
+      "sort-key-manual",
+      "sort-dir-asc",
+      "sort-dir-desc",
+    ]) {
+      expect(view.querySelector(`[data-testid="${id}"]`), `${id} 必须移除`).toBeNull();
     }
-  });
-
-  it("切到名称/紧要度时 order 保留不清(再切回手动恢复自定义顺序)", async () => {
-    const calls: SortConfig[] = [];
-    const order = ["c", "a", "b"];
-    const view = await renderWithConfig({ key: "manual", dir: "asc", order }, (c) => calls.push(c));
-    // 从 manual 切到 name: onSortConfig 收到的配置必须带原 order
-    act(() => {
-      view.querySelector<HTMLButtonElement>('[data-testid="sort-key-name"]')!.click();
-    });
-    expect(calls).toEqual([{ key: "name", dir: "asc", order }]);
-    // 从 name 切回 manual: order 仍在, dir 由控件当前值决定(这里切回 manual 保留 order)
-    act(() => {
-      view.querySelector<HTMLButtonElement>('[data-testid="sort-key-manual"]')!.click();
-    });
-    expect(calls[1]).toEqual({ key: "manual", dir: "asc", order });
   });
 });
 
@@ -205,8 +189,7 @@ describe("自动更新四态(D-046)", () => {
           onThemeMode={() => {}}
         glass={false}
         onGlass={() => {}}
-          sortConfig={{ key: "name", dir: "asc" }}
-          onSortConfig={() => {}}
+
           onBack={() => {}}
         />,
       );
@@ -307,8 +290,7 @@ describe("语言分段控件(Phase B i18n)", () => {
             onThemeMode={() => {}}
         glass={false}
         onGlass={() => {}}
-            sortConfig={{ key: "name", dir: "asc" }}
-            onSortConfig={() => {}}
+
             onBack={() => {}}
           />
         </LangProvider>,
@@ -351,8 +333,9 @@ describe("语言分段控件(Phase B i18n)", () => {
     expect(h4s[1]).toBe("Language");
     // 持久化回写(真壳 settings.json RMW 由 set_lang 通道完成)
     expect(ipcMocks.setLangPersisted).toHaveBeenCalledWith("en");
-    // 主题/排序/更新控件文案同步英文
-    expect(view.querySelector('[data-testid="sort-key-name"]')!.textContent).toBe("Name");
+    // 主题/排序(手动提示)/更新控件文案同步英文
+    expect(view.querySelector('[data-testid="sort-sec"]')!.textContent).toContain("Sort order");
+    expect(view.querySelector('[data-testid="sort-sec"]')!.textContent).toContain("drag");
     expect(view.querySelector('[data-testid="updater-check-btn"]')!.textContent).toBe("Check for updates");
     // 复位(防串扰后续用例)
     setLang("zh");

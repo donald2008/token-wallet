@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// L1(t_05271be0/t_2ac39613 回归 + t_66b67453 契约1): 标题栏瘦身后只剩 图钉/最小化/关闭,
-// hover 显隐逻辑整体移除(CSS 无 toolbar-btn 淡出规则); t_66b67453 契约1 起标题栏
-// .panel 内独占第一行(全宽), .panel 重排 column + panel-body 行布局锁定;
+// L1(t_05271be0/t_2ac39613 回归 + t_66b67453 契约1 + t_d086543b 重排): 标题栏 = 状态点 +
+// app-title + 刷新/主题快切(侧栏迁入) + 图钉/最小化/关闭; hover 显隐逻辑整体移除;
+// t_d086543b 起 .panel 内标题栏独占第一行(全宽), .panel-body 仅剩内容区;
 // 标题不断词换行 + 进度条对齐占位等既有 CSS 契约继续锁定(布局行为由 e2e boundingBox 兜底)。
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -30,20 +30,31 @@ afterEach(() => {
   container.remove();
 });
 
-function renderTitleBar(pinned = false) {
+function renderTitleBar(pinned = false, refreshing = false, themeMode: "system" | "light" | "dark" = "system") {
   act(() => {
     root.render(
-      <TitleBar health="ok" tooltip="" pinned={pinned} onTogglePin={() => {}} />,
+      <TitleBar
+        health="ok"
+        tooltip=""
+        pinned={pinned}
+        onTogglePin={() => {}}
+        refreshing={refreshing}
+        onRefresh={() => {}}
+        themeMode={themeMode}
+        onCycleTheme={() => {}}
+      />,
     );
   });
   return container.querySelector<HTMLElement>(".titlebar")!;
 }
 
-describe("标题栏瘦身(D-038)", () => {
-  it("只剩 3 个控件: 图钉 / 最小化 / 关闭(+ app-title, 非按钮)", () => {
+describe("标题栏控件构成(t_d086543b 重排)", () => {
+  it("5 个控件: 刷新 / 主题快切 / 图钉 / 最小化 / 关闭(+ app-title, 非按钮)", () => {
     const bar = renderTitleBar();
     const buttons = [...bar.querySelectorAll("button")];
     expect(buttons.map((b) => b.dataset.testid)).toEqual([
+      "refresh-btn",
+      "theme-cycle-btn",
       "pin-btn",
       "win-min-btn",
       "win-close-btn",
@@ -51,9 +62,18 @@ describe("标题栏瘦身(D-038)", () => {
     expect(bar.querySelector(".app-title")!.textContent).toBe("token-wallet");
   });
 
-  it("刷新 / 设置 / 主题切换三钮已移除(迁侧栏 + 设置页)", () => {
+  it("刷新钮带 refreshing 旋转类; 主题钮 data-theme-mode 同步", () => {
+    const idle = renderTitleBar(false, false);
+    expect(idle.querySelector("[data-testid=refresh-btn]")!.className).not.toContain("spinning");
+    const spinning = renderTitleBar(false, true);
+    expect(spinning.querySelector("[data-testid=refresh-btn]")!.className).toContain("spinning");
+    const bar = renderTitleBar(false, false, "dark");
+    expect(bar.querySelector("[data-testid=theme-cycle-btn]")!.getAttribute("data-theme-mode")).toBe("dark");
+  });
+
+  it("设置/添加不在标题栏(迁底边栏 BottomBar); 旧 theme-toggle 控件不存在", () => {
     const bar = renderTitleBar();
-    for (const id of ["refresh-btn", "settings-btn", "theme-toggle"]) {
+    for (const id of ["settings-btn", "add-btn", "theme-toggle"]) {
       expect(bar.querySelector(`[data-testid="${id}"]`), `${id} 不应再在标题栏`).toBeNull();
     }
   });
@@ -82,7 +102,7 @@ function ruleBlock(selector: string): string {
   return m![1];
 }
 
-describe("CSS 契约(D-038 + t_05271be0 #1/#2 回归)", () => {
+describe("CSS 契约(D-038 + t_05271be0 #1/#2 回归 + t_d086543b)", () => {
   it("hover 显隐规则已整体移除(无 toolbar-btn opacity 淡出)", () => {
     expect(css).not.toContain("toolbar-btn");
     expect(css).not.toContain('.titlebar .btn-pin[data-pinned="true"]');
@@ -102,8 +122,7 @@ describe("CSS 契约(D-038 + t_05271be0 #1/#2 回归)", () => {
     expect(ruleBlock(".titlebar .spacer")).toContain("min-width: 0");
   });
 
-  it(".panel 横向布局 + .panel-main 可收缩(侧栏定宽, 内容区不横向溢出)", () => {
-    // t_66b67453 契约1: .panel 重排 column(标题栏全宽第一行) + .panel-body 行(侧栏|内容)
+  it(".panel 纵向布局 + .panel-main 可收缩(t_d086543b 侧栏取消, 内容区全宽不溢出)", () => {
     expect(ruleBlock(".panel")).toContain("flex-direction: column");
     expect(ruleBlock(".panel-body")).toContain("flex-direction: row");
     const main = ruleBlock(".panel-main");
@@ -111,12 +130,12 @@ describe("CSS 契约(D-038 + t_05271be0 #1/#2 回归)", () => {
     expect(main).toContain("overflow: hidden");
   });
 
-  it("标题栏全宽(t_66b67453 契约1): .panel 无 row 布局, 侧栏从第二行开始", () => {
-    // 旧布局的判别特征: .panel flex-direction: row(侧栏与标题栏同行)必须消失
-    expect(ruleBlock(".panel")).not.toContain("flex-direction: row");
-    // 拖拽区仍在标题栏整行(现 = 全宽), 侧栏保持 no-drag
+  it("侧栏 CSS 已整体删除; 底边栏存在且内容带 icon+label(不是空栏)", () => {
+    // 旧布局的判别特征: .sidebar / .sidebar-btn 规则必须消失
+    expect(css).not.toContain(".sidebar");
+    expect(ruleBlock(".bottombar")).toContain("border-top: 1px solid var(--border)");
+    // 拖拽区仍在标题栏整行; 底栏按钮 no-drag 由继承 .btn 覆盖(标题栏拖拽不扩散)
     expect(ruleBlock(".titlebar")).toContain("-webkit-app-region: drag");
-    expect(ruleBlock(".sidebar")).toContain("-webkit-app-region: no-drag");
   });
 
   it(".bar-row 无透明左缘占位(评审③④: 2px border 对齐漂移源已移除, audit §2.1 L300 收敛)", () => {

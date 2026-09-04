@@ -82,7 +82,7 @@ body {
   backdrop-filter: var(--card-blur);
 }
 
-/* t_66b67453 契约1: 标题栏之下的主体行 = 左侧窄功能侧栏 + 内容区(横向) */
+/* t_66b67453 契约1: 标题栏之下的主体区(原 侧栏+内容 横向布局; t_d086543b 侧栏取消后仅剩内容区, 保留行容器) */
 .panel-body {
   flex: 1;
   min-height: 0;
@@ -102,46 +102,45 @@ body {
   overflow: hidden;
 }
 
-/* ---- D-038 左侧窄功能侧栏(全局动作: 添加 / 刷新 / 设置) ----
- * 宽 44px 定宽常驻, 与面板同高; 与内容区之间用 --border 分隔。
- * ⚠️ 整栏 no-drag: 无边框窗(D-033)的 -webkit-app-region: drag 若覆盖侧栏,
- *   按钮点击会被拖拽区吃掉(标题栏同款处理见 .titlebar .btn)。 */
-.sidebar {
-  flex: 0 0 44px;
-  width: 44px;
+/* ---- t_d086543b 底边栏(侧栏取消后全局动作: 添加 / 设置) ----
+ * 高 ~36px 一条窄栏: icon 16 + 文字 12 + 上下 padding(4/8 网格)。
+ * 两个按钮左右分布(space-between), 带 icon+label 有实际内容 —— 不是空栏。
+ * 底色 .bg-elev + 上缘 1px --border 与内容区分界; hover/active 走既有 token。 */
+.bottombar {
+  flex: 0 0 auto;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--space-8);
-  padding: 8px 0;
-  border-right: 1px solid var(--border);
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-8);
+  border-top: 1px solid var(--border);
   background: var(--bg-elev);
   -webkit-app-region: no-drag;
 }
 
-/* 弹性空隙: 添加/刷新贴顶, 设置沉底 */
-.sidebar-spacer {
-  flex: 1;
-}
-
-.sidebar-btn {
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border-color: transparent; /* 常态无框(窄栏内减噪), hover 才浮出底色 */
+.bottombar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 28px;
+  padding: 0 var(--space-8);
   color: var(--fg-dim);
 }
 
-.sidebar-btn:hover {
+.bottombar-btn:hover {
   background: var(--bg-hover);
   color: var(--fg);
 }
 
-/* active/focus 态用既有 --accent(D-016, 不新增强调色) */
-.sidebar-btn:active,
-.sidebar-btn:focus-visible {
+.bottombar-btn:active,
+.bottombar-btn:focus-visible {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+.bottombar-label {
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 /* ---- 标题栏(§6.5, D-038 瘦身: 全局状态点 / 标题 / 图钉 / 最小化 / 关闭) ---- */
@@ -240,8 +239,8 @@ body {
   stroke: var(--accent);
 }
 
-/* 刷新中: 侧栏刷新钮图标旋转(D-038 图标为手绘 SVG) */
-.sidebar-btn.spinning svg {
+/* 刷新中: 刷新钮图标旋转(原侧栏按钮类; t_d086543b 后刷新钮在标题栏, 泛化为 .btn-icon.spinning) */
+.btn-icon.spinning svg {
   animation: tw-spin 0.8s linear infinite;
 }
 
@@ -1054,12 +1053,6 @@ body {
   /* P1: 弹窗内部滚动不穿透 — 滚到底后背景面板完全不跟滚(链式滚动截断) */
   overscroll-behavior: contain;
   padding-bottom: 12px;
-}
-
-.sort-controls {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .settings-section {

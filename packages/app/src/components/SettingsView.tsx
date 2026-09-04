@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { ThemeMode } from "../theme";
-import type { SortConfig, SortDir, SortKey } from "../health";
 import {
   getBootstrap,
   getStoragePaths,
@@ -36,9 +35,6 @@ interface Props {
   /** 玻璃特效开关(2026-09-03): 半透明面板 + 背景模糊, 正交于主题三态 */
   glass: boolean;
   onGlass: (g: boolean) => void;
-  /** 卡间排序配置(#829 R1): key(名称|紧要度)×dir(正排|倒排), 由 App 持有并持久化 */
-  sortConfig: SortConfig;
-  onSortConfig: (c: SortConfig) => void;
   onBack: () => void;
   /** theme-glass 实验入口: 打开进度条形态方案页(可选, 缺省不渲染入口) */
   onOpenQuota?: () => void;
@@ -46,26 +42,15 @@ interface Props {
   variant?: "page" | "modal";
 }
 
-const SORT_KEY_OPTIONS: { id: SortKey; labelKey: string }[] = [
-  { id: "name", labelKey: "set.sortName" },
-  { id: "urgency", labelKey: "set.sortUrgency" },
-  { id: "manual", labelKey: "set.sortManual" },
-];
-
-const SORT_DIR_OPTIONS: { id: SortDir; labelKey: string }[] = [
-  { id: "asc", labelKey: "set.sortAsc" },
-  { id: "desc", labelKey: "set.sortDesc" },
-];
-
 /**
  * 设置页 = 纯偏好页(D-038 瘦身; D-010/D-019/D-024/#829 R1/R3):
- * - 主题(D-010): 跟随系统/浅色/深色 —— 标题栏主题切换钮已移除, 此处是唯一入口
- * - 排序(#829 R1): 键(名称/紧要度)×方向(正排/倒排)两正交控件, 缺省名称正排
+ * - 主题(D-010): 跟随系统/浅色/深色 —— 标题栏 ☀ 钮快切与此处三档同走一套 theme state
+ * - 排序(t_d086543b 简化): 排序只留手动, 无选择控件 —— 仅提示「拖动卡片自定义顺序」
  * - 开机自启(D-024): 默认关
  * - 存储路径展示(D-019): 运行时解析
  * - 布局(#829 R3): .settings-head 固定不滚动, 滚动只发生在 .settings-body 内容区
  *
- * **不再承载 provider 管理**(D-038 操作分区): 添加 = 侧栏 ＋(AddProviderWizard),
+ * **不再承载 provider 管理**(D-038 操作分区): 添加 = 底边栏 ＋(AddProviderWizard),
  * 删除 = provider 卡内删除钮。此处不得再出现实例列表/增删按钮。
  */
 export function SettingsView({
@@ -73,8 +58,6 @@ export function SettingsView({
   onThemeMode,
   glass,
   onGlass,
-  sortConfig,
-  onSortConfig,
   onBack,
   variant = "page",
   onOpenQuota,
@@ -184,36 +167,8 @@ export function SettingsView({
 
         <section className="settings-section" data-testid="sort-sec">
           <h4>{t("set.sort")}</h4>
-          <div className="sort-controls">
-            <div className="seg" data-testid="sort-key-seg">
-              {SORT_KEY_OPTIONS.map((o) => (
-                <button
-                  key={o.id}
-                  type="button"
-                  className={`btn${sortConfig.key === o.id ? " active" : ""}`}
-                  data-testid={`sort-key-${o.id}`}
-                  onClick={() => onSortConfig({ ...sortConfig, key: o.id })}
-                >
-                  {tKey(o.labelKey)}
-                </button>
-              ))}
-            </div>
-            {/* D-039: 手动模式按拖拽顺序排列, dir 无意义 → 禁用方向控件(契约: manual 持久化 dir:"asc") */}
-            <div className="seg" data-testid="sort-dir-seg">
-              {SORT_DIR_OPTIONS.map((o) => (
-                <button
-                  key={o.id}
-                  type="button"
-                  className={`btn${sortConfig.dir === o.id ? " active" : ""}`}
-                  data-testid={`sort-dir-${o.id}`}
-                  disabled={sortConfig.key === "manual"}
-                  onClick={() => onSortConfig({ ...sortConfig, dir: o.id })}
-                >
-                  {tKey(o.labelKey)}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* t_d086543b: 排序只留手动 —— 无选择控件; 提示性文案说明拖拽即排序
+              (选择控件 sort-key-* / sort-dir-* 已全部移除) */}
           <p className="hint">{t("set.sortHint")}</p>
         </section>
 

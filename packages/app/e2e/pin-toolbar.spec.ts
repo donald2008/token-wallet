@@ -28,6 +28,8 @@ test("标题栏控件常显(D-038): 鼠标在面板外/面板内 opacity 均为 
   const pinBtn = page.getByTestId("pin-btn");
   const minBtn = page.getByTestId("win-min-btn");
   const closeBtn = page.getByTestId("win-close-btn");
+  const refreshBtn = page.locator('.titlebar [data-testid="refresh-btn"]');
+  const themeBtn = page.locator('.titlebar [data-testid="theme-cycle-btn"]');
 
   // 鼠标在面板外(8px 透明边) → 三控件依然全显(旧版此时会淡出到 opacity 0)
   await page.mouse.move(2, 2);
@@ -43,8 +45,12 @@ test("标题栏控件常显(D-038): 鼠标在面板外/面板内 opacity 均为 
     await pwExpect(btn).toHaveCSS("opacity", "1");
   }
 
-  // 标题栏内不再有刷新/设置/主题三钮(迁侧栏 + 设置页)
-  await pwExpect(page.locator('.titlebar [data-testid="refresh-btn"]')).toHaveCount(0);
+  // t_d086543b: 标题栏含 刷新+主题快切(icon 小钮), 常显同口径; 设置/添加在底边栏
+  for (const btn of [refreshBtn, themeBtn]) {
+    await pwExpect(btn).toHaveCSS("opacity", "1");
+  }
+  await pwExpect(page.locator('.titlebar [data-testid="refresh-btn"]')).toHaveCount(1);
+  await pwExpect(page.locator('.titlebar [data-testid="theme-cycle-btn"]')).toHaveCount(1);
   await pwExpect(page.locator('.titlebar [data-testid="settings-btn"]')).toHaveCount(0);
   await pwExpect(page.getByTestId("theme-toggle")).toHaveCount(0);
 });

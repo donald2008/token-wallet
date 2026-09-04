@@ -105,12 +105,12 @@ test("command 通道: CLI 重新授权后点 ⟳ → 15s 内恢复(不重启 app
 
   // 2) 采集失败 → error 卡
   await page.evaluate(() => localStorage.setItem("token-wallet.mock.commandfail", "1"));
-  await page.getByTestId("sidebar").getByTestId("refresh-btn").click();
+  await page.locator('.titlebar [data-testid="refresh-btn"]').click();
   await pwExpect(card).toContainText("采集失败", { timeout: 15_000 });
 
   // 3) 用户在 CLI 完成修复(模拟: 撤掉失败标记) → 点 ⟳ 不重启 → 卡片恢复 ok
   await page.evaluate(() => localStorage.removeItem("token-wallet.mock.commandfail"));
-  await page.getByTestId("sidebar").getByTestId("refresh-btn").click();
+  await page.locator('.titlebar [data-testid="refresh-btn"]').click();
   await pwExpect(card).toHaveAttribute("data-health", "ok", { timeout: 15_000 });
   await pwExpect(card).toContainText("37.9"); // 健康 mock 值(37.9% → 文案一位小数)
 });

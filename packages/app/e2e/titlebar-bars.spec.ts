@@ -42,7 +42,7 @@ test("标题栏: 360px 视口下置顶切换不撑高 titlebar, 按钮文字不�
   const titlebar = page.locator(".titlebar");
   const pinBtn = page.getByTestId("pin-btn");
 
-  // D-038: 主题按钮已从标题栏移除(唯一入口 = 设置页既有分段控件)
+  // t_d086543b: 主题快切已回标题栏(theme-cycle-btn); 旧 theme-toggle 控件不存在
   await pwExpect(page.getByTestId("theme-toggle")).toHaveCount(0);
 
   // CSS 层: 按钮文字禁止换行(根因①, .btn 全局 nowrap)

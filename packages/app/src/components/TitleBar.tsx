@@ -2,6 +2,9 @@ import type { HealthLevel } from "../types";
 import { StatusDot } from "./StatusDot";
 import { winClose, winMinimize } from "../ipc";
 import { t } from "../i18n";
+import type { ThemeMode } from "../theme";
+import { themeLabel } from "../theme";
+import { ThemeQuickIcon } from "./icons";
 
 interface Props {
   health: HealthLevel;
@@ -9,20 +12,25 @@ interface Props {
   /** 窗口置顶态(P1): true=已置顶(图钉实心高亮) */
   pinned: boolean;
   onTogglePin: () => void;
+  /** t_d086543b: 手动刷新(原侧栏 ⟳ 钮迁入标题栏) */
+  refreshing: boolean;
+  onRefresh: () => void;
+  /** t_d086543b: 主题快切(原侧栏 ☀ 钮迁入标题栏); 图标反映当前 mode, 与设置弹窗三态同 state */
+  themeMode: ThemeMode;
+  onCycleTheme: () => void;
 }
 
 /**
- * 标题栏(§6.5, D-038 瘦身): 全局状态点 / app-title / 图钉置顶 / 最小化 / 关闭。
+ * 标题栏(§6.5, D-038 瘦身 + t_d086543b 重排): 全局状态点 / app-title / 弹性空隙 /
+ * 刷新 + 主题快切 / 图钉置顶 / 最小化 / 关闭。
  *
- * D-038 变更:
- * - 移除 刷新 / 设置 / 主题切换 三钮 —— 刷新与设置迁入左侧窄侧栏(全局动作分区),
- *   主题切换只留设置页(不新增控件)。
- * - **hover 显隐逻辑整体移除**: 三个控件(图钉/最小化/关闭)全部常显, 图钉不再有
- *   \"置顶时常显\"特判(常显即无需特判)。少而常显 > 多而隐藏。
- *
- * 无边框窗(D-033): 整栏拖拽由 CSS -webkit-app-region: drag 提供(app.css .titlebar),
- * 交互控件一律 no-drag; min/close 走 win_minimize / win_close IPC。
- * 图钉为手写 SVG(D-002 不引图标库), 置顶态填充 var(--accent)(D-016 既有 token)。
+ * t_d086543b 变更(用户拍板 2026-09-04, 侧栏整体取消):
+ * - **刷新 / 主题快切**从左侧窄栏迁入标题栏(icon 小钮, 与图钉同宽 30px 命中区)。
+ *   标题栏宽度预算: 360px 窗内 5 个 icon 钮 + 状态点 + 标题, 由 .spacer 收缩标题;
+ *   按钮全部 .btn-icon(30px), 不额外加宽, 布局不发胖。
+ * - 原 D-038 注释的「移除 刷新/设置/主题三钮」已随本次重排废止 —— 刷新/主题回归标题栏,
+ *   添加/设置落在新增底边栏(BottomBar)。
+ * - 所有控件常显(无 hover 显隐); 图钉 no-drag, min/close 走 win_minimize / win_close IPC。
  */
 export function TitleBar(props: Props) {
   return (
@@ -32,6 +40,45 @@ export function TitleBar(props: Props) {
       </span>
       <span className="app-title no-drag">token-wallet</span>
       <span className="spacer" />
+      <button
+        type="button"
+        className={`btn btn-icon${props.refreshing ? " spinning" : ""}`}
+        data-testid="refresh-btn"
+        title={t("side.refresh")}
+        aria-label={t("side.refresh")}
+        onClick={props.onRefresh}
+      >
+        {/* 手绘环形箭头(缺口圆弧 + 箭头, 原侧栏刷新 SVG 平移) */}
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path
+            d="M13 8a5 5 0 1 1-1.9-3.9"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+          />
+          <path
+            d="M13.2 1.9v2.6h-2.6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="btn btn-icon"
+        data-testid="theme-cycle-btn"
+        data-theme-mode={props.themeMode}
+        title={t("side.themeTitle", { mode: themeLabel(props.themeMode) })}
+        aria-label={t("side.themeTitle", { mode: themeLabel(props.themeMode) })}
+        onClick={props.onCycleTheme}
+      >
+        {/* 手绘主题图标(随 mode 切换): system=半日半月 / light=太阳 / dark=月亮 */}
+        <ThemeQuickIcon mode={props.themeMode} />
+      </button>
       <button
         type="button"
         className="btn btn-icon btn-pin"

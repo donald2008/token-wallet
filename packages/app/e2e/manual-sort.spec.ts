@@ -2,11 +2,11 @@ import { expect as pwExpect } from "@playwright/test";
 import { test, getCapturedInvokes } from "./fixtures";
 
 /**
- * L2(D-039 卡片拖动排序): manual 模式(拖动即切 + order 持久化 + 实例集为真相源) + 设置页排序三档。
+ * L2(D-039 + t_d086543b): manual(拖拽)排序 —— 排序只留手动后的行为契约。
  *
  * 覆盖验收:
- *   - 拖 A 到首位 → 面板顺序变 + 设置页显示「手动」+ 重启后顺序保持
- *   - 切名称排序再切回手动 → 自定义顺序恢复(order 保留不清)
+ *   - 拖 A 到首位 → 面板顺序变 + 重启后顺序保持(设置页只剩手动提示, 无排序控件)
+ *   - 旧持久化 name 配置带 order → 归一化 manual 且 order 保留(顺序仍按自定义)
  *   - 删除一张后 order 幽灵 id 不影响渲染(实例集合是真相源)
  *   - 拖动过程(未松手)无写盘: set_sort_config 调用次数 = drop 次数
  */
@@ -73,7 +73,7 @@ async function dragCard(
 }
 
 async function openSettingsModal(page: import("@playwright/test").Page) {
-  await page.getByTestId("sidebar").getByTestId("settings-btn").click();
+  await page.getByTestId("bottombar").getByTestId("settings-btn").click();
   await pwExpect(page.getByTestId("settings-overlay")).toBeVisible();
 }
 
@@ -98,25 +98,26 @@ test("拖 A 到首位 → 面板顺序变 + 设置页显示手动 + 重启后顺
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(3);
   pwExpect(await cardOrder(page)).toEqual(["charlie", "alpha", "bravo"]);
 
-  // 设置页显示「手动」且高亮; 方向控件禁用(manual 按拖拽顺序)
+  // 设置页: 排序只留手动 → 只剩提示性文案, 无选择控件(sort-key-*/sort-dir-* 已移除)
   await openSettingsModal(page);
-  await pwExpect(page.getByTestId("sort-key-manual")).toHaveClass(/active/);
-  await pwExpect(page.getByTestId("sort-dir-asc")).toBeDisabled();
-  await pwExpect(page.getByTestId("sort-dir-desc")).toBeDisabled();
+  await pwExpect(page.getByTestId("sort-sec")).toBeVisible();
+  await pwExpect(page.getByTestId("sort-sec")).toContainText("拖动");
+  await pwExpect(page.locator('[data-testid^="sort-key-"], [data-testid^="sort-dir-"]')).toHaveCount(0);
   await page.getByTestId("settings-close").click();
 
   // 重启后顺序保持(manual order 持久化到 mock localStorage)
   await page.reload();
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(3);
   pwExpect(await cardOrder(page)).toEqual(["charlie", "alpha", "bravo"]);
-  // 设置页仍是手动
+  // 设置页仍是手动提示(无选择控件)
   await openSettingsModal(page);
-  await pwExpect(page.getByTestId("sort-key-manual")).toHaveClass(/active/);
+  await pwExpect(page.getByTestId("sort-sec")).toContainText("拖动");
+  await pwExpect(page.locator('[data-testid^="sort-key-"], [data-testid^="sort-dir-"]')).toHaveCount(0);
 });
 
-/* ---------- 2. 切名称再切回手动 → 自定义顺序恢复 ---------- */
+/* ---------- 2. 旧持久化 name 配置 → 归一化 manual, order 保留(t_d086543b) ---------- */
 
-test("切名称排序再切回手动 → 自定义顺序恢复(order 保留不清, D-039)", async ({
+test("旧 name 排序配置带 order → 归一化 manual 且自定义顺序仍生效(t_d086543b)", async ({
   hostPage,
   page,
 }) => {
@@ -127,22 +128,19 @@ test("切名称排序再切回手动 → 自定义顺序恢复(order 保留不�
     inst("charlie", "Charlie", "deepseek/balance"),
   ]);
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(3);
-
-  // 先拖出自定义顺序: Charlie 到首位
-  await dragCard(page, "charlie", "alpha", "above");
-  pwExpect(await cardOrder(page)).toEqual(["charlie", "alpha", "bravo"]);
-
-  // 切到名称正排 → 面板按名称排, order 保留在配置里
-  await openSettingsModal(page);
-  await page.getByTestId("sort-key-name").click();
-  await pwExpect(page.getByTestId("sort-key-name")).toHaveClass(/active/);
-  await page.getByTestId("settings-close").click();
   pwExpect(await cardOrder(page)).toEqual(["alpha", "bravo", "charlie"]);
 
-  // 切回手动 → 自定义顺序恢复
-  await openSettingsModal(page);
-  await page.getByTestId("sort-key-manual").click();
-  await page.getByTestId("settings-close").click();
+  // 预置 #829 R1 时代遗留配置: 名称正排 + 自定义 order(charlie 首位)
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "token-wallet.mock.sort-config.v1",
+      JSON.stringify({ key: "name", dir: "asc", order: ["charlie", "alpha", "bravo"] }),
+    );
+  });
+  await page.reload();
+  await pwExpect(page.getByTestId("provider-card")).toHaveCount(3);
+
+  // 归一化 manual 后 order 保留 → 面板仍按自定义顺序(charlie 首位), 不退回名称正排
   pwExpect(await cardOrder(page)).toEqual(["charlie", "alpha", "bravo"]);
 });
 

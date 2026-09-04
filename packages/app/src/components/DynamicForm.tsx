@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChannelDescriptor } from "@token-wallet/core/channels";
-import { defaultInstanceName, findKeyDuplicate, keyFingerprint } from "../instances/schema";
+import { defaultInstanceName, findKeyDuplicate, keyFingerprint, type InstanceConfig } from "../instances/schema";
 import { existingInstances, existingNames, getSharedKeyring, saveInstance } from "../instances/store";
 import { testConnection } from "../connection/testConnection";
 import { t } from "../i18n";
@@ -16,8 +16,8 @@ import type { ProviderSnapshot } from "../types";
 
 interface Props {
   channel: ChannelDescriptor;
-  /* 保存已完成(实例已入 store + 钥匙串) */
-  onSaved?: () => void;
+  /* 保存已完成(实例已入 store + 钥匙串); 携带新实例供上层做「置顶」等后续(t_d086543b) */
+  onSaved?: (inst: InstanceConfig) => void;
   onBack?: () => void;
 }
 
@@ -134,7 +134,7 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
     setPending(true);
     try {
       // 保存: secret 值写入钥匙串 + 配置入 store(D-029, §5.0.1)
-      await saveInstance({
+      const saved = await saveInstance({
         id: `inst-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         channel: channel.channel,
         name: name.trim(),
@@ -144,7 +144,8 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
         keyring: getSharedKeyring(),
       });
       setSavedMsg(t("form.saved"));
-      onSaved?.();
+      // t_d086543b: onSaved 携带新实例(App 用它做 order prepend → 新 provider 置顶)
+      onSaved?.(saved);
     } finally {
       setPending(false);
     }

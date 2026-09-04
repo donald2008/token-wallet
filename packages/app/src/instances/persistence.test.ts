@@ -77,7 +77,8 @@ describe("instances.yaml 持久化(P0-7)", () => {
 
     store.add(inst("n", "新增"));
     expect(seen).toHaveLength(1);
-    expect(seen[0]!.map((i) => i.id)).toEqual(["h", "n"]);
+    // t_d086543b: 新 provider 插入第一位(unshift; 实例序 = 持久化序, 重启后新卡仍在首位)
+    expect(seen[0]!.map((i) => i.id)).toEqual(["n", "h"]);
 
     store.remove("h", keyring);
     expect(seen).toHaveLength(2);

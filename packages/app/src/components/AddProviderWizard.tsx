@@ -2,6 +2,7 @@ import { useState } from "react";
 import { t } from "../i18n";
 import type { ChannelDescriptor } from "@token-wallet/core/channels";
 import { useInstances } from "../instances/store";
+import type { InstanceConfig } from "../instances/schema";
 import { ChannelTree } from "./ChannelTree";
 import { DynamicForm } from "./DynamicForm";
 
@@ -10,20 +11,23 @@ interface Props {
   onBack: () => void;
   /** page = 首开引导页内导航(D-021); modal = 侧栏 ＋ 添加 打开的弹窗 */
   variant?: "page" | "modal";
+  /** t_d086543b: 保存成功回调(携带新实例, 供 App 做 order prepend → 新 provider 置顶);
+   *  缺省时仅执行 onBack(关闭向导) */
+  onSavedProvider?: (inst: InstanceConfig) => void;
 }
 
 /**
  * 添加 Provider 向导(D-038 从设置页独立出来, 流程本体不变):
  * 选平台(树形通道选择器 D-025) → 填 key(动态表单 D-017/D-026) → 保存。
  *
- * 入口(D-038 操作分区): 侧栏 ＋ 添加(modal) / 空态大按钮引导首加(page, D-021 不变)。
+ * 入口(D-038 操作分区): 底边栏 ＋ 添加(modal) / 空态大按钮引导首加(page, D-021 不变)。
  * 设置弹窗不再承载添加入口与实例列表(设置 = 纯偏好页)。
  *
  * 结构与设置弹窗同构(.settings-view/.settings-head/.settings-body):
  * head 固定不滚, 滚动只在 body(#829 R3 语义沿用)。
- * 保存成功 → 直接关闭向导回面板(新卡即时出现), 不再回落到\"实例列表\"。
+ * 保存成功 → 直接关闭向导回面板(新卡即时出现), 不再回落到"实例列表"。
  */
-export function AddProviderWizard({ onBack, variant = "page" }: Props) {
+export function AddProviderWizard({ onBack, variant = "page", onSavedProvider }: Props) {
   const instances = useInstances();
   const [step, setStep] = useState<"add-channel" | "fill-form">("add-channel");
   const [selectedChannel, setSelectedChannel] = useState<ChannelDescriptor | null>(null);
@@ -73,7 +77,11 @@ export function AddProviderWizard({ onBack, variant = "page" }: Props) {
                 setStep("add-channel");
                 setSelectedChannel(null);
               }}
-              onSaved={onBack}
+              onSaved={(inst) => {
+                // 保存成功: 先让上层处理新实例(置顶), 再关向导回面板
+                onSavedProvider?.(inst);
+                onBack();
+              }}
             />
           </section>
         )}

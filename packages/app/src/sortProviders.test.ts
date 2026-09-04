@@ -1,6 +1,6 @@
-// L1(#829 R1, t_c31e6099): sortProviders —— 卡间排序 key(名称|紧要度)×dir(正排|倒排) 两正交参数。
-// 覆盖: 四象限 / 缺省值(名称正排) / limit 缺失卡排最后 / 同比例并列按健康度稳定 / 名称并列稳定 /
-// normalizeSortConfig 非法值兜底 / sortByHealth 保留回归(urgency 次级稳定键)。
+// L1(t_d086543b): sortProviders —— 卡间排序只留手动(order 交集语义, 名称/紧要度自动排序已移除)。
+// 覆盖: order 交集 / 尾部名称正排追加 / 幽灵 id 忽略 / order 缺失退化 / normalizeSortConfig 全归一 manual /
+// 旧持久化 name|urgency 配置 → manual(order 保留) / reorderByIds / sortByHealth 保留回归。
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SORT_CONFIG,
@@ -33,194 +33,37 @@ function names(list: ProviderSnapshot[]): string[] {
   return list.map((p) => p.display_name);
 }
 
-describe("sortProviders: name 键(localeCompare 自然序)", () => {
-  const cards = [snap("beta"), snap("Alpha"), snap("gamma 10"), snap("gamma 2")];
-
-  it("asc 正排(缺省默认)", () => {
-    expect(names(sortProviders(cards, { key: "name", dir: "asc" }))).toEqual([
-      "Alpha",
-      "beta",
-      "gamma 2",
-      "gamma 10",
-    ]);
-    // 缺省 = 名称正排(无历史设置时的出厂行为)
-    expect(DEFAULT_SORT_CONFIG).toEqual({ key: "name", dir: "asc" });
-    expect(names(sortProviders(cards))).toEqual(["Alpha", "beta", "gamma 2", "gamma 10"]);
-  });
-
-  it("desc 倒排 = asc 整体反转", () => {
-    expect(names(sortProviders(cards, { key: "name", dir: "desc" }))).toEqual([
-      "gamma 10",
-      "gamma 2",
-      "beta",
-      "Alpha",
-    ]);
-  });
-
-  it("同名并列保持原相对顺序(稳定)", () => {
-    const dup = [snap("same", "ok"), snap("other"), snap("same", "error")];
-    const sorted = sortProviders(dup, { key: "name", dir: "asc" });
-    // "other" < "same"; 两个 same 之间保持输入顺序: 先 ok 后 error
-    expect(names(sorted)).toEqual(["other", "same", "same"]);
-    expect(sorted[1].status).toBe("ok");
-    expect(sorted[2].status).toBe("error");
-  });
-
-  it("中文名拼音序 + 中英混合(locale 显式钉 zh, 不随运行时默认 locale 漂移, t_6c6dd54f)", () => {
-    // zh 拼音序: 百炼(bai) < 方舟(fang) < DeepSeek(d) < Kimi(k)
-    // —— 拼音与拉丁同序列比对, 与 en(拉丁整体在前)不同; 钉 zh 后 Node/Chrome 结果一致
-    const cards = [snap("Kimi"), snap("方舟"), snap("DeepSeek"), snap("百炼")];
-    expect(names(sortProviders(cards, { key: "name", dir: "asc" }))).toEqual([
-      "百炼",
-      "方舟",
-      "DeepSeek",
-      "Kimi",
-    ]);
-    // 与 e2e 期望值计算同式(localeCompare 钉 zh) —— 两侧锁同一语义
-    const e2eNames = ["Kimi", "方舟", "DeepSeek", "百炼"];
-    expect([...e2eNames].sort((a, b) => a.localeCompare(b, "zh", { numeric: true }))).toEqual([
-      "百炼",
-      "方舟",
-      "DeepSeek",
-      "Kimi",
-    ]);
-  });
-});
-
-describe("sortProviders: urgency 键(卡内最紧窗口剩余比例)", () => {
-  // tightest: 剩余 10% / loose: 剩余 90% / nolimit: limit 缺失 → 视为 1(排最后)
-  const tight = snap("tight", "ok", [metric(90, 100)]);
-  const loose = snap("loose", "ok", [metric(10, 100)]);
-  const noLimit = snap("nolimit", "ok", [metric(5)]);
-  const zeroLimit = snap("zerolimit", "ok", [metric(5, 0)]);
-  const cards = [noLimit, loose, tight, zeroLimit];
-
-  it("asc: 越快耗尽越靠前; limit 缺失/为 0 排最后不崩", () => {
-    expect(names(sortProviders(cards, { key: "urgency", dir: "asc" }))).toEqual([
-      "tight",
-      "loose",
-      "nolimit",
-      "zerolimit",
-    ]);
-  });
-
-  it("desc: 整体反转(limit 缺失卡到最前)", () => {
-    expect(names(sortProviders(cards, { key: "urgency", dir: "desc" }))).toEqual([
-      "zerolimit",
-      "nolimit",
-      "loose",
-      "tight",
-    ]);
-  });
-
-  it("同比例并列 → sortByHealth 次序稳定(健康差在前)", () => {
-    // 两张卡剩余比例同为 1(无 limit): error(红) 应在 stale(灰) 前
-    const err = snap("z-err", "error");
-    const stale = snap("a-stale", "stale");
-    expect(names(sortProviders([stale, err], { key: "urgency", dir: "asc" }))).toEqual([
-      "z-err",
-      "a-stale",
-    ]);
-  });
-});
-
-describe("normalizeSortConfig: 非法/缺失 → 缺省名称正排, 不抛错", () => {
-  it("合法值原样通过", () => {
-    expect(normalizeSortConfig({ key: "urgency", dir: "desc" })).toEqual({
-      key: "urgency",
-      dir: "desc",
-    });
-  });
-
-  it("非法 key/dir/非对象/null → 缺省", () => {
-    for (const raw of [
-      null,
-      undefined,
-      "urgency",
-      [],
-      { key: "size", dir: "asc" },
-      { key: "name", dir: "up" },
-      { key: "name" },
-      { dir: "asc" },
-      {},
-    ]) {
-      expect(normalizeSortConfig(raw)).toEqual(DEFAULT_SORT_CONFIG);
-    }
-  });
-});
-
-describe("normalizeSortConfig: manual(D-039)", () => {
-  it("接受 manual; dir 强制 asc(契约 §3 持久化 {key:manual,dir:asc,order})", () => {
-    expect(normalizeSortConfig({ key: "manual", dir: "desc", order: ["b", "a"] })).toEqual({
-      key: "manual",
-      dir: "asc",
-      order: ["b", "a"],
-    });
-    expect(normalizeSortConfig({ key: "manual" })).toEqual({ key: "manual", dir: "asc" });
-  });
-
-  it("order 非数组/空数组/含非字符串 → 过滤或省略, 不崩", () => {
-    expect(normalizeSortConfig({ key: "manual", order: "nope" })).toEqual({
-      key: "manual",
-      dir: "asc",
-    });
-    expect(normalizeSortConfig({ key: "manual", order: [] })).toEqual({ key: "manual", dir: "asc" });
-    expect(normalizeSortConfig({ key: "manual", order: ["a", 42, "b", null] })).toEqual({
-      key: "manual",
-      dir: "asc",
-      order: ["a", "b"],
-    });
-  });
-
-  it("非 manual 配置带 order → order 保留(切换回 manual 可恢复, 契约 §2/§3)", () => {
-    expect(normalizeSortConfig({ key: "name", dir: "asc", order: ["b", "a"] })).toEqual({
-      key: "name",
-      dir: "asc",
-      order: ["b", "a"],
-    });
-    expect(normalizeSortConfig({ key: "urgency", dir: "desc", order: ["a", "b"] })).toEqual({
-      key: "urgency",
-      dir: "desc",
-      order: ["a", "b"],
-    });
-  });
-});
-
-describe("sortProviders: manual(D-039 order 交集)", () => {
+describe("sortProviders: manual 只留手动(t_d086543b)", () => {
   const A = snap("a", "ok", [metric(50, 100)]);
   const B = snap("b", "ok", [metric(50, 100)]);
   const C = snap("c", "ok", [metric(50, 100)]);
   // 注: snap(id) 的 display_name = id(拉丁), NAME_COLLATOR(zh) 对拉丁串按码位序: a<b<c<d
 
-  it("按 order 顺序排(交集); dir 忽略(manual 固定 asc)", () => {
-    // dir 即使 desc 也不反转 —— manual 语义是「用户拖出来的顺序」
-    expect(names(sortProviders([A, B, C], { key: "manual", dir: "desc", order: ["c", "a", "b"] }))).toEqual([
+  it("缺省 = manual; 无 order 时按名称正排(与旧缺省视觉一致)", () => {
+    expect(DEFAULT_SORT_CONFIG).toEqual({ key: "manual", dir: "asc" });
+    expect(names(sortProviders([C, A, B]))).toEqual(["a", "b", "c"]);
+    expect(names(sortProviders([C, A, B], { key: "manual", dir: "asc" }))).toEqual(["a", "b", "c"]);
+  });
+
+  it("按 order 顺序排(交集); 恒 asc 语义(不反转)", () => {
+    expect(names(sortProviders([A, B, C], { key: "manual", dir: "asc", order: ["c", "a", "b"] }))).toEqual([
       "c",
       "a",
       "b",
     ]);
-    expect(names(sortProviders([A, B, C], { key: "manual", dir: "desc", order: ["c", "a"] }))).toEqual([
+    expect(names(sortProviders([A, B, C], { key: "manual", dir: "asc", order: ["c", "a"] }))).toEqual([
       "c",
       "a",
       "b",
     ]);
   });
 
-  it("order 里没有的 id(新添加/历史漂移)按缺省规则(名称正排)追加尾部", () => {
+  it("order 里没有的 id(历史漂移/从未拖过)按名称正排追加尾部", () => {
     // order 只有 c; a/b 不在 order → 尾部按名称正排: a < b
     expect(names(sortProviders([A, B, C], { key: "manual", dir: "asc", order: ["c"] }))).toEqual([
       "c",
       "a",
       "b",
-    ]);
-    // 全新 provider d 未在 order(新添加) → 按名称正排追加尾部(a < b < d)
-    const D = snap("d", "ok", [metric(50, 100)]);
-    const cards = [A, B, C, D];
-    expect(names(sortProviders(cards, { key: "manual", dir: "asc", order: ["c"] }))).toEqual([
-      "c",
-      "a",
-      "b",
-      "d",
     ]);
   });
 
@@ -230,7 +73,7 @@ describe("sortProviders: manual(D-039 order 交集)", () => {
     ).toEqual(["a", "b"]);
   });
 
-  it("order 缺失/空 → 退化为名称正排(实例集合是真相源)", () => {
+  it("order 缺失/空 → 名称正排(实例集合是真相源)", () => {
     expect(names(sortProviders([A, B, C], { key: "manual", dir: "asc" }))).toEqual(["a", "b", "c"]);
     expect(names(sortProviders([A, B, C], { key: "manual", dir: "asc", order: [] }))).toEqual([
       "a",
@@ -239,13 +82,55 @@ describe("sortProviders: manual(D-039 order 交集)", () => {
     ]);
   });
 
-  it("order 保留切换恢复: 切回 manual 后自定义顺序恢复(契约 §2)", () => {
-    // 模拟: manual 存了 order → 切 name(保留 order) → 切回 manual → 恢复
-    const manualCfg = normalizeSortConfig({ key: "manual", dir: "asc", order: ["c", "a", "b"] });
-    const nameCfg = { ...manualCfg, key: "name" as const };
-    expect(nameCfg.order).toEqual(["c", "a", "b"]); // 切换不清 order
-    const back = normalizeSortConfig({ ...nameCfg, key: "manual" });
-    expect(names(sortProviders([A, B, C], back))).toEqual(["c", "a", "b"]);
+  it("新 provider 置顶 = order 首插(由 App 保存回调写入); 尾部规则不吞新卡", () => {
+    // 模拟 App onProviderSaved: order = [newId, ...旧 order]
+    const D = snap("d", "ok", [metric(50, 100)]);
+    const cards = [A, B, C, D];
+    const cfg = { key: "manual" as const, dir: "asc" as const, order: ["d", "b", "a"] };
+    expect(names(sortProviders(cards, cfg))).toEqual(["d", "b", "a", "c"]);
+  });
+});
+
+describe("normalizeSortConfig: 全归一 manual(t_d086543b)", () => {
+  it("旧持久化 name/urgency → manual; dir 固定 asc; order 保留", () => {
+    expect(normalizeSortConfig({ key: "name", dir: "asc" })).toEqual({ key: "manual", dir: "asc" });
+    expect(normalizeSortConfig({ key: "urgency", dir: "desc" })).toEqual({ key: "manual", dir: "asc" });
+    expect(normalizeSortConfig({ key: "urgency", dir: "desc", order: ["a", "b"] })).toEqual({
+      key: "manual",
+      dir: "asc",
+      order: ["a", "b"],
+    });
+    expect(normalizeSortConfig({ key: "manual", dir: "desc", order: ["b", "a"] })).toEqual({
+      key: "manual",
+      dir: "asc",
+      order: ["b", "a"],
+    });
+  });
+
+  it("非法 key/非对象/null/缺失 → 缺省 manual, 不抛错", () => {
+    for (const raw of [
+      null,
+      undefined,
+      "manual",
+      [],
+      { key: "size", dir: "asc" },
+      { key: "manual", dir: "up" },
+      { key: "manual" },
+      { dir: "asc" },
+      {},
+    ]) {
+      expect(normalizeSortConfig(raw)).toEqual(DEFAULT_SORT_CONFIG);
+    }
+  });
+
+  it("order 非数组/空数组/含非字符串 → 过滤或省略, 不崩", () => {
+    expect(normalizeSortConfig({ key: "manual", order: "nope" })).toEqual({ key: "manual", dir: "asc" });
+    expect(normalizeSortConfig({ key: "manual", order: [] })).toEqual({ key: "manual", dir: "asc" });
+    expect(normalizeSortConfig({ key: "manual", order: ["a", 42, "b", null] })).toEqual({
+      key: "manual",
+      dir: "asc",
+      order: ["a", "b"],
+    });
   });
 });
 
@@ -264,7 +149,7 @@ describe("reorderByIds(D-039 拖动落点)", () => {
   });
 });
 
-describe("sortByHealth 保留回归(urgency 次级稳定键来源)", () => {
+describe("sortByHealth 保留回归(历史次级稳定键来源, 保留不删)", () => {
   it("健康带 > status 严重度 > 剩余比例 的三级次序不变", () => {
     const okTight = snap("ok-tight", "ok", [metric(50, 100)]); // 剩余 50% → ok 带
     const warnExpired = snap("warn-expired", "auth_expired"); // warn 带

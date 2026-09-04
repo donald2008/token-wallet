@@ -29,7 +29,7 @@ async function openAddFlow(page: import("@playwright/test").Page) {
 
 /** 侧栏 ＋ 添加 → 添加向导弹窗(非首开路径, D-038) */
 async function openAddModal(page: import("@playwright/test").Page) {
-  await page.getByTestId("sidebar-add").click();
+  await page.getByTestId("add-btn").click();
   await pwExpect(page.getByTestId("add-channel-step")).toBeVisible();
 }
 
@@ -243,45 +243,43 @@ test("首开向导回归: 空态添加 Provider 仍走页内导航, 不弹模态
   await pwExpect(page.getByTestId("add-back")).toBeVisible();
 });
 
-/* ---------- #829 R1: 卡间排序配置(key×dir 两正交参数, 缺省名称正排) ---------- */
+/* ---------- t_d086543b: 排序只留手动(自动排序控件移除, 旧配置归一化 manual) ---------- */
 
-test("排序配置: 缺省名称正排 + 切紧要度生效 + 方向倒排 + 重启保持(#829 R1)", async ({
+test("排序只留手动: 设置页无排序选择控件 + 旧自动配置归一化 manual(t_d086543b)", async ({
   hostPage,
   page,
 }) => {
   void hostPage;
   await agree(page);
+  // 预置旧版自动排序配置(#829 R1 时代遗留: urgency/desc) → reload 归一为 manual
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "token-wallet.mock.sort-config.v1",
+      JSON.stringify({ key: "urgency", dir: "desc" }),
+    );
+  });
+  await page.reload();
   await page.getByTestId("scenario-mixed").click();
   const cards = page.getByTestId("provider-card");
   await pwExpect(cards).toHaveCount(4);
 
-  // 缺省 = 名称正排(无历史设置时); 期望钉 "zh" 与 sortProviders 的 Intl.Collator("zh") 同语义,
-  // 消除 Node 测试进程默认 locale 跨机差异(t_6c6dd54f)
+  // manual + 无 order → 尾部名称正排(与旧缺省视觉一致, urgency/desc 不再影响面板序)
   const names = await cards.locator(".card-name").allTextContents();
   pwExpect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, "zh", { numeric: true })));
 
-  // 设置弹窗: 排序键/方向两正交控件, 缺省态高亮
+  // 设置弹窗排序段: 只剩提示性文案(拖拽排序), sort-key-*/sort-dir-* 控件全部移除
   await openSettingsModal(page);
-  await pwExpect(page.getByTestId("sort-key-name")).toHaveClass(/active/);
-  await pwExpect(page.getByTestId("sort-dir-asc")).toHaveClass(/active/);
-  // 切紧要度 → 最紧卡(kimi 5h 窗 100/100 耗尽, 剩余比例最小)置顶
-  await page.getByTestId("sort-key-urgency").click();
+  await pwExpect(page.getByTestId("sort-sec")).toBeVisible();
+  await pwExpect(page.locator('[data-testid^="sort-key-"], [data-testid^="sort-dir-"]')).toHaveCount(0);
+  await pwExpect(page.getByTestId("sort-sec")).toContainText("拖动");
   await page.getByTestId("settings-close").click();
-  await pwExpect(cards.first().locator(".card-name")).toContainText("Kimi");
 
-  // 方向独立生效: 倒排 → 整体反转, kimi 到最末
-  await openSettingsModal(page);
-  await page.getByTestId("sort-dir-desc").click();
-  await page.getByTestId("settings-close").click();
-  await pwExpect(cards.last().locator(".card-name")).toContainText("Kimi");
-
-  // 重启保持(mock 桥 localStorage 与真壳 settings.json 同语义, reload 不丢)
+  // 重启保持(manual + 无 order; mock localStorage 与真壳 settings.json 同语义)
   await page.reload();
+  await page.getByTestId("scenario-mixed").click();
   await pwExpect(cards).toHaveCount(4);
-  await pwExpect(cards.last().locator(".card-name")).toContainText("Kimi");
-  await openSettingsModal(page);
-  await pwExpect(page.getByTestId("sort-key-urgency")).toHaveClass(/active/);
-  await pwExpect(page.getByTestId("sort-dir-desc")).toHaveClass(/active/);
+  const namesAfter = await cards.locator(".card-name").allTextContents();
+  pwExpect(namesAfter).toEqual([...namesAfter].sort((a, b) => a.localeCompare(b, "zh", { numeric: true })));
 });
 
 /* ---------- #829 R3: 设置弹窗头部固定, 滚动只在内容区 ---------- */
