@@ -1906,9 +1906,10 @@ body {
   gap: var(--space-8);
 }
 
-/* ============ Provider 卡片组合层方案段(t_698a43c9, mock 供选型) ============
+/* ============ Provider 卡片卡内排版方案段(t_698a43c9 round2, #1043 终稿, mock 供选型) ============
  * 目标结构(未来实现卡): ProviderCard 壳 = head(BrandLogo 拖把手 + 名称 + StatusDot +
- * 徽章文字) + body slot。正常 body = 窗口行列表(每窗一个 QuotaMeter row/duo);
+ * 徽章文字) + body slot。窗口行一律 QuotaMeter 默认排版(row, t_23800bd4 主页同规);
+ * 4 方案差异只在卡内窗口区组织(S1 竖排基准 / S2 头部融合警示带 / S3 周期分区 / S4 紧凑密度);
  * 异常 body = AbnormalBody 同构槽(黄灯/红字 + setup_hint 授权面板), 不渲染假窗口行。
  * 新前缀 .qcard-* / .qvar-canvas--cards(gallery 专属), 不占真卡 .card/.card-head,
  * 不与 e2e 真卡选择器(provider-card/.progress 之外)冲突; .progress 契约由 QuotaMeter 保证。 */
@@ -2039,4 +2040,56 @@ body {
 .qcard-note {
   font-size: var(--font-10);
   color: var(--fg-dim);
+}
+
+/* S2 头部融合式(t_698a43c9 round2): 最紧窗警示色带摘要直呈头部下方; 窗口区完整列表不变 */
+.qcard-tightest-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  border-radius: var(--radius);
+  padding: var(--space-4) var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.qcard-strip-label {
+  font-size: var(--font-10);
+  font-weight: 600;
+  color: var(--warn-fg);
+}
+
+/* S3 分区卡片式: 分区标签(--font-10 dim) + 区间 8px + 1px 分隔线, 组内紧凑(4px) */
+.qcard-zone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.qcard-zone + .qcard-zone {
+  margin-top: var(--space-8);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--border);
+}
+
+.qcard-zone-label {
+  font-size: var(--font-10);
+  font-weight: 600;
+  color: var(--fg-dim);
+  letter-spacing: 0.02em;
+}
+
+/* S3 区内窗间不再重复 1px 分隔线(分区本身就是边界), 只留 8px 间距 */
+.qcard-windows--zoned .qcard-zone > .quota-meter + .quota-meter {
+  margin-top: var(--space-8);
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* S4 紧凑密度式: 无窗间分隔线, 行距压到 4px(ok 窗重置行由组件层缺省不渲染) */
+.qcard--compact .qcard-windows > .quota-meter + .quota-meter {
+  margin-top: var(--space-4);
+  padding-top: 0;
+  border-top: 0;
 }

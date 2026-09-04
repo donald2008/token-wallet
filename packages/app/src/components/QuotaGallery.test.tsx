@@ -61,9 +61,9 @@ describe("QuotaGallery 排版对比页(同数据 × 5 排版)", () => {
         expect(m.querySelector(".quota-usage")!.textContent!.length).toBeGreaterThan(0);
       }
     }
-    // 总 progressbar = 4 数据 × 5 排版 + Provider 卡 2 窗 × 2 方案(A/B) = 24(t_698a43c9 卡片段)
-    expect(container.querySelectorAll('[role="progressbar"]').length).toBe(24);
-    expect(container.querySelectorAll(".progress").length).toBe(24);
+    // 总 progressbar = 4 数据 × 5 排版 + 卡片方案 S1-S4(2+3+2+2) = 29(t_698a43c9 round2 卡内排版段)
+    expect(container.querySelectorAll('[role="progressbar"]').length).toBe(29);
+    expect(container.querySelectorAll(".progress").length).toBe(29);
   });
 
   it("同一组数据喂所有排版: 各段 4 条标题与用量文案两两一致", () => {
@@ -94,13 +94,14 @@ describe("QuotaGallery 排版对比页(同数据 × 5 排版)", () => {
     }
   });
 
-  it("三态色按数据分布: ok 12(2 行 ok × 5 段 + 卡片各 1) / warn 7 / bad 5", () => {
+  it("三态色按数据分布: ok 14(2×5 段 + 卡片 4 窗) / warn 10(5 段 + 卡片 5) / bad 5", () => {
     render(<QuotaGallery onBack={() => {}} />);
     const fills = Array.from(container.querySelectorAll(".progress-fill"));
     const byHealth = (h: string) => fills.filter((f) => f.getAttribute("data-health") === h).length;
-    // 5 排版段 10/5/5(t_23800bd4); Provider 卡 A/B 各加 ok1+warn1(kimi 5h 80% warn + 周窗 20% ok)
-    expect(byHealth("ok")).toBe(12);
-    expect(byHealth("warn")).toBe(7);
+    // 5 排版段 10/5/5(t_23800bd4); 卡片 S1-S4 各含 kimi 5h 80% warn + 周窗 20% ok,
+    // S2 另加最紧窗警示带 1 warn → 卡片小计 ok 4 / warn 5(t_698a43c9 round2)
+    expect(byHealth("ok")).toBe(14);
+    expect(byHealth("warn")).toBe(10);
     expect(byHealth("bad")).toBe(5);
     // 每段内部: 3 百分制三态 + 1 计数制 ok
     for (const l of LAYOUTS) {
@@ -135,7 +136,7 @@ describe("QuotaGallery 排版对比页(同数据 × 5 排版)", () => {
   });
 });
 
-describe("QuotaGallery Provider 卡片组合层方案段(t_698a43c9)", () => {
+describe("QuotaGallery Provider 卡片卡内排版方案段(t_698a43c9 round2, 以 #1043 终稿为准)", () => {
   function cardCanvas(key: string): HTMLElement {
     return container.querySelector<HTMLElement>(`[data-testid='qvar-canvas-cards-${key}']`)!;
   }
@@ -146,47 +147,77 @@ describe("QuotaGallery Provider 卡片组合层方案段(t_698a43c9)", () => {
     return Array.from(cardCanvas(key).querySelectorAll<HTMLElement>("[data-testid='qcard']"));
   }
 
-  it("A/B 两方案卡: 同一份 Kimi 快照, 仅窗口行排版不同(row vs duo)", () => {
+  it("S1-S4 四个卡内排版方案段渲染: 窗口行一律 QuotaMeter 默认排版(row), 同数据同组件只差卡内组织", () => {
     render(<QuotaGallery onBack={() => {}} />);
-    // 方案 A(layout=row, 推荐) 与 B(layout=duo, 备选) 段都渲染
-    const a = metersOfCanvas("a");
-    const b = metersOfCanvas("b");
-    expect(a.length).toBe(2);
-    expect(b.length).toBe(2);
-    // 窗口行排版与方案一致(容器层 class + data-layout)
-    for (const m of a) {
-      expect(m.getAttribute("data-layout")).toBe("row");
-      expect(m.classList.contains("quota-meter--layout-row")).toBe(true);
+    // S2 = 头部最紧窗带 1 + 窗口区完整列表 2; 其余 2
+    const counts: Record<string, number> = { s1: 2, s2: 3, s3: 2, s4: 2 };
+    for (const key of ["s1", "s2", "s3", "s4"]) {
+      const meters = metersOfCanvas(key);
+      expect(meters.length).toBe(counts[key]);
+      for (const m of meters) {
+        // 窗口行一律默认排版 row(#1043: QuotaMeter 已定稿不改, duo 等拍板)
+        expect(m.getAttribute("data-layout")).toBe("row");
+        expect(m.classList.contains("quota-meter--layout-row")).toBe(true);
+        // DOM 契约不破
+        expect(m.querySelectorAll('[role="progressbar"]').length).toBe(1);
+        expect(m.querySelectorAll(".progress .progress-fill[data-health]").length).toBe(1);
+      }
     }
-    for (const m of b) {
-      expect(m.getAttribute("data-layout")).toBe("duo");
-      expect(m.classList.contains("quota-meter--layout-duo")).toBe(true);
-    }
-    // 每窗四元素齐全 + DOM 契约(.progress/.progress-fill[data-health]/role=progressbar)
-    for (const m of [...a, ...b]) {
-      expect(m.querySelectorAll('[role="progressbar"]').length).toBe(1);
-      expect(m.querySelectorAll(".progress .progress-fill[data-health]").length).toBe(1);
-      expect(m.querySelector(".quota-title")!.textContent!.length).toBeGreaterThan(0);
-      expect(m.querySelector(".quota-reset")!.textContent!.length).toBeGreaterThan(0);
-    }
-    // 真实感数据(t_698a43c9): kimi 双窗 requests 计数制 —— 用量文本按真实单位格式化
-    expect(a[0]!.querySelector(".quota-usage")!.textContent).toBe(usageText(960, 1200, "requests"));
-    expect(a[1]!.querySelector(".quota-usage")!.textContent).toBe(usageText(1200, 6000, "requests"));
-    expect(a[0]!.querySelector(".quota-title")!.textContent).toBe("5 小时窗");
-    expect(a[1]!.querySelector(".quota-title")!.textContent).toBe("周窗");
-  });
-
-  it("卡头组合(BrandLogo+名称+StatusDot+徽章)与健康度一致", () => {
-    render(<QuotaGallery onBack={() => {}} />);
-    const card = cardsOf("a")[0]!;
+    // 卡头组合(S1 抽查): BrandLogo + 名称 + StatusDot + 徽章
+    const card = cardsOf("s1")[0]!;
     expect(card.getAttribute("data-health")).toBe("warn"); // kimi 最紧窗 5h 剩余 20% → warn
     expect(card.querySelector(".qcard-name")!.textContent).toBe("Kimi-Code #1");
-    // head 组合件: BrandLogo(SVG) + StatusDot + 徽章文字
     expect(card.querySelectorAll(".qcard-handle svg").length).toBe(1);
     const dot = card.querySelector<HTMLElement>("[data-testid='status-dot']")!;
-    expect(dot).toBeTruthy();
     expect(dot.getAttribute("data-health")).toBe("warn");
     expect(card.querySelector(".qcard-badge")!.textContent!.length).toBeGreaterThan(0);
+    // 真实感数据(kimi 双窗 requests 计数制)
+    const s1 = metersOfCanvas("s1");
+    expect(s1[0]!.querySelector(".quota-usage")!.textContent).toBe(usageText(960, 1200, "requests"));
+    expect(s1[1]!.querySelector(".quota-usage")!.textContent).toBe(usageText(1200, 6000, "requests"));
+    expect(s1[0]!.querySelector(".quota-title")!.textContent).toBe("5 小时窗");
+    expect(s1[1]!.querySelector(".quota-title")!.textContent).toBe("周窗");
+  });
+
+  it("S2 头部融合: 最紧窗警示带(1 meter) + 窗口区完整列表(2 meter, 最紧窗不抽离不排序 §6.3)", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    const canvas = cardCanvas("s2");
+    const strip = canvas.querySelector("[data-testid='qcard-tightest-strip']")!;
+    expect(strip).toBeTruthy();
+    expect(strip.querySelectorAll("[data-testid='quota-meter']").length).toBe(1);
+    // 警示带 = 最紧窗(5h 80% warn)
+    expect(strip.querySelector(".quota-title")!.textContent).toBe("5 小时窗");
+    // 窗口区完整列表不变(时间窗升序: 5h → 周)
+    const wins = canvas.querySelectorAll(".qcard-windows [data-testid='quota-meter']");
+    expect(wins.length).toBe(2);
+    expect(wins[0]!.querySelector(".quota-title")!.textContent).toBe("5 小时窗");
+    expect(wins[1]!.querySelector(".quota-title")!.textContent).toBe("周窗");
+  });
+
+  it("S3 分区卡片式: 短/长周期分区标签 + 各分区 1 窗", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    const canvas = cardCanvas("s3");
+    const zones = Array.from(canvas.querySelectorAll<HTMLElement>(".qcard-zone"));
+    expect(zones.length).toBe(2);
+    expect(zones[0]!.getAttribute("data-zone")).toBe("short");
+    expect(zones[1]!.getAttribute("data-zone")).toBe("long");
+    expect(zones[0]!.querySelector(".qcard-zone-label")!.textContent!.length).toBeGreaterThan(0);
+    expect(zones[0]!.querySelectorAll("[data-testid='quota-meter']").length).toBe(1);
+    expect(zones[1]!.querySelectorAll("[data-testid='quota-meter']").length).toBe(1);
+    expect(zones[1]!.querySelector(".quota-title")!.textContent).toBe("周窗");
+  });
+
+  it("S4 紧凑密度式: ok 窗不渲染重置行(warn 窗保留), QuotaMeter 四元素契约不破", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    const meters = metersOfCanvas("s4");
+    expect(meters.length).toBe(2);
+    // 窗1 warn(5h 80%) → 保留重置行; 窗2 ok(周窗 20%) → 不渲染重置行(状态色已表达健康)
+    expect(meters[0]!.querySelectorAll(".quota-reset").length).toBe(1);
+    expect(meters[1]!.querySelectorAll(".quota-reset").length).toBe(0);
+    // 四元素其余位仍在(标题/条/用量)
+    expect(meters[1]!.querySelector(".quota-title")!.textContent!.length).toBeGreaterThan(0);
+    expect(meters[1]!.querySelectorAll('[role="progressbar"]').length).toBe(1);
+    expect(meters[1]!.querySelector(".quota-usage")!.textContent!.length).toBeGreaterThan(0);
   });
 
   it("异常段: auth_expired 卡黄+setup_hint 面板, error 卡红; 都不渲染假窗口行(§2.1)", () => {

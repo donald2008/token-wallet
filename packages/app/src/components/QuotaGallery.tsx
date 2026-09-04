@@ -3,7 +3,7 @@ import { QuotaMeter, type QuotaLayout, type QuotaState } from "./QuotaMeter";
 import { metricHealth, providerHealth, statusBadge } from "../health";
 import { BrandLogo } from "./brand-logos";
 import { StatusDot } from "./StatusDot";
-import type { HealthLevel, MetricUnit, ProviderSnapshot } from "../types";
+import type { HealthLevel, Metric, MetricUnit, ProviderSnapshot } from "../types";
 
 /**
  * QuotaGallery — 四元素排版变体对比页(t_35ff3c1f, feat/theme-glass 实验视图)。
@@ -71,18 +71,16 @@ const SCENARIO_TAG: Record<QuotaLayout, string> = {
   ticker: "D",
 };
 
-/* ============ Provider 卡片组合层方案段(t_698a43c9, mock 供选型) ============
- * 目标结构(未来实现卡, 本卡不落地正式替换): ProviderCard 壳 = head(BrandLogo 拖把手
- * + 名称 + StatusDot + 徽章文字, D-005/D-039) + body slot。
- *   · 正常卡 body = 窗口行列表 —— 每窗口一个 QuotaMeter 实例:
- *       方案 A(layout=row): 标题列/条列/用量列多窗纵向对齐, 跨窗扫读比进度; 重置小字垫底(推荐)
- *       方案 B(layout=duo): 标题+用量一行 / 条+重置一行, 单窗自含组块(备选)
- *   · 异常卡 body = AbnormalBody 同构槽(auth_expired 黄灯+setup_hint 授权面板 /
- *       error 红字 / stale 灰), 不渲染假窗口行(§2.1)
- * 两方案共用同一份真实感 provider 快照(Kimi 窗口形态, requests 计数制), 只差排版。
- * 全部复用已定稿组件: BrandLogo / StatusDot / QuotaMeter + health 纯函数, 不重造。
- * mock 卡 class 用 .qcard-* 前缀(不占真卡 .card/.card-head 命名, 不与 e2e 真卡选择器冲突)。
- */
+/* ============ Provider 卡片卡内排版方案段(t_698a43c9 round2, 以评论 #1043 终稿为准) ============
+ * 对象: 卡片**内部排版** —— 多窗口 QuotaMeter 实例(一律当前默认排版 row, t_23800bd4 主页同规;
+ * duo 等排版切换等用户拍板, 本设计不定案)在卡内的组织方式。QuotaMeter 本体已定稿不改。
+ * 4 方案差异只在卡内窗口区的组织/分组/间距/对齐/层级(敢差异, 非 QuotaMeter 本体改造):
+ *   S1 基准竖排列表式: 窗间 1px 分隔线(--border) + 8px 节奏(现状最接近, 基准对照)
+ *   S2 头部融合式: 最紧窗以警示色带摘要直呈头部下方, 窗口区按时间窗升序完整列表(风险上抬)
+ *   S3 分区卡片式: 窗口按周期分区(短周期/长周期)分区标签 + 组内紧凑 + 区间分隔线
+ *   S4 紧凑密度式: 去窗间分隔线 + 行距压 4px + ok 窗不渲染重置行(状态色已表达健康)
+ * 异常卡共用骨架(auth_expired+error)保留(H 段)。mock 渲染供选型, 不落地正式替换。
+ * 复用已定稿组件 BrandLogo/StatusDot/QuotaMeter + health 纯函数, 不重造; .qcard-* 前缀。 */
 
 const NOW_SEC = Math.floor(Date.now() / 1000);
 
@@ -169,12 +167,60 @@ function AbnormalBodyMock({ p, health }: { p: ProviderSnapshot; health: HealthLe
   );
 }
 
-/** 未来 ProviderCard 的目标结构 mock: head + body slot(正常=窗口行 QuotaMeter / 异常=AbnormalBodyMock) */
-function ProviderCardMock({ p, layout }: { p: ProviderSnapshot; layout?: QuotaLayout }) {
+/** 单个窗口行: 一律 QuotaMeter 当前默认排版(row, t_23800bd4 主页同规; duo 等切换等用户拍板)。
+ * hideReset = ok 窗隐藏重置行(S4 紧凑密度式用; resetText 缺省即不渲染, QuotaMeter 契约不破) */
+function WindowMeter({ m, hideReset = false }: { m: Metric; hideReset?: boolean }) {
+  const h = metricHealth(m);
+  return (
+    <QuotaMeter
+      layout="row"
+      pct={m.limit !== undefined && m.limit > 0 ? m.used / m.limit : 0}
+      state={h === "unknown" ? "ok" : (h as QuotaState)}
+      title={cardWindowTitle(m.key)}
+      resetText={
+        hideReset
+          ? undefined
+          : m.key === "rolling_5h"
+            ? t("quota.cResetH" as Parameters<typeof t>[0])
+            : t("quota.cResetD" as Parameters<typeof t>[0])
+      }
+      used={m.used}
+      limit={m.limit}
+      unit={m.unit}
+    />
+  );
+}
+
+/** 窗口周期分区(S3): rolling_5h/session → 短周期; 其余(weekly/monthly…) → 长周期 */
+function zoneOf(key: string): "short" | "long" {
+  return key === "rolling_5h" || key === "session" ? "short" : "long";
+}
+
+/** 最紧窗(S2): 用量比例最大者(remaining 最小); 无 limit 的窗不参与比较 */
+function tightestOf(metrics: Metric[]): Metric | null {
+  const ratio = (m: Metric) => (m.limit !== undefined && m.limit > 0 ? m.used / m.limit : -1);
+  return metrics.reduce<Metric | null>((acc, m) => (acc === null || ratio(m) > ratio(acc) ? m : acc), null);
+}
+
+/** 未来 ProviderCard 的目标结构 mock: head + body slot(正常=窗口区卡内排版方案 / 异常=AbnormalBodyMock)。
+ * variant 只改窗口区组织方式(卡内排版), QuotaMeter 实例一律默认排版 row(每窗一个)。 */
+function ProviderCardMock({
+  p,
+  variant = "stacked",
+}: {
+  p: ProviderSnapshot;
+  variant?: "stacked" | "fusion" | "zoned" | "compact";
+}) {
   const health = providerHealth(p);
   const abnormal = p.status !== "ok";
+  const tightest = tightestOf(p.metrics);
   return (
-    <div className="qcard" data-testid="qcard" data-health={health} data-layout={layout ?? "abnormal"}>
+    <div
+      className={`qcard qcard--${variant}`}
+      data-testid="qcard"
+      data-health={health}
+      data-variant={abnormal ? "abnormal" : variant}
+    >
       <div className="qcard-head">
         <span className="qcard-handle" aria-hidden="true">
           {/* 拖把手载体 = BrandLogo(D-039: 实现卡用 brand-block.drag-handle 绑 makeHandleProps) */}
@@ -189,47 +235,71 @@ function ProviderCardMock({ p, layout }: { p: ProviderSnapshot; layout?: QuotaLa
       {abnormal ? (
         <AbnormalBodyMock p={p} health={health} />
       ) : (
-        <div className="qcard-windows">
-          {p.metrics.map((m) => {
-            const h = metricHealth(m);
-            return (
-              <QuotaMeter
-                key={m.key}
-                layout={layout}
-                pct={m.limit !== undefined && m.limit > 0 ? m.used / m.limit : 0}
-                state={h === "unknown" ? "ok" : (h as QuotaState)}
-                title={cardWindowTitle(m.key)}
-                resetText={
-                  m.key === "rolling_5h"
-                    ? t("quota.cResetH" as Parameters<typeof t>[0])
-                    : t("quota.cResetD" as Parameters<typeof t>[0])
-                }
-                used={m.used}
-                limit={m.limit}
-                unit={m.unit}
-              />
-            );
-          })}
-        </div>
+        <>
+          {/* S2 头部融合: 最紧窗摘要带(警示底色)直呈头部下方; 窗口区完整列表不变(§6.3 只标不排序) */}
+          {variant === "fusion" && tightest && (
+            <div className="qcard-tightest-strip" data-testid="qcard-tightest-strip">
+              <span className="qcard-strip-label">
+                {t("quota.stripTightest" as Parameters<typeof t>[0])}
+              </span>
+              <WindowMeter m={tightest} />
+            </div>
+          )}
+          {variant === "zoned" ? (
+            /* S3 分区卡片式: 窗口按周期分区(短/长), 分区标签 + 区间分隔线 */
+            <div className="qcard-windows qcard-windows--zoned">
+              {(["short", "long"] as const)
+                .map((zone) => ({ zone, items: p.metrics.filter((m) => zoneOf(m.key) === zone) }))
+                .filter((z) => z.items.length > 0)
+                .map((z) => (
+                  <div className="qcard-zone" data-zone={z.zone} key={z.zone}>
+                    <span className="qcard-zone-label">
+                      {t(
+                        (z.zone === "short"
+                          ? "quota.zoneShort"
+                          : "quota.zoneLong") as Parameters<typeof t>[0],
+                      )}
+                    </span>
+                    {z.items.map((m) => (
+                      <WindowMeter key={m.key} m={m} />
+                    ))}
+                  </div>
+                ))}
+            </div>
+          ) : (
+            /* S1 基准竖排(分隔线+8px) / S4 紧凑(无分隔线+ok窗藏重置, 由 hideReset 与 CSS modifier 实现) */
+            <div className="qcard-windows">
+              {p.metrics.map((m) => (
+                <WindowMeter
+                  key={m.key}
+                  m={m}
+                  hideReset={variant === "compact" && metricHealth(m) === "ok"}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-/** Provider 卡片方案段定义: tag(方案代号) + 画布内容 + i18n 名/说明 */
+/** Provider 卡片卡内排版方案段定义: tag(方案代号) + variant(窗口区组织) + 画布内容 + i18n 名/说明 */
 interface CardOptionDef {
   tag: string;
   testKey: string;
   nameKey: string;
   descKey: string;
   providers: ProviderSnapshot[];
-  layout?: QuotaLayout;
+  variant?: "stacked" | "fusion" | "zoned" | "compact";
 }
 
-/** 方案 A(row, 推荐) / 方案 B(duo, 备选) 同数据; 第三段 = 异常卡共用骨架(auth+error 两例) */
+/** S1-S4 = 4 个卡内排版方案(同数据同组件, 只差卡内组织); 末段 = 异常卡共用骨架(auth+error 两例) */
 const CARD_OPTIONS: CardOptionDef[] = [
-  { tag: "A", testKey: "a", layout: "row", nameKey: "quota.cardAName", descKey: "quota.cardADesc", providers: [CARD_OK_PROVIDER] },
-  { tag: "B", testKey: "b", layout: "duo", nameKey: "quota.cardBName", descKey: "quota.cardBDesc", providers: [CARD_OK_PROVIDER] },
+  { tag: "1", testKey: "s1", variant: "stacked", nameKey: "quota.cardS1Name", descKey: "quota.cardS1Desc", providers: [CARD_OK_PROVIDER] },
+  { tag: "2", testKey: "s2", variant: "fusion", nameKey: "quota.cardS2Name", descKey: "quota.cardS2Desc", providers: [CARD_OK_PROVIDER] },
+  { tag: "3", testKey: "s3", variant: "zoned", nameKey: "quota.cardS3Name", descKey: "quota.cardS3Desc", providers: [CARD_OK_PROVIDER] },
+  { tag: "4", testKey: "s4", variant: "compact", nameKey: "quota.cardS4Name", descKey: "quota.cardS4Desc", providers: [CARD_OK_PROVIDER] },
   { tag: "⚠", testKey: "abn", nameKey: "quota.cardAbnName", descKey: "quota.cardAbnDesc", providers: [CARD_AUTH_PROVIDER, CARD_ERROR_PROVIDER] },
 ];
 
@@ -279,7 +349,7 @@ export function QuotaGallery({ onBack }: { onBack: () => void }) {
           </section>
         ))}
 
-        {/* Provider 卡片组合层方案(t_698a43c9): A=row 卡(推荐) / B=duo 卡(备选) 同数据横比 + 异常卡共用骨架 */}
+        {/* Provider 卡片卡内排版方案(t_698a43c9 round2, #1043): S1-S4 同数据横比 + 异常卡共用骨架 */}
         {CARD_OPTIONS.map((opt) => (
           <section className="qvar" data-testid={`qvar-cards-${opt.testKey}`} key={opt.testKey}>
             <header className="qvar-head">
@@ -293,7 +363,7 @@ export function QuotaGallery({ onBack }: { onBack: () => void }) {
             </header>
             <div className="qvar-canvas qvar-canvas--cards" data-testid={`qvar-canvas-cards-${opt.testKey}`}>
               {opt.providers.map((p) => (
-                <ProviderCardMock key={`${opt.testKey}-${p.provider_id}`} p={p} layout={opt.layout} />
+                <ProviderCardMock key={`${opt.testKey}-${p.provider_id}`} p={p} variant={opt.variant} />
               ))}
             </div>
           </section>

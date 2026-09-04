@@ -306,17 +306,27 @@ const zh = {
     legendWarn: "warn(偏低)",
     legendBad: "bad(耗尽)",
     // t_698a43c9: Provider 卡片组合层方案段(组合 QuotaMeter, 供选型)
-    cardAName: "Provider 卡 · 方案 A 行式窗口行（推荐）",
-    cardADesc:
-      "每窗口一个 QuotaMeter row 实例: 标题列定宽左 / 条中 / 用量右, 多窗堆叠成列, 跨窗扫读比进度最省力; 重置小字垫底弱化。head = BrandLogo(拖把手) + 名称 + StatusDot + 徽章。拖拽把手 D-039 保留(useCardDragSort 零改)。",
-    cardBName: "Provider 卡 · 方案 B duo 两行组块（备选）",
-    cardBDesc:
-      "每窗口一个 QuotaMeter duo 实例: 标题+用量一行分左右(数字加粗), 条+重置一行。单窗自含、纵向节奏更松; 代价: 多窗纵向扫读需在左右列间跳, 且重置与条同级抢眼。",
-    cardAbnName: "异常状态卡 · 共用骨架（两方案同一套）",
+    // t_698a43c9 round2(#1043 终稿): Provider 卡片卡内排版方案段(4 方案, 窗口行一律 QuotaMeter 默认排版 row)
+    cardS1Name: "Provider 卡 · 方案 1 基准竖排列表式",
+    cardS1Desc:
+      "窗口区 = 每窗一个 QuotaMeter(默认排版)竖排堆叠, 窗间 1px 分隔线(--border) + 8px 节奏; 头部与窗口区主从分明, 现状最接近(基准对照)。窗口数 1-4 最佳; 5-6 窗纵向冗长但扫描仍稳。实现边界: 复用现有 ProviderCard 壳, 仅窗口区容器化(.card-windows), 零结构重构。",
+    cardS2Name: "Provider 卡 · 方案 2 头部融合式（风险上抬）",
+    cardS2Desc:
+      "最紧窗在头部下方以警示色带(--warn 10% 底 + 30% 边)摘要直呈, 风险一瞥可见; 窗口区仍按时间窗升序完整列表(最紧窗不抽离不排序, §6.3 契约保留)。取舍: 风险信息重复一次换 glanceability, 头部密度↑; 多窗场景风险不沉没。窗口数 1-6 均适用。",
+    cardS3Name: "Provider 卡 · 方案 3 分区卡片式（周期分区）",
+    cardS3Desc:
+      "窗口区按周期分组: 短周期(5h/日)与长周期(周/月+)各立分区标签(--font-10 dim), 区间 8px + 1px 分隔线, 组内紧凑。窗口数 4-6 时层级最清晰; 1-2 窗时标签冗余。实现边界: 复用壳 + 窗口区按 span 分组渲染(zoneOf 纯函数), 结构增量最小。",
+    cardS4Name: "Provider 卡 · 方案 4 紧凑密度式（行距收敛）",
+    cardS4Desc:
+      "取消窗间分隔线, 行距压到 4px, ok(健康)窗不渲染重置行(状态色已表达健康, 重置是辅助信息)→ 每窗省一行。窗口数 5-6 时总高省 ~20-30%; 取舍: 窗间分界靠间距语气弱于分隔线, 首扫需适应。实现边界: 仅 CSS modifier + 条件 prop(resetText 缺省不渲染, QuotaMeter 契约不破)。",
+    cardAbnName: "异常状态卡 · 共用骨架（四方案同一套）",
     cardAbnDesc:
       "auth_expired / error / stale 不渲染假窗口行(§2.1): 黄灯+setup_hint 授权面板(auth_expired, 保留 t_52e3a7fb 列式修复) / 红字(error) / 灰字(stale)。卡骨架与正常卡同构(data-health 相同), 排序扫描形态一致。",
     cResetH: "3.2 小时后重置",
     cResetD: "5.8 天后重置",
+    stripTightest: "最紧窗",
+    zoneShort: "短周期",
+    zoneLong: "长周期",
   },
 } as const;
 
@@ -606,18 +616,27 @@ const en: Dict = {
     legendOk: "ok (healthy)",
     legendWarn: "warn (low)",
     legendBad: "bad (exhausted)",
-    // t_698a43c9: Provider card composition options (compose QuotaMeter, for pick)
-    cardAName: "Provider card · Option A row window rows (recommended)",
-    cardADesc:
-      "One QuotaMeter row per window: fixed-width title left / bar center / usage right; stacked windows align into columns for fastest cross-window scanning; reset demoted to a small sub-line. head = BrandLogo (drag handle) + name + StatusDot + badge. Drag handle D-039 kept (useCardDragSort unchanged).",
-    cardBName: "Provider card · Option B duo two-line blocks (alternative)",
-    cardBDesc:
-      "One QuotaMeter duo per window: title + usage share the top line (bold number), bar + reset the bottom. Each window self-contained with a looser rhythm; cost: scanning across stacked windows jumps between left/right columns, and reset vies with the bar for attention.",
-    cardAbnName: "Abnormal state card · shared skeleton (same for both options)",
+    // t_698a43c9 round2 (per final requirement comment #1043): Provider card interior-layout options (4 schemes; window rows always QuotaMeter default layout row)
+    cardS1Name: "Provider card · Scheme 1 baseline stacked list",
+    cardS1Desc:
+      "Windows area = one QuotaMeter (default layout) per window, stacked; 1px separators (--border) + 8px rhythm; head/body hierarchy explicit; closest to current state (baseline). Best for 1-4 windows; 5-6 get tall but stay scannable. Implementation: reuse existing ProviderCard shell, only containerize the windows area (.card-windows) — zero structural rework.",
+    cardS2Name: "Provider card · Scheme 2 head-fused (risk elevated)",
+    cardS2Desc:
+      "The tightest window is summarized in a warning strip (--warn 10% fill + 30% border) directly under the head, so risk is glanceable; the windows area still lists every window in time-span order (the tightest one is NOT pulled out of order, §6.3 contract kept). Trade-off: the risk is shown twice to buy glanceability, head density rises; multi-window cards never bury the risk. Works for 1-6 windows.",
+    cardS3Name: "Provider card · Scheme 3 zoned card (period zones)",
+    cardS3Desc:
+      "Windows area grouped by period: short (5h/daily) vs long (weekly/monthly+) each gets a zone label (--font-10 dim); 8px + 1px divider between zones, compact inside. Clearest hierarchy at 4-6 windows; labels are redundant at 1-2 windows. Implementation: reuse shell + group windows by span (zoneOf pure fn), minimal structural delta.",
+    cardS4Name: "Provider card · Scheme 4 compact density (tight rhythm)",
+    cardS4Desc:
+      "No window separators, 4px rhythm, ok (healthy) windows drop the reset line (state color already says healthy; reset is auxiliary) — saves one line per healthy window. At 5-6 windows total height shrinks ~20-30%; trade-off: window boundaries read by spacing (weaker cue than a divider line), first scan needs adapting. Implementation: CSS modifier + conditional prop only (resetText omitted = not rendered, QuotaMeter contract intact).",
+    cardAbnName: "Abnormal state card · shared skeleton (same for all four schemes)",
     cardAbnDesc:
       "auth_expired / error / stale never render fake window rows (§2.1): yellow lamp + setup_hint auth panel (auth_expired, keeps t_52e3a7fb column-layout fix) / red text (error) / grey text (stale). The card skeleton stays isomorphic with normal cards (same data-health) so sorting/scanning shape is consistent.",
     cResetH: "resets in 3.2h",
     cResetD: "resets in 5.8d",
+    stripTightest: "Tightest window",
+    zoneShort: "Short period",
+    zoneLong: "Long period",
   },
 };
 

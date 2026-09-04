@@ -62,12 +62,12 @@ test("方案页: 同数据×5种排版, 每段 4 条完整四元素, 单位语�
   await pwExpect(rowCanvas.locator(".quota-usage").first()).toHaveText("40% / 100%");
   await pwExpect(rowCanvas.locator(".quota-usage").nth(3)).toContainText("2300 / 10000 credits");
 
-  // 总契约: 24 条 progressbar/进度条(4 数据 × 5 排版 + Provider 卡 2 窗 × 2 方案);
-  // 填充 ok 12 / warn 7 / bad 5(t_698a43c9 卡片段: A/B 各加 kimi 5h 80% warn + 周窗 20% ok)
-  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(24);
-  await pwExpect(gallery.locator(".progress")).toHaveCount(24);
-  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(12);
-  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(7);
+  // 总契约: 29 条 progressbar/进度条(4 数据 × 5 排版 + 卡片方案 S1-S4: 2+3+2+2);
+  // 填充 ok 14 / warn 10 / bad 5(t_698a43c9 round2 卡内排版段: 每方案 kimi 5h warn+周窗 ok, S2 另加警示带 warn)
+  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(29);
+  await pwExpect(gallery.locator(".progress")).toHaveCount(29);
+  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(14);
+  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(10);
   await pwExpect(gallery.locator(".progress-fill[data-health='bad']")).toHaveCount(5);
 
   // 每段 meter 的 data-layout 与 class 和所在段一致(容器层排版生效)
@@ -84,24 +84,33 @@ test("方案页: 同数据×5种排版, 每段 4 条完整四元素, 单位语�
   // 图例三态色
   await pwExpect(page.getByTestId("quota-legend")).toBeVisible();
 
-  // Provider 卡片组合层方案段(t_698a43c9): A=row(2窗) B=duo(2窗) 同数据; 异常段无假窗口行
-  for (const [key, layout] of [
-    ["a", "row"],
-    ["b", "duo"],
-  ] as const) {
+  // Provider 卡片卡内排版方案段(t_698a43c9 round2, #1043): S1-S4 同数据同组件只差卡内组织;
+  // 窗口行一律 QuotaMeter 默认排版 row; S2=最紧窗警示带(1)+窗口区(2)
+  const cardCounts: Record<string, number> = { s1: 2, s2: 3, s3: 2, s4: 2 };
+  for (const key of ["s1", "s2", "s3", "s4"]) {
     const canvas = page.getByTestId(`qvar-canvas-cards-${key}`);
     await pwExpect(canvas).toBeVisible();
     const meters = canvas.locator("[data-testid='quota-meter']");
-    await pwExpect(meters).toHaveCount(2);
-    await pwExpect(meters.first()).toHaveAttribute("data-layout", layout);
-    await pwExpect(meters.first()).toHaveClass(new RegExp(`quota-meter--layout-${layout}`));
+    await pwExpect(meters).toHaveCount(cardCounts[key]);
+    await pwExpect(meters.first()).toHaveAttribute("data-layout", "row");
   }
-  // A 卡头组合 + 真实感用量(kimi 5h requests 计数制, 主页同形态)
-  const cardA = page.getByTestId("qvar-canvas-cards-a").locator("[data-testid='qcard']");
-  await pwExpect(cardA).toHaveAttribute("data-health", "warn");
-  await pwExpect(cardA.locator(".qcard-name")).toHaveText("Kimi-Code #1");
-  await pwExpect(cardA.locator("[data-testid='status-dot']")).toHaveAttribute("data-health", "warn");
-  await pwExpect(cardA.locator(".qcard-windows .quota-usage").first()).toContainText("960 / 1200");
+  // S1 卡头组合 + 真实感用量(kimi 5h requests 计数制, 主页同形态)
+  const cardS1 = page.getByTestId("qvar-canvas-cards-s1").locator("[data-testid='qcard']");
+  await pwExpect(cardS1).toHaveAttribute("data-health", "warn");
+  await pwExpect(cardS1.locator(".qcard-name")).toHaveText("Kimi-Code #1");
+  await pwExpect(cardS1.locator("[data-testid='status-dot']")).toHaveAttribute("data-health", "warn");
+  await pwExpect(cardS1.locator(".qcard-windows .quota-usage").first()).toContainText("960 / 1200");
+  // S2 头部融合: 警示带存在且含 1 meter, 窗口区完整列表 2(最紧窗不抽离不排序 §6.3)
+  const s2 = page.getByTestId("qvar-canvas-cards-s2");
+  await pwExpect(s2.getByTestId("qcard-tightest-strip").locator("[data-testid='quota-meter']")).toHaveCount(1);
+  await pwExpect(s2.locator(".qcard-windows [data-testid='quota-meter']")).toHaveCount(2);
+  // S3 分区: 短/长周期两个分区, 各区 1 窗
+  const s3 = page.getByTestId("qvar-canvas-cards-s3");
+  await pwExpect(s3.locator(".qcard-zone")).toHaveCount(2);
+  // S4 紧凑: ok 窗(第 2 窗)不渲染重置行, warn 窗(第 1 窗)保留
+  const s4 = page.getByTestId("qvar-canvas-cards-s4");
+  await pwExpect(s4.locator("[data-testid='quota-meter']").nth(0).locator(".quota-reset")).toHaveCount(1);
+  await pwExpect(s4.locator("[data-testid='quota-meter']").nth(1).locator(".quota-reset")).toHaveCount(0);
   // 异常段: auth_expired 卡(黄+hint) + error 卡(红) 且无任何 progressbar(§2.1 不显示假数据)
   const abn = page.getByTestId("qvar-canvas-cards-abn");
   await pwExpect(abn.locator("[data-testid='qcard']")).toHaveCount(2);
@@ -127,8 +136,8 @@ test("方案页截图取证(5 种排版逐段落 /tmp)", async ({ hostPage, page
     await page.waitForTimeout(250);
     await section.screenshot({ path: `/tmp/quota-layout-${layout}.png` });
   }
-  // Provider 卡片组合层方案(t_698a43c9): 方案 A(row 卡) / B(duo 卡) / 异常段逐段落 /tmp
-  for (const key of ["a", "b", "abn"]) {
+  // Provider 卡片卡内排版方案(t_698a43c9 round2): S1-S4 + 异常段逐段落 /tmp
+  for (const key of ["s1", "s2", "s3", "s4", "abn"]) {
     const section = page.getByTestId(`qvar-cards-${key}`);
     await section.scrollIntoViewIfNeeded();
     await page.waitForTimeout(250);
