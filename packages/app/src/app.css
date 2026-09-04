@@ -738,6 +738,7 @@ body {
   gap: var(--gap);
   margin-top: var(--space-4);
   /* 2026-09-03 评审③④: 移除历史 2px 透明左缘占位(tightest 红竖条已删, 无漂移源) */
+  position: relative; /* t_a398348b: 悬停 tooltip(.bar-tooltip)的定位容器 */
 }
 
 .bar-label {
@@ -809,6 +810,43 @@ body {
   font-size: 9px;
   color: var(--fg-dim);
   line-height: 1.2;
+}
+
+/* ---- t_a398348b: 窗口行悬停 tooltip(micro 排版四元素微型展示) ----
+ * 挂既有纯 CSS 悬停机制(.bar-row:hover), 零 JS 事件; 定位相对行(left/right:0)
+ * → 横向永不溢出面板(行宽 = 卡内容宽 ⊂ 360 面板)。默认向上弹出(浮在同卡上方行/卡头
+ * 之上); 模板首行改向下 —— 首卡吸顶时向上会被 card-list 顶缘裁剪且不可滚动找回,
+ * 向下压住后续行(单窗口卡超底时溢出进滚动区, 可滚动找回)。pointer-events:none
+ * 纯提示不截获 hover; glass 态半透明底需 backdrop-filter 保可读(非玻璃态 var
+ * 未定义 → 降级 none, 不炸)。配色/边框/圆角/阴影全走 tokens, 三态零硬编码。 */
+.bar-tooltip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + var(--space-4));
+  z-index: 6; /* 高于 filter-icons(3)/drop-line(4)/card-dragging(5), 浮于邻卡之上 */
+  padding: var(--space-8);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  -webkit-backdrop-filter: var(--card-blur, none);
+  backdrop-filter: var(--card-blur, none);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.15s ease,
+    visibility 0.15s ease;
+  pointer-events: none;
+}
+.bar-row:hover .bar-tooltip,
+.bar-row:focus-within .bar-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+.bars-template .bar-row:first-child .bar-tooltip {
+  bottom: auto;
+  top: calc(100% + var(--space-4));
 }
 
 /* bars 模板: 最紧窗口标记(§6.3, P1 起只标不置顶) — 2026-09-03 收敛单一编码:

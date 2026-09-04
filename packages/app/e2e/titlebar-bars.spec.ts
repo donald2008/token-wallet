@@ -93,7 +93,8 @@ test("进度条对齐: 三行进度条左缘 x 坐标差 ≤1px(tightest 占位�
 
   const card = page.getByTestId("provider-card").first();
   await pwExpect(card).toBeVisible({ timeout: 10_000 });
-  const bars = card.locator(".bar-row .progress");
+  // t_a398348b: 行内新增悬停 tooltip(含 micro meter 的 .progress), 选择器收紧到行本体条
+  const bars = card.locator(".bar-row .bar-track > .progress");
   await pwExpect(bars).toHaveCount(3);
   // tightest 行(weekly 100% 耗尽)存在 —— 对齐断言必须覆盖它(历史漂移源)
   await pwExpect(card.locator(".bar-row[data-tightest]")).toHaveCount(1);

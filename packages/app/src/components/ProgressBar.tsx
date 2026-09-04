@@ -1,6 +1,7 @@
 import type { Metric } from "../types";
 import { metricHealth } from "../health";
 import { t } from "../i18n";
+import { BarRowTooltip } from "./BarRowTooltip";
 
 /**
  * 重置倒计时文案(#829 R2): 纯倒计时, 去掉旧的动作后缀, 单单位 + 保留一位小数:
@@ -36,6 +37,12 @@ export function progressText(metric: Metric): string {
   return `${metric.used}/${metric.limit ?? "—"}`;
 }
 
+/** tooltip 用量行显示值(t_a398348b): percent 单位与压字同款 fmt1 修浮点尾差
+ * (37.941548… → 37.9), 非 percent(计数制)原样; 喂 QuotaMeter 的 used slot(数值)。 */
+export function displayUsed(metric: Metric): number {
+  return metric.unit === "percent" ? Math.round(metric.used * 10) / 10 : metric.used;
+}
+
 /** bars 模板微部件: 手写进度条 + 数值上行(t_66b67453 契约6 + 2026-09-03 视觉重构:
  * 借鉴 token-monitor —— 条瘦身 8px, 数值从条内压字移到条上方一行(窗口名左/数值右),
  * 信息层级 窗口名(10px muted) < 数值(10px 亮) < 重置(9px); tightest 标红左缘。
@@ -49,6 +56,7 @@ export function ProgressBar({ metric, tightest = false }: { metric: Metric; tigh
   // 2026-09-03 文案本地化(⑤): rolling_5h/weekly/... 直出 → 友好窗名, 未知 key 回退原样
   const metricKey = `metric.${metric.key}` as Parameters<typeof t>[0];
   const label = t(metricKey).startsWith("metric.") ? t("metric.fallback", { key: metric.key }) : t(metricKey);
+  const reset = resetText(metric.reset_at);
   return (
     <div className="bar-row" data-tightest={tightest || undefined}>
       <span className="bar-label" title={metric.key}>
@@ -69,8 +77,11 @@ export function ProgressBar({ metric, tightest = false }: { metric: Metric; tigh
             {progressText(metric)}
           </span>
         </div>
-        <span className="bar-reset">{resetText(metric.reset_at)}</span>
+        <span className="bar-reset">{reset}</span>
       </div>
+      {/* t_a398348b: 窗口行悬停 tooltip —— 挂载 BarRowTooltip(micro 排版四元素,
+          与行同源 Metric)。揭示/定位/防溢出全在 app.css .bar-tooltip(纯 CSS hover)。 */}
+      <BarRowTooltip metric={metric} />
     </div>
   );
 }

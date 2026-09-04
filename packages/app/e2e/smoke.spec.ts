@@ -152,7 +152,8 @@ test("bars+ticker 模板: 进度条/倒计时/最紧标红 + 余额预计可用�
     .filter({ hasText: "Kimi-Code" })
     .getByTestId("bars-template");
   await pwExpect(kimiBars).toHaveCount(1);
-  await pwExpect(kimiBars.locator(".progress")).toHaveCount(2); // rolling_5h + weekly 两窗
+  // t_a398348b: 行内新增悬停 tooltip(含 micro meter 的 .progress), 计数收紧到行本体条
+  await pwExpect(kimiBars.locator(".bar-row .bar-track > .progress")).toHaveCount(2); // rolling_5h + weekly 两窗
   // 最紧窗口(rolling_5h 剩余<30%)标红 —— P1 起按时间窗升序排列, 只标不置顶(rolling_5h 为最短窗仍在首行)
   // 2026-09-03 文案本地化(⑤): key 直出 → 友好窗名「5 小时窗」
   await pwExpect(kimiBars.locator(".bar-row[data-tightest] .bar-label")).toContainText("5 小时窗");

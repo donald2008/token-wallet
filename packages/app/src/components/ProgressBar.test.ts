@@ -3,7 +3,7 @@
 // - progressText: percent 单位 used 格式化 ≤1 位小数 + 去尾 .0(显示层修浮点尾巴,
 //   数据层原始值不动); 非 percent 单位(计数制)原样。
 import { describe, expect, it } from "vitest";
-import { progressText, resetText } from "./ProgressBar";
+import { displayUsed, progressText, resetText } from "./ProgressBar";
 import type { Metric } from "../types";
 
 const NOW = 1_800_000_000; // 固定基准, 注入 nowSec 保确定性
@@ -79,5 +79,18 @@ describe("progressText: percent 单位 ≤1 位小数 + 去尾 .0(契约6)", () 
 
   it("limit 缺省 → 破折号兜底(语义不变)", () => {
     expect(progressText(metricOf({ used: 37.94, limit: undefined }))).toBe("37.9/—");
+  });
+});
+
+// ---- t_a398348b: tooltip 用量行显示值(与压字同款浮点尾差修正, 数值形态喂 QuotaMeter) ----
+describe("displayUsed: percent 修尾差 / 非 percent 原样", () => {
+  it("percent: 37.941548… → 37.9(≤1 位小数)", () => {
+    expect(displayUsed(metricOf({ used: 0.37941548 * 100 }))).toBe(37.9);
+    expect(displayUsed(metricOf({ used: 40 }))).toBe(40); // 整数不进小数
+    expect(displayUsed(metricOf({ used: 12.35 }))).toBe(12.4); // 四舍五入
+  });
+  it("非 percent(计数制)原样不动", () => {
+    expect(displayUsed(metricOf({ unit: "requests", used: 48 }))).toBe(48);
+    expect(displayUsed(metricOf({ unit: "cny", used: 451.85714 }))).toBe(451.85714);
   });
 });
