@@ -1,6 +1,9 @@
 import { t } from "../i18n";
 import { QuotaMeter, type QuotaLayout, type QuotaState } from "./QuotaMeter";
-import type { MetricUnit } from "../types";
+import { metricHealth, providerHealth, statusBadge } from "../health";
+import { BrandLogo } from "./brand-logos";
+import { StatusDot } from "./StatusDot";
+import type { HealthLevel, MetricUnit, ProviderSnapshot } from "../types";
 
 /**
  * QuotaGallery — 四元素排版变体对比页(t_35ff3c1f, feat/theme-glass 实验视图)。
@@ -68,6 +71,168 @@ const SCENARIO_TAG: Record<QuotaLayout, string> = {
   ticker: "D",
 };
 
+/* ============ Provider 卡片组合层方案段(t_698a43c9, mock 供选型) ============
+ * 目标结构(未来实现卡, 本卡不落地正式替换): ProviderCard 壳 = head(BrandLogo 拖把手
+ * + 名称 + StatusDot + 徽章文字, D-005/D-039) + body slot。
+ *   · 正常卡 body = 窗口行列表 —— 每窗口一个 QuotaMeter 实例:
+ *       方案 A(layout=row): 标题列/条列/用量列多窗纵向对齐, 跨窗扫读比进度; 重置小字垫底(推荐)
+ *       方案 B(layout=duo): 标题+用量一行 / 条+重置一行, 单窗自含组块(备选)
+ *   · 异常卡 body = AbnormalBody 同构槽(auth_expired 黄灯+setup_hint 授权面板 /
+ *       error 红字 / stale 灰), 不渲染假窗口行(§2.1)
+ * 两方案共用同一份真实感 provider 快照(Kimi 窗口形态, requests 计数制), 只差排版。
+ * 全部复用已定稿组件: BrandLogo / StatusDot / QuotaMeter + health 纯函数, 不重造。
+ * mock 卡 class 用 .qcard-* 前缀(不占真卡 .card/.card-head 命名, 不与 e2e 真卡选择器冲突)。
+ */
+
+const NOW_SEC = Math.floor(Date.now() / 1000);
+
+/** 窗口行标题(与 registry windowTitle 同规): 取 i18n metric.<key> 展示名, 未知 key 回退原样 */
+function cardWindowTitle(key: string): string {
+  const metricKey = `metric.${key}` as Parameters<typeof t>[0];
+  return t(metricKey).startsWith("metric.") ? key : t(metricKey);
+}
+
+/** 方案 A/B 共用快照: kimi 双窗(5h 80% warn + 周窗 20% ok), 真实 requests 计数制(主页同形态) */
+const CARD_OK_PROVIDER: ProviderSnapshot = {
+  provider_id: "kimi-code",
+  display_name: "Kimi-Code #1",
+  plan_type: "window",
+  logo: "kimi",
+  fetched_at: NOW_SEC - 90,
+  status: "ok",
+  metrics: [
+    { key: "rolling_5h", kind: "window", unit: "requests", used: 960, limit: 1200, reset_at: NOW_SEC + 3.2 * 3600 },
+    { key: "weekly", kind: "window", unit: "requests", used: 1200, limit: 6000, reset_at: NOW_SEC + 5.8 * 86400 },
+  ],
+  alerts: [],
+};
+
+/** 异常卡快照: auth_expired(百炼, setup_hint 授权引导)—— 新卡片结构必须承载的状态之一 */
+const CARD_AUTH_PROVIDER: ProviderSnapshot = {
+  provider_id: "aliyun",
+  display_name: "百炼 Token Plan",
+  plan_type: "window",
+  logo: "aliyun-bailian",
+  fetched_at: NOW_SEC - 7200,
+  status: "auth_expired",
+  metrics: [],
+  alerts: [{ level: "warn", message: "bl 会话已失效" }],
+  setup_hint: "请运行 `bl auth login --console` 重新授权",
+};
+
+/** 异常卡快照: error(deepseek, 采集失败) */
+const CARD_ERROR_PROVIDER: ProviderSnapshot = {
+  provider_id: "deepseek",
+  display_name: "DeepSeek-按量 #1",
+  plan_type: "balance",
+  logo: "deepseek",
+  fetched_at: NOW_SEC - 240,
+  status: "error",
+  metrics: [],
+  alerts: [{ level: "critical", message: "429 quota exceeded: 今日按量已超限" }],
+};
+
+/** 异常体 mock —— 未来实现卡由 ProviderCard AbnormalBody(OneClickAuth + HintCopyButton 等
+ * IPC 件)承载, 此处仅静态示意结构(按钮为 chip 占位, 不接 IPC)。布局语义与
+ * t_52e3a7fb 修复一致: 说明文字独占整行自然折行, 动作钮换行并排, 不单行挤压。 */
+function AbnormalBodyMock({ p, health }: { p: ProviderSnapshot; health: HealthLevel }) {
+  return (
+    <div className="qcard-abnormal" data-testid="qcard-abnormal">
+      <div className={`qcard-status-line text-${health}`}>
+        {p.status === "auth_expired" && (
+          <span className="qcard-lamp" aria-hidden="true">
+            ●
+          </span>
+        )}
+        {p.status === "auth_expired"
+          ? t("statusText.auth_expired" as Parameters<typeof t>[0])
+          : p.status === "error"
+            ? t("statusText.error" as Parameters<typeof t>[0])
+            : p.status}
+      </div>
+      {p.setup_hint && (
+        <div className="qcard-hint" data-testid="qcard-hint">
+          <span className="qcard-hint-text">⚑ {p.setup_hint}</span>
+          <div className="qcard-hint-actions">
+            {/* 示意(非功能): 实现卡接入 HintCopyButton / OneClickAuth */}
+            <span className="qcard-chip" aria-hidden="true">
+              {t("card.copy" as Parameters<typeof t>[0])}
+            </span>
+            <span className="qcard-chip" aria-hidden="true">
+              {t("card.authStart" as Parameters<typeof t>[0])}
+            </span>
+          </div>
+        </div>
+      )}
+      {p.alerts.length > 0 && <div className="qcard-note">{p.alerts.map((a) => a.message).join("; ")}</div>}
+    </div>
+  );
+}
+
+/** 未来 ProviderCard 的目标结构 mock: head + body slot(正常=窗口行 QuotaMeter / 异常=AbnormalBodyMock) */
+function ProviderCardMock({ p, layout }: { p: ProviderSnapshot; layout?: QuotaLayout }) {
+  const health = providerHealth(p);
+  const abnormal = p.status !== "ok";
+  return (
+    <div className="qcard" data-testid="qcard" data-health={health} data-layout={layout ?? "abnormal"}>
+      <div className="qcard-head">
+        <span className="qcard-handle" aria-hidden="true">
+          {/* 拖把手载体 = BrandLogo(D-039: 实现卡用 brand-block.drag-handle 绑 makeHandleProps) */}
+          <BrandLogo platform={p.logo ?? p.provider_id} size={14} />
+        </span>
+        <span className="qcard-name" title={p.display_name}>
+          {p.display_name}
+        </span>
+        <StatusDot health={health} size={8} />
+        <span className={`qcard-badge text-${health}`}>{statusBadge(p)}</span>
+      </div>
+      {abnormal ? (
+        <AbnormalBodyMock p={p} health={health} />
+      ) : (
+        <div className="qcard-windows">
+          {p.metrics.map((m) => {
+            const h = metricHealth(m);
+            return (
+              <QuotaMeter
+                key={m.key}
+                layout={layout}
+                pct={m.limit !== undefined && m.limit > 0 ? m.used / m.limit : 0}
+                state={h === "unknown" ? "ok" : (h as QuotaState)}
+                title={cardWindowTitle(m.key)}
+                resetText={
+                  m.key === "rolling_5h"
+                    ? t("quota.cResetH" as Parameters<typeof t>[0])
+                    : t("quota.cResetD" as Parameters<typeof t>[0])
+                }
+                used={m.used}
+                limit={m.limit}
+                unit={m.unit}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Provider 卡片方案段定义: tag(方案代号) + 画布内容 + i18n 名/说明 */
+interface CardOptionDef {
+  tag: string;
+  testKey: string;
+  nameKey: string;
+  descKey: string;
+  providers: ProviderSnapshot[];
+  layout?: QuotaLayout;
+}
+
+/** 方案 A(row, 推荐) / 方案 B(duo, 备选) 同数据; 第三段 = 异常卡共用骨架(auth+error 两例) */
+const CARD_OPTIONS: CardOptionDef[] = [
+  { tag: "A", testKey: "a", layout: "row", nameKey: "quota.cardAName", descKey: "quota.cardADesc", providers: [CARD_OK_PROVIDER] },
+  { tag: "B", testKey: "b", layout: "duo", nameKey: "quota.cardBName", descKey: "quota.cardBDesc", providers: [CARD_OK_PROVIDER] },
+  { tag: "⚠", testKey: "abn", nameKey: "quota.cardAbnName", descKey: "quota.cardAbnDesc", providers: [CARD_AUTH_PROVIDER, CARD_ERROR_PROVIDER] },
+];
+
 export function QuotaGallery({ onBack }: { onBack: () => void }) {
   return (
     <div className="settings-view quota-gallery" data-testid="quota-gallery">
@@ -109,6 +274,26 @@ export function QuotaGallery({ onBack }: { onBack: () => void }) {
                   limit={d.limit}
                   unit={d.unit}
                 />
+              ))}
+            </div>
+          </section>
+        ))}
+
+        {/* Provider 卡片组合层方案(t_698a43c9): A=row 卡(推荐) / B=duo 卡(备选) 同数据横比 + 异常卡共用骨架 */}
+        {CARD_OPTIONS.map((opt) => (
+          <section className="qvar" data-testid={`qvar-cards-${opt.testKey}`} key={opt.testKey}>
+            <header className="qvar-head">
+              <div className="qvar-title-row">
+                <span className="qvar-tag" aria-hidden="true">
+                  {opt.tag}
+                </span>
+                <h4 className="qvar-name">{t(opt.nameKey as Parameters<typeof t>[0])}</h4>
+              </div>
+              <p className="qvar-desc">{t(opt.descKey as Parameters<typeof t>[0])}</p>
+            </header>
+            <div className="qvar-canvas qvar-canvas--cards" data-testid={`qvar-canvas-cards-${opt.testKey}`}>
+              {opt.providers.map((p) => (
+                <ProviderCardMock key={`${opt.testKey}-${p.provider_id}`} p={p} layout={opt.layout} />
               ))}
             </div>
           </section>

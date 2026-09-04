@@ -305,6 +305,18 @@ const zh = {
     legendOk: "ok(健康)",
     legendWarn: "warn(偏低)",
     legendBad: "bad(耗尽)",
+    // t_698a43c9: Provider 卡片组合层方案段(组合 QuotaMeter, 供选型)
+    cardAName: "Provider 卡 · 方案 A 行式窗口行（推荐）",
+    cardADesc:
+      "每窗口一个 QuotaMeter row 实例: 标题列定宽左 / 条中 / 用量右, 多窗堆叠成列, 跨窗扫读比进度最省力; 重置小字垫底弱化。head = BrandLogo(拖把手) + 名称 + StatusDot + 徽章。拖拽把手 D-039 保留(useCardDragSort 零改)。",
+    cardBName: "Provider 卡 · 方案 B duo 两行组块（备选）",
+    cardBDesc:
+      "每窗口一个 QuotaMeter duo 实例: 标题+用量一行分左右(数字加粗), 条+重置一行。单窗自含、纵向节奏更松; 代价: 多窗纵向扫读需在左右列间跳, 且重置与条同级抢眼。",
+    cardAbnName: "异常状态卡 · 共用骨架（两方案同一套）",
+    cardAbnDesc:
+      "auth_expired / error / stale 不渲染假窗口行(§2.1): 黄灯+setup_hint 授权面板(auth_expired, 保留 t_52e3a7fb 列式修复) / 红字(error) / 灰字(stale)。卡骨架与正常卡同构(data-health 相同), 排序扫描形态一致。",
+    cResetH: "3.2 小时后重置",
+    cResetD: "5.8 天后重置",
   },
 } as const;
 
@@ -594,6 +606,18 @@ const en: Dict = {
     legendOk: "ok (healthy)",
     legendWarn: "warn (low)",
     legendBad: "bad (exhausted)",
+    // t_698a43c9: Provider card composition options (compose QuotaMeter, for pick)
+    cardAName: "Provider card · Option A row window rows (recommended)",
+    cardADesc:
+      "One QuotaMeter row per window: fixed-width title left / bar center / usage right; stacked windows align into columns for fastest cross-window scanning; reset demoted to a small sub-line. head = BrandLogo (drag handle) + name + StatusDot + badge. Drag handle D-039 kept (useCardDragSort unchanged).",
+    cardBName: "Provider card · Option B duo two-line blocks (alternative)",
+    cardBDesc:
+      "One QuotaMeter duo per window: title + usage share the top line (bold number), bar + reset the bottom. Each window self-contained with a looser rhythm; cost: scanning across stacked windows jumps between left/right columns, and reset vies with the bar for attention.",
+    cardAbnName: "Abnormal state card · shared skeleton (same for both options)",
+    cardAbnDesc:
+      "auth_expired / error / stale never render fake window rows (§2.1): yellow lamp + setup_hint auth panel (auth_expired, keeps t_52e3a7fb column-layout fix) / red text (error) / grey text (stale). The card skeleton stays isomorphic with normal cards (same data-health) so sorting/scanning shape is consistent.",
+    cResetH: "resets in 3.2h",
+    cResetD: "resets in 5.8d",
   },
 };
 

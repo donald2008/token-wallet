@@ -1905,3 +1905,138 @@ body {
   padding: 0;
   gap: var(--space-8);
 }
+
+/* ============ Provider 卡片组合层方案段(t_698a43c9, mock 供选型) ============
+ * 目标结构(未来实现卡): ProviderCard 壳 = head(BrandLogo 拖把手 + 名称 + StatusDot +
+ * 徽章文字) + body slot。正常 body = 窗口行列表(每窗一个 QuotaMeter row/duo);
+ * 异常 body = AbnormalBody 同构槽(黄灯/红字 + setup_hint 授权面板), 不渲染假窗口行。
+ * 新前缀 .qcard-* / .qvar-canvas--cards(gallery 专属), 不占真卡 .card/.card-head,
+ * 不与 e2e 真卡选择器(provider-card/.progress 之外)冲突; .progress 契约由 QuotaMeter 保证。 */
+.qvar-canvas--cards {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  gap: var(--space-12);
+}
+
+.qcard {
+  box-sizing: border-box;
+  width: 100%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-12);
+  padding: var(--space-8) var(--space-12);
+}
+
+.qcard-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  margin-bottom: var(--space-4);
+}
+
+/* 拖把手示意(D-039): 真卡 = .brand-block.drag-handle(16px, grab 光标 + pointer 绑定);
+ * mock 放大到 20px 盒 + 虚线缘仅为可读性提示「此处可拖」, 实现卡沿真卡结构落地 */
+.qcard-handle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-20);
+  height: var(--space-20);
+  border: 1px dashed color-mix(in srgb, var(--fg-dim) 45%, transparent);
+  border-radius: var(--radius-4);
+  color: var(--fg-dim);
+}
+
+.qcard-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.qcard-badge {
+  font-size: var(--font-11);
+  white-space: nowrap;
+}
+
+/* 窗口行列表: 窗间 1px 分隔线 + 8px 节奏(读作「一窗一单元」); 每窗 QuotaMeter 撑满行宽 */
+.qcard-windows {
+  display: flex;
+  flex-direction: column;
+}
+
+.qcard-windows > .quota-meter + .quota-meter {
+  margin-top: var(--space-8);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--border);
+}
+
+/* 异常体(与 ProviderCard AbnormalBody 同构; setup-hint 保留 t_52e3a7fb 列式修复语义) */
+.qcard-abnormal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.qcard-status-line {
+  font-size: var(--font-12);
+  font-weight: 600;
+}
+
+/* auth_expired 黄灯(§2.1): 自绘圆点, 填充 --warn(D-016), 光晕提示待处理(同 .lamp) */
+.qcard-lamp {
+  display: inline-block;
+  margin-right: var(--space-4);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--warn);
+  text-shadow:
+    0 0 2px var(--warn),
+    0 0 6px var(--warn);
+  vertical-align: middle;
+}
+
+.qcard-hint {
+  font-size: var(--font-11);
+  color: var(--warn-fg);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  border-radius: var(--radius);
+  padding: var(--space-4) var(--space-8);
+  line-height: 1.5;
+  display: flex;
+  flex-wrap: wrap; /* t_52e3a7fb 语义: 说明文字独占整行自然折行, 动作钮换行并排 */
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+.qcard-hint-text {
+  flex: 1 1 100%; /* 独占整行, 不单行挤压 */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.qcard-hint-actions {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* 示意 chip(非功能按钮): 实现卡替换为 HintCopyButton / OneClickAuth */
+.qcard-chip {
+  font-size: var(--font-10);
+  line-height: 1.4;
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg-dim);
+}
+
+.qcard-note {
+  font-size: var(--font-10);
+  color: var(--fg-dim);
+}

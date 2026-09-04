@@ -62,11 +62,12 @@ test("方案页: 同数据×5种排版, 每段 4 条完整四元素, 单位语�
   await pwExpect(rowCanvas.locator(".quota-usage").first()).toHaveText("40% / 100%");
   await pwExpect(rowCanvas.locator(".quota-usage").nth(3)).toContainText("2300 / 10000 credits");
 
-  // 总契约: 20 条 progressbar/进度条(4 数据 × 5 排版); 填充 ok 10 / warn 5 / bad 5
-  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(20);
-  await pwExpect(gallery.locator(".progress")).toHaveCount(20);
-  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(10);
-  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(5);
+  // 总契约: 24 条 progressbar/进度条(4 数据 × 5 排版 + Provider 卡 2 窗 × 2 方案);
+  // 填充 ok 12 / warn 7 / bad 5(t_698a43c9 卡片段: A/B 各加 kimi 5h 80% warn + 周窗 20% ok)
+  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(24);
+  await pwExpect(gallery.locator(".progress")).toHaveCount(24);
+  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(12);
+  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(7);
   await pwExpect(gallery.locator(".progress-fill[data-health='bad']")).toHaveCount(5);
 
   // 每段 meter 的 data-layout 与 class 和所在段一致(容器层排版生效)
@@ -82,6 +83,30 @@ test("方案页: 同数据×5种排版, 每段 4 条完整四元素, 单位语�
 
   // 图例三态色
   await pwExpect(page.getByTestId("quota-legend")).toBeVisible();
+
+  // Provider 卡片组合层方案段(t_698a43c9): A=row(2窗) B=duo(2窗) 同数据; 异常段无假窗口行
+  for (const [key, layout] of [
+    ["a", "row"],
+    ["b", "duo"],
+  ] as const) {
+    const canvas = page.getByTestId(`qvar-canvas-cards-${key}`);
+    await pwExpect(canvas).toBeVisible();
+    const meters = canvas.locator("[data-testid='quota-meter']");
+    await pwExpect(meters).toHaveCount(2);
+    await pwExpect(meters.first()).toHaveAttribute("data-layout", layout);
+    await pwExpect(meters.first()).toHaveClass(new RegExp(`quota-meter--layout-${layout}`));
+  }
+  // A 卡头组合 + 真实感用量(kimi 5h requests 计数制, 主页同形态)
+  const cardA = page.getByTestId("qvar-canvas-cards-a").locator("[data-testid='qcard']");
+  await pwExpect(cardA).toHaveAttribute("data-health", "warn");
+  await pwExpect(cardA.locator(".qcard-name")).toHaveText("Kimi-Code #1");
+  await pwExpect(cardA.locator("[data-testid='status-dot']")).toHaveAttribute("data-health", "warn");
+  await pwExpect(cardA.locator(".qcard-windows .quota-usage").first()).toContainText("960 / 1200");
+  // 异常段: auth_expired 卡(黄+hint) + error 卡(红) 且无任何 progressbar(§2.1 不显示假数据)
+  const abn = page.getByTestId("qvar-canvas-cards-abn");
+  await pwExpect(abn.locator("[data-testid='qcard']")).toHaveCount(2);
+  await pwExpect(abn.locator("[data-testid='qcard-hint']")).toHaveCount(1);
+  await pwExpect(abn.locator('[role="progressbar"]')).toHaveCount(0);
 
   // 返回面板(侧栏仍在)
   await page.getByTestId("quota-back").click();
@@ -101,5 +126,12 @@ test("方案页截图取证(5 种排版逐段落 /tmp)", async ({ hostPage, page
     await section.scrollIntoViewIfNeeded();
     await page.waitForTimeout(250);
     await section.screenshot({ path: `/tmp/quota-layout-${layout}.png` });
+  }
+  // Provider 卡片组合层方案(t_698a43c9): 方案 A(row 卡) / B(duo 卡) / 异常段逐段落 /tmp
+  for (const key of ["a", "b", "abn"]) {
+    const section = page.getByTestId(`qvar-cards-${key}`);
+    await section.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(250);
+    await section.screenshot({ path: `/tmp/quota-card-${key}.png` });
   }
 });
