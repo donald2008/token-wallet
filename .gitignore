@@ -38,3 +38,4 @@ playwright-report/
 data/
 *.jsonl
 !sketches/**/*.jsonl
+__pycache__/
