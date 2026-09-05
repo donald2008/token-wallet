@@ -2014,7 +2014,9 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* 方案 B/D 共用触发器 ⓘ (含 hover 揭示 tooltip 子层) */
+/* 方案 B/D 共用触发器 ⓘ (含 hover 揭示 tooltip 子层)
+ * t_03bdaf1f 终审修正: D 方案 trigger 不再显数字(避免与 qcard2-headline 重复),
+ * 改为 ⓘ 形态与 B 一致, 只作 hover 锚 */
 .qcard2-trigger {
   flex: 0 0 auto;
   display: inline-flex;
@@ -2030,12 +2032,8 @@ body {
   position: relative;
 }
 .qcard2-trigger--head {
-  /* 方案 D 头部触发器: 用最紧窗数字当锚, 不显示 ⓘ 而显数字 */
+  /* D 方案头部触发器: 与 B ⓘ 形态一致, 仅触发器位置略不同(卡头右侧) */
   cursor: help;
-  font-weight: 600;
-  width: auto;
-  padding: 0 var(--space-8);
-  border-color: color-mix(in srgb, var(--fg-dim) 30%, transparent);
 }
 
 /* 合并 tooltip(B 用 ⓘ, D 用 head-tip): 显隐纯 CSS, 跟随 BarRowTooltip 既有结构

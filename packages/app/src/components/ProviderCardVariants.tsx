@@ -1,5 +1,5 @@
 import type { Metric, MetricUnit, ProviderSnapshot } from "../types";
-import { metricHealth, providerHealth, statusBadge } from "../health";
+import { healthLabel, metricHealth, providerHealth, statusBadge } from "../health";
 import { t } from "../i18n";
 import { QuotaMeter, type QuotaState } from "./QuotaMeter";
 import { BarRowTooltip } from "./BarRowTooltip";
@@ -51,7 +51,7 @@ interface VariantDef {
 
 /** 共享: 卡头(handle + 名称 + StatusDot + 综合徽章)
  * `compact`=基线/色条方案 A/C, `expanded`=头部综合态 B(加综合态文字)
- * `headline`=头部承担方案 D(头部并入最紧窗用量, 让该窗行隐藏用量) */
+ * `highlight`=头部承担方案 D(头部并入最紧窗用量, 让该窗行隐藏用量) */
 function CardHead({
   p,
   mode,
@@ -59,8 +59,8 @@ function CardHead({
 }: {
   p: ProviderSnapshot;
   mode: "compact" | "expanded";
-  /** 头部 tooltip 触发器: 承载最紧窗(D 用), null = 头部无 tooltip */
-  highlight?: Metric | null;
+  /** 头部 tooltip 触发器: 承载最紧窗(D 用), undefined = 头部无 tooltip */
+  highlight?: Metric;
 }) {
   const health = providerHealth(p);
   const abnormal = p.status !== "ok";
@@ -82,7 +82,9 @@ function CardHead({
           </span>
         </span>
       )}
-      {/* B 方案: 综合态徽章(灯+文字同行), A/C 灯+徽章各列右 */}
+      {/* B 方案: 综合态徽章(灯+文字同行), A/C 灯+徽章各列右。
+       * t_03bdaf1f 终审修正: 文字 = healthLabel(health) 同源, 不再用固定
+       * "综合健康" 键; mock kimi warn 卡正确显示「偏低」(与灯色一致)。 */}
       {mode === "expanded" ? (
         <span
           className={`qcard2-status-group text-${health}`}
@@ -90,7 +92,7 @@ function CardHead({
         >
           <StatusDot health={health} size={8} />
           <span className="qcard2-status-label">
-            {abnormal ? statusBadge(p) : t("quota.card2Health" as Parameters<typeof t>[0])}
+            {abnormal ? statusBadge(p) : healthLabel(health)}
           </span>
         </span>
       ) : (
@@ -107,22 +109,27 @@ function CardHead({
 
 /** 共享: 单个窗口行(QuotaMeter 默认排版 row) + 行内 BarRowTooltip(micro)。
  * `hideUsage` = D 方案让头部承担该窗用量, 行隐藏用量避免重复(QuotaMeter 缺省即不渲染, 契约不破) */
-function WindowRow({ m, hideUsage = false }: { m: Metric; hideUsage?: boolean }) {
-  const h = metricHealth(m);
+type WindowRowProps = {
+  metric: Metric;
+  /** D 方案让头部承担该窗用量时设为 true, 该窗 QuotaMeter 不渲染 .quota-usage */
+  hideUsage?: boolean;
+};
+function WindowRow({ metric, hideUsage = false }: WindowRowProps) {
+  const h = metricHealth(metric);
   return (
-    <div className="bar-row" data-testid="qcard2-bar-row" data-metric={m.key}>
+    <div className="bar-row" data-testid="qcard2-bar-row" data-metric={metric.key}>
       <QuotaMeter
         layout="row"
-        pct={m.limit !== undefined && m.limit > 0 ? m.used / m.limit : 0}
+        pct={metric.limit !== undefined && metric.limit > 0 ? metric.used / metric.limit : 0}
         state={h === "unknown" ? "ok" : (h as QuotaState)}
-        title={cardWindowTitle(m.key)}
-        resetText={cardResetText(m)}
-        used={hideUsage ? undefined : m.used}
-        limit={m.limit}
-        unit={m.unit}
+        title={cardWindowTitle(metric.key)}
+        resetText={cardResetText(metric)}
+        used={hideUsage ? undefined : metric.used}
+        limit={metric.limit}
+        unit={metric.unit}
       />
       {/* 行内 BarRowTooltip: 沿用 6dde355 契约, 不动本体 */}
-      <BarRowTooltip metric={m} />
+      <BarRowTooltip metric={metric} />
     </div>
   );
 }
@@ -221,7 +228,7 @@ function VariantA({ p, m, abnormal }: { p: ProviderSnapshot; m: Metric[]; abnorm
       ) : (
         <div className="qcard2-windows" data-testid="qcard2-windows">
           {m.map((mm) => (
-            <WindowRow key={mm.key} m={mm} />
+            <WindowRow key={mm.key} metric={mm} />
           ))}
         </div>
       )}
@@ -265,7 +272,7 @@ function VariantB({ p, m, abnormal }: { p: ProviderSnapshot; m: Metric[]; abnorm
       ) : (
         <div className="qcard2-windows">
           {m.map((mm) => (
-            <WindowRow key={mm.key} m={mm} />
+            <WindowRow key={mm.key} metric={mm} />
           ))}
         </div>
       )}
@@ -296,7 +303,7 @@ function VariantC({ p, m, abnormal }: { p: ProviderSnapshot; m: Metric[]; abnorm
       ) : (
         <div className="qcard2-windows">
           {m.map((mm) => (
-            <WindowRow key={mm.key} m={mm} />
+            <WindowRow key={mm.key} metric={mm} />
           ))}
         </div>
       )}
@@ -320,9 +327,6 @@ function VariantD({ p, m, abnormal }: { p: ProviderSnapshot; m: Metric[]; abnorm
     const accR = acc.used / accLimit;
     return r > accR ? mm : acc;
   }, null);
-  const normalMetrics = m.map((mm) =>
-    tightest && mm.key === tightest.key ? { ...mm, _hideUsage: true } : mm,
-  );
   return (
     <div
       className="qcard2 qcard2--head-takes"
@@ -331,16 +335,17 @@ function VariantD({ p, m, abnormal }: { p: ProviderSnapshot; m: Metric[]; abnorm
       data-health={providerHealth(p)}
     >
       <div className="qcard2-head-wrap">
-        <CardHead p={p} mode="compact" highlight={abnormal ? null : tightest} />
+        <CardHead p={p} mode="compact" highlight={abnormal ? undefined : (tightest ?? undefined)} />
         {!abnormal && tightest && (
-          /* 头部 tooltip 触发器: 承载最紧窗的 BarRowTooltip(micro 四元素)
+          /* 头部 tooltip 触发器: 与 B ⓘ 形态对齐, 只作 hover 锚,
+           * 不再渲染 formatUsage(避免与 qcard2-headline 数字重复, t_03bdaf1f 终审修正);
            * 纯 CSS .qcard2-trigger:hover ~ .qcard2-head-tip 显示 */
           <span
             className="qcard2-trigger qcard2-trigger--head"
             data-testid="qcard2-head-trigger"
             aria-label={t("quota.card2HeadTip" as Parameters<typeof t>[0])}
           >
-            {formatUsage(tightest)}
+            <span aria-hidden="true">ⓘ</span>
             <span className="qcard2-head-tip" data-testid="qcard2-head-tip">
               <BarRowTooltip metric={tightest} />
             </span>
@@ -351,8 +356,12 @@ function VariantD({ p, m, abnormal }: { p: ProviderSnapshot; m: Metric[]; abnorm
         <AbnormalBody p={p} />
       ) : (
         <div className="qcard2-windows">
-          {normalMetrics.map((mm) => (
-            <WindowRow key={mm.key} m={mm} hideUsage={(mm as Metric & { _hideUsage?: boolean })._hideUsage} />
+          {m.map((mm) => (
+            <WindowRow
+              key={mm.key}
+              metric={mm}
+              hideUsage={tightest !== null && mm.key === tightest.key}
+            />
           ))}
         </div>
       )}

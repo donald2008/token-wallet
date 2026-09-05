@@ -8,6 +8,7 @@
 // - 旧矩阵结构(.quota-table/.quota-row/.quota-vhead)零残留
 // - t_85237167 9/5 清空: Provider 卡片卡内排版方案段(279858d+d304801)已删, 故总 progressbar
 //   从 29 回归到 20(4 数据 × 5 排版); 填充 ok 14/warn 10/bad 5 → ok 10/warn 5/bad 5
+// - t_85237167 9/5 重建 + 9/6 终审修复: 4 方案卡片段 19 加入, 总 progressbar 39
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";

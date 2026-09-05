@@ -12,7 +12,7 @@ import { test } from "./fixtures";
  * - 返回按钮回面板
  * - t_85237167 9/5 清空重建: 旧 S1-S4 删, 新 4 方案(A/B/C/D) + 异常段,
  *   全部基于 tooltip QuotaMeter(BarRowTooltip + QuotaMeter layout=micro) 组合
- *   总 progressbar 36 = 5 排版段 20 + 4 方案卡片段 16
+ *   总 progressbar 39 = 5 排版段 20 + 4 方案卡片段 19
  */
 
 const LAYOUTS = ["row", "duo", "hero", "micro", "ticker"] as const;
