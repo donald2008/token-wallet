@@ -1,5 +1,5 @@
 name: hook-usage-reporter
-version: 0.1.0
+version: 0.1.1
 description: "token-wallet usage reporter — post_api_request 提取 LLM 消耗, buffer/flush 上报 token-wallet MCP daemon (D-048 协议)."
 author: njbx02
 kind: backend
@@ -7,10 +7,30 @@ provides_hooks:
   - post_api_request
   - on_stream_end
   - on_session_end
-config:
-  enabled: false            # 缺省关: daemon 上线联调时开
-  endpoint: "http://127.0.0.1:9131/mcp"
-  key_env: "TOKEN_WALLET_MCP_KEY"
-  buffer_max: 50
-  flush_interval_s: 60
-  unreachable_drop_min: 30  # daemon 连续不可达超此分钟数则丢 buffer 防 OOM
+# 配置真实通道 = 用户 config.yaml 的 plugins.entries.hook-usage-reporter.settings.*（env 可覆盖）
+# 注: plugin.yaml 的 config: 块 loader 不消费, 这里用 manifest 原生 config_schema 声明缺省。
+config_schema:
+  enabled:
+    type: bool
+    default: false
+    description: "总开关(缺省关)。daemon(:9131) 上线联调时置 true, 或 env TOKEN_WALLET_REPORTER_ENABLED=true"
+  endpoint:
+    type: str
+    default: "http://127.0.0.1:9131/mcp"
+    description: "token-wallet MCP streamable-http 端点"
+  key_env:
+    type: str
+    default: "TOKEN_WALLET_MCP_KEY"
+    description: "Bearer key 的 env 变量名(值本身走 env/Consul 注入, 不落配置文件)"
+  buffer_max:
+    type: int
+    default: 50
+    description: "buffer 满 N 条触发 flush"
+  flush_interval_s:
+    type: float
+    default: 60.0
+    description: "定时 flush 周期(秒)"
+  unreachable_drop_min:
+    type: float
+    default: 30.0
+    description: "daemon 连续不可达超此分钟数则丢 buffer 防 OOM"

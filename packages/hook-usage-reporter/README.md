@@ -38,15 +38,28 @@ cp -r packages/hook-usage-reporter ~/.hermes/plugins/hook_usage_reporter
 # 2. key 注入（Consul secrets_mapping 加映射 → env）
 #    TOKEN_WALLET_MCP_KEY ← ai-hermes/security/providers/token-wallet-mcp-key
 
-# 3. 启用（等 daemon 上线后）
-#    plugin.yaml config.enabled=true 或 env TOKEN_WALLET_REPORTER_ENABLED=true
+# 3. 启用（等 daemon 上线后）— 二选一:
+#    a) 用户 ~/.hermes/config.yaml:
+#       plugins:
+#         entries:
+#           hook-usage-reporter:
+#             settings:
+#               enabled: true
+#    b) env: TOKEN_WALLET_REPORTER_ENABLED=true
+#    注: 配置真实通道 = env 优先 → plugins.entries.<id>.settings（ctx.get_config）。
+#    plugin.yaml 内的 config_schema 仅声明缺省与校验, 不是配置值本身。
 
 # 4. 重启 gateway（用户手动, 铁律）
 ```
+
+## 协议符合性要点（v0.1.1 修复记录）
+
+- `event_id` = **uuidv7**（RFC 9562, spec §1.1 pattern 要求版本位 '7'——uuid4 会被 daemon 判 pattern 违例整条 rejected）
+- MCP 信封级 tool error（`isError=True`）→ 抛异常走整批重发路径（spec §2.1 语义 6）；逐条 `rejected` 明细在成功响应内, 不触发重发
 
 ## 测试
 
 ```bash
 cd packages/hook-usage-reporter
-python -m pytest tests/ -v   # 8 passed（映射/护栏/flush/重发/超时丢弃）
+python -m pytest tests/ -v   # 10 passed（映射/护栏/flush/重发/超时丢弃/uuidv7 pattern/信封错误）
 ```

@@ -89,3 +89,35 @@ def test_requeue_drops_after_timeout(monkeypatch):
     batch = [{"schema_version": 1, "event_id": "old"}]
     r._requeue(batch)
     assert r._buffer == []  # 超时丢弃
+
+
+# ── spec §1.1 event_id: uuidv7 pattern ──────────────────────────────────────
+import re  # noqa: E402
+
+_UUID7_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+
+
+def test_uuid7_matches_spec_pattern():
+    from reporter import uuid7
+
+    ids = {uuid7() for _ in range(200)}
+    assert len(ids) == 200  # 无碰撞
+    assert all(_UUID7_RE.match(i) for i in ids), next(i for i in ids if not _UUID7_RE.match(i))
+
+
+# ── MCP 信封级 tool error → 抛异常 → 整批重发路径 ────────────────────────────
+def test_envelope_error_raises():
+    from reporter import raise_if_envelope_error
+
+    class _Txt:
+        def __init__(self, t):
+            self.text = t
+
+    bad = type("R", (), {"isError": True, "content": [_Txt("reports must be array")]})()
+    try:
+        raise_if_envelope_error(bad)
+        assert False, "isError=True 必须抛 RuntimeError"
+    except RuntimeError as e:
+        assert "reports must be array" in str(e)
+    ok = type("R", (), {"isError": False, "content": [_Txt('{"accepted":1}')]})()
+    raise_if_envelope_error(ok)  # 不抛

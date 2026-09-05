@@ -8,13 +8,12 @@ import logging
 import os
 import threading
 import time
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("hook-usage-reporter")
 
-# ── 配置(env 可覆盖, 插件 config.yaml 由 loader 合并进 env 前缀) ──────────────
+# ── 配置缺省值(register 时可被 env / plugins.entries.<id>.settings 覆盖) ──────
 ENDPOINT = os.getenv("TOKEN_WALLET_MCP_ENDPOINT", "http://127.0.0.1:9131/mcp")
 KEY = os.getenv("TOKEN_WALLET_MCP_KEY", "")
 BUFFER_MAX = int(os.getenv("TOKEN_WALLET_REPORTER_BUFFER_MAX", "50"))
@@ -29,6 +28,25 @@ HARNESS = "hermes"
 def _iso(epoch: float) -> str:
     """epoch 秒 → ISO8601 带时区(njbx02 = +08:00)。"""
     return datetime.fromtimestamp(epoch, tz=timezone.utc).astimezone().isoformat(timespec="milliseconds")
+
+
+def uuid7() -> str:
+    """RFC 9562 UUIDv7（stdlib 3.11 无内置）：48bit ms 时间戳 + 74bit 随机。
+
+    spec §1.1 event_id pattern 要求版本位字面量 '7'——uuid4 会被 daemon 判
+    pattern 违例整条 rejected。monotonic 同毫秒不保证，协议无此要求。
+    """
+    ms = time.time_ns() // 1_000_000
+    rand_a = os.urandom(2)   # 12 bits (version 后的 rand_a)
+    rand_b = os.urandom(8)   # 62 bits (variant 占高 2 位)
+    b = bytearray(16)
+    b[0:6] = ms.to_bytes(6, "big")
+    b[6] = 0x70 | (rand_a[0] >> 4)                       # version 7
+    b[7] = ((rand_a[0] & 0x0F) << 4) | (rand_a[1] >> 4)
+    b[8] = 0x80 | (rand_b[0] & 0x3F)                     # variant 10xx
+    b[9:16] = rand_b[1:8]
+    h = b.hex()
+    return f"{h[0:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
 
 
 def canonical_tokens(u: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -62,11 +80,20 @@ def kind_from_platform(platform: str) -> str:
     return "other"
 
 
+def raise_if_envelope_error(result: Any) -> None:
+    """MCP 信封级 tool error(空批/超100条/顶层多字段)以 isError 文本返回不抛异常;
+    不检查会被当成功 → 整批静默丢失(违反 spec §2.1 语义6 整批重发)。"""
+    if getattr(result, "isError", False):
+        text = "".join(getattr(c, "text", "") for c in (getattr(result, "content", None) or []))
+        raise RuntimeError(f"report_usage envelope error: {text[:500]}")
+
+
 class Reporter:
     """内存 buffer + 后台 flush 线程 + MCP streamable-http 上报。"""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._spawn_lock = threading.Lock()  # flush 线程 spawn 原子性(timer/session_end 并发)
         self._buffer: List[Dict[str, Any]] = []
         self._reported_keys: set = set()  # (session_id, turn_id) 防双计护栏
         self._last_ok: float = time.time()
@@ -91,7 +118,7 @@ class Reporter:
             self._reported_keys.add(key)
         self.enqueue({
             "schema_version": 1,
-            "event_id": str(uuid.uuid4()),
+            "event_id": uuid7(),
             "status": "unknown",
             "agent_id": AGENT_ID,
             "harness": HARNESS,
@@ -113,11 +140,12 @@ class Reporter:
 
     # ── flush(后台线程) ────────────────────────────────────────────────
     def flush_async(self) -> None:
-        if self._thread and self._thread.is_alive():
-            return
-        self._thread = threading.Thread(target=self._flush_once, daemon=True,
-                                        name="usage-reporter-flush")
-        self._thread.start()
+        with self._spawn_lock:
+            if self._thread and self._thread.is_alive():
+                return
+            self._thread = threading.Thread(target=self._flush_once, daemon=True,
+                                            name="usage-reporter-flush")
+            self._thread.start()
 
     def _flush_once(self) -> None:
         with self._lock:
@@ -157,6 +185,7 @@ class Reporter:
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     result = await session.call_tool("report_usage", {"reports": batch})
+                    raise_if_envelope_error(result)
                     text = "".join(getattr(c, "text", "") for c in (result.content or []))
                     logger.info("report_usage ok: %s", text[:200])
 
