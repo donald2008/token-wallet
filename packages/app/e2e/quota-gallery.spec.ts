@@ -10,6 +10,9 @@ import { test } from "./fixtures";
  *   第 4 条计数制演示(credits 2300/10000); 填充 ok 10 / warn 5 / bad 5
  * - 复用 e2e DOM 契约(.progress/.progress-fill[data-health]/role=progressbar)
  * - 返回按钮回面板
+ * - t_85237167 9/5 清空重建: 旧 S1-S4 删, 新 4 方案(A/B/C/D) + 异常段,
+ *   全部基于 tooltip QuotaMeter(BarRowTooltip + QuotaMeter layout=micro) 组合
+ *   总 progressbar 36 = 5 排版段 20 + 4 方案卡片段 16
  */
 
 const LAYOUTS = ["row", "duo", "hero", "micro", "ticker"] as const;
@@ -62,12 +65,16 @@ test("方案页: 同数据×5种排版, 每段 4 条完整四元素, 单位语�
   await pwExpect(rowCanvas.locator(".quota-usage").first()).toHaveText("40% / 100%");
   await pwExpect(rowCanvas.locator(".quota-usage").nth(3)).toContainText("2300 / 10000 credits");
 
-  // 总契约: 29 条 progressbar/进度条(4 数据 × 5 排版 + 卡片方案 S1-S4: 2+3+2+2);
-  // 填充 ok 14 / warn 10 / bad 5(t_698a43c9 round2 卡内排版段: 每方案 kimi 5h warn+周窗 ok, S2 另加警示带 warn)
-  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(29);
-  await pwExpect(gallery.locator(".progress")).toHaveCount(29);
-  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(14);
-  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(10);
+  // 总契约: 39 条 progressbar/进度条
+  //   5 排版段 4 × 5 = 20 + 4 方案卡片段 19 = 39
+  //   A=4 / B=6(2 row + 2 BarRowTooltip + 2 触发器 BarRowTooltip) / C=4 / D=5(2 row + 2 BarRowTooltip + 1 头部触发器)
+  //   异常 2 卡 0
+  // 填充 ok 19 / warn 15 / bad 5
+  // t_85237167 9/5 重建: 卡内方案段 4 方案 + 异常段
+  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(39);
+  await pwExpect(gallery.locator(".progress")).toHaveCount(39);
+  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(19);
+  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(15);
   await pwExpect(gallery.locator(".progress-fill[data-health='bad']")).toHaveCount(5);
 
   // 每段 meter 的 data-layout 与 class 和所在段一致(容器层排版生效)
@@ -84,38 +91,38 @@ test("方案页: 同数据×5种排版, 每段 4 条完整四元素, 单位语�
   // 图例三态色
   await pwExpect(page.getByTestId("quota-legend")).toBeVisible();
 
-  // Provider 卡片卡内排版方案段(t_698a43c9 round2, #1043): S1-S4 同数据同组件只差卡内组织;
-  // 窗口行一律 QuotaMeter 默认排版 row; S2=最紧窗警示带(1)+窗口区(2)
-  const cardCounts: Record<string, number> = { s1: 2, s2: 3, s3: 2, s4: 2 };
-  for (const key of ["s1", "s2", "s3", "s4"]) {
-    const canvas = page.getByTestId(`qvar-canvas-cards-${key}`);
+  // Provider 卡片卡内排版方案段(t_85237167 9/5 重建): 4 方案 (A/B/C/D) + 异常段,
+  // 全部基于 tooltip QuotaMeter(BarRowTooltip + QuotaMeter layout=micro) 组合
+  for (const key of ["a", "b", "c", "d"]) {
+    const canvas = page.getByTestId(`qvar-canvas-cards2-${key}`);
     await pwExpect(canvas).toBeVisible();
-    const meters = canvas.locator("[data-testid='quota-meter']");
-    await pwExpect(meters).toHaveCount(cardCounts[key]);
-    await pwExpect(meters.first()).toHaveAttribute("data-layout", "row");
+    const cards = canvas.locator("[data-testid='qcard2']");
+    await pwExpect(cards).toHaveCount(1);
+    const card = cards.first();
+    // 卡头组合 + Kimi-Code #1(主页同形态)
+    await pwExpect(card.locator("[data-testid='qcard2-name']")).toHaveText("Kimi-Code #1");
+    // 每张 ok 卡 2 窗行, 每行嵌 1 个 BarRowTooltip(micro, tooltip 原语契约)
+    const rows = card.locator("[data-testid='qcard2-bar-row']");
+    await pwExpect(rows).toHaveCount(2);
+    await pwExpect(rows.first().locator("[data-testid='bar-tooltip']")).toHaveCount(1);
   }
-  // S1 卡头组合 + 真实感用量(kimi 5h requests 计数制, 主页同形态)
-  const cardS1 = page.getByTestId("qvar-canvas-cards-s1").locator("[data-testid='qcard']");
-  await pwExpect(cardS1).toHaveAttribute("data-health", "warn");
-  await pwExpect(cardS1.locator(".qcard-name")).toHaveText("Kimi-Code #1");
-  await pwExpect(cardS1.locator("[data-testid='status-dot']")).toHaveAttribute("data-health", "warn");
-  await pwExpect(cardS1.locator(".qcard-windows .quota-usage").first()).toContainText("960 / 1200");
-  // S2 头部融合: 警示带存在且含 1 meter, 窗口区完整列表 2(最紧窗不抽离不排序 §6.3)
-  const s2 = page.getByTestId("qvar-canvas-cards-s2");
-  await pwExpect(s2.getByTestId("qcard-tightest-strip").locator("[data-testid='quota-meter']")).toHaveCount(1);
-  await pwExpect(s2.locator(".qcard-windows [data-testid='quota-meter']")).toHaveCount(2);
-  // S3 分区: 短/长周期两个分区, 各区 1 窗
-  const s3 = page.getByTestId("qvar-canvas-cards-s3");
-  await pwExpect(s3.locator(".qcard-zone")).toHaveCount(2);
-  // S4 紧凑: ok 窗(第 2 窗)不渲染重置行, warn 窗(第 1 窗)保留
-  const s4 = page.getByTestId("qvar-canvas-cards-s4");
-  await pwExpect(s4.locator("[data-testid='quota-meter']").nth(0).locator(".quota-reset")).toHaveCount(1);
-  await pwExpect(s4.locator("[data-testid='quota-meter']").nth(1).locator(".quota-reset")).toHaveCount(0);
-  // 异常段: auth_expired 卡(黄+hint) + error 卡(红) 且无任何 progressbar(§2.1 不显示假数据)
-  const abn = page.getByTestId("qvar-canvas-cards-abn");
-  await pwExpect(abn.locator("[data-testid='qcard']")).toHaveCount(2);
-  await pwExpect(abn.locator("[data-testid='qcard-hint']")).toHaveCount(1);
+  // 异常段: 2 张卡(auth_expired warn + setup_hint / error bad 无 hint)
+  const abn = page.getByTestId("qvar-canvas-cards2-abn");
+  await pwExpect(abn.locator("[data-testid='qcard2']")).toHaveCount(2);
+  await pwExpect(abn.locator("[data-testid='qcard2-hint']")).toHaveCount(1);
   await pwExpect(abn.locator('[role="progressbar"]')).toHaveCount(0);
+  // 方案 C 锁住态容器: tabIndex + role=button + data-pinnable=true
+  const cardC = page.getByTestId("qvar-canvas-cards2-c").locator("[data-testid='qcard2']");
+  await pwExpect(cardC).toHaveAttribute("tabindex", "0");
+  await pwExpect(cardC).toHaveAttribute("role", "button");
+  // 方案 B 头部综合态: .qcard2-status-group + qcard2-trigger(ⓘ + 合并 tooltip)
+  const cardB = page.getByTestId("qvar-canvas-cards2-b").locator("[data-testid='qcard2']");
+  await pwExpect(cardB.locator("[data-testid='qcard2-status-group']")).toHaveCount(1);
+  await pwExpect(cardB.locator("[data-testid='qcard2-trigger']")).toHaveCount(1);
+  // 方案 D 头部承担最紧窗: qcard2-headline + qcard2-head-trigger(内嵌 BarRowTooltip)
+  const cardD = page.getByTestId("qvar-canvas-cards2-d").locator("[data-testid='qcard2']");
+  await pwExpect(cardD.locator("[data-testid='qcard2-headline']")).toHaveCount(1);
+  await pwExpect(cardD.locator("[data-testid='qcard2-head-trigger'] [data-testid='bar-tooltip']")).toHaveCount(1);
 
   // 返回面板(侧栏仍在)
   await page.getByTestId("quota-back").click();
@@ -123,7 +130,7 @@ test("方案页: 同数据×5种排版, 每段 4 条完整四元素, 单位语�
   await pwExpect(page.getByTestId("settings-btn")).toBeVisible();
 });
 
-test("方案页截图取证(5 种排版逐段落 /tmp)", async ({ hostPage, page }) => {
+test("方案页截图取证(5 种排版 + 4 方案 + 异常段逐段落 /tmp)", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await openGallery(page);
@@ -136,11 +143,11 @@ test("方案页截图取证(5 种排版逐段落 /tmp)", async ({ hostPage, page
     await page.waitForTimeout(250);
     await section.screenshot({ path: `/tmp/quota-layout-${layout}.png` });
   }
-  // Provider 卡片卡内排版方案(t_698a43c9 round2): S1-S4 + 异常段逐段落 /tmp
-  for (const key of ["s1", "s2", "s3", "s4", "abn"]) {
-    const section = page.getByTestId(`qvar-cards-${key}`);
+  // t_85237167 9/5 重建: 4 方案 + 异常段逐段落 /tmp(每方案一张)
+  for (const key of ["a", "b", "c", "d", "abn"]) {
+    const section = page.getByTestId(`qvar-cards2-${key}`);
     await section.scrollIntoViewIfNeeded();
     await page.waitForTimeout(250);
-    await section.screenshot({ path: `/tmp/quota-card-${key}.png` });
+    await section.screenshot({ path: `/tmp/quota-card2-${key}.png` });
   }
 });

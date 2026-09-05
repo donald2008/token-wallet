@@ -305,28 +305,27 @@ const zh = {
     legendOk: "ok(健康)",
     legendWarn: "warn(偏低)",
     legendBad: "bad(耗尽)",
-    // t_698a43c9: Provider 卡片组合层方案段(组合 QuotaMeter, 供选型)
-    // t_698a43c9 round2(#1043 终稿): Provider 卡片卡内排版方案段(4 方案, 窗口行一律 QuotaMeter 默认排版 row)
-    cardS1Name: "Provider 卡 · 方案 1 基准竖排列表式",
-    cardS1Desc:
-      "窗口区 = 每窗一个 QuotaMeter(默认排版)竖排堆叠, 窗间 1px 分隔线(--border) + 8px 节奏; 头部与窗口区主从分明, 现状最接近(基准对照)。窗口数 1-4 最佳; 5-6 窗纵向冗长但扫描仍稳。实现边界: 复用现有 ProviderCard 壳, 仅窗口区容器化(.card-windows), 零结构重构。",
-    cardS2Name: "Provider 卡 · 方案 2 头部融合式（风险上抬）",
-    cardS2Desc:
-      "最紧窗在头部下方以警示色带(--warn 10% 底 + 30% 边)摘要直呈, 风险一瞥可见; 窗口区仍按时间窗升序完整列表(最紧窗不抽离不排序, §6.3 契约保留)。取舍: 风险信息重复一次换 glanceability, 头部密度↑; 多窗场景风险不沉没。窗口数 1-6 均适用。",
-    cardS3Name: "Provider 卡 · 方案 3 分区卡片式（周期分区）",
-    cardS3Desc:
-      "窗口区按周期分组: 短周期(5h/日)与长周期(周/月+)各立分区标签(--font-10 dim), 区间 8px + 1px 分隔线, 组内紧凑。窗口数 4-6 时层级最清晰; 1-2 窗时标签冗余。实现边界: 复用壳 + 窗口区按 span 分组渲染(zoneOf 纯函数), 结构增量最小。",
-    cardS4Name: "Provider 卡 · 方案 4 紧凑密度式（行距收敛）",
-    cardS4Desc:
-      "取消窗间分隔线, 行距压到 4px, ok(健康)窗不渲染重置行(状态色已表达健康, 重置是辅助信息)→ 每窗省一行。窗口数 5-6 时总高省 ~20-30%; 取舍: 窗间分界靠间距语气弱于分隔线, 首扫需适应。实现边界: 仅 CSS modifier + 条件 prop(resetText 缺省不渲染, QuotaMeter 契约不破)。",
-    cardAbnName: "异常状态卡 · 共用骨架（四方案同一套）",
-    cardAbnDesc:
-      "auth_expired / error / stale 不渲染假窗口行(§2.1): 黄灯+setup_hint 授权面板(auth_expired, 保留 t_52e3a7fb 列式修复) / 红字(error) / 灰字(stale)。卡骨架与正常卡同构(data-health 相同), 排序扫描形态一致。",
-    cResetH: "3.2 小时后重置",
-    cResetD: "5.8 天后重置",
-    stripTightest: "最紧窗",
-    zoneShort: "短周期",
-    zoneLong: "长周期",
+    // t_85237167: Provider 卡片卡内排版方案段(4 方案 + 异常段, 9/5 清空重建)
+    card2AName: "Provider 卡 · 方案 A 简洁双行基线",
+    card2ADesc:
+      "头部最小化(handle + 名称 + StatusDot + 状态徽章), 双窗各一行 QuotaMeter(row), 窗间 8px 节奏, 无新结构。**与主页窗口行 1:1 完全一致, 认知零成本**。每窗行内嵌 BarRowTooltip(micro), 行 hover 弹四元素。与 tooltip 关系: 纯沿用, 无新增。取舍: 2 窗总高 ~88px 最中性, 无惊喜。",
+    card2BName: "Provider 卡 · 方案 B 头部综合态(信息上抬, 无摘要条)",
+    card2BDesc:
+      "头部右侧合并「灯 + 综合态文字」单行(整卡 health 综合态徽章), 整卡右上角 ⓘ hover 触发合并 tooltip(双 BarRowTooltip 堆叠)。**信息上抬但不引入摘要条形态**——不抽最紧窗颜色, 风险颜色仍走行内自身 color。取舍: 综合态一行让「健康/偏低/告急」一瞥可读, ⓘ 是新交互; 真实屏 ~336px 宽下「灯+综合态文字+ⓘ」是否拥挤需选型测。",
+    card2CName: "Provider 卡 · 方案 C 状态色条 + 锁住态 tooltip",
+    card2CDesc:
+      "整卡左竖 2px 色条(--ok/--warn/--bad, 对应最紧窗 health), 整卡可点击锁住(tabIndex+role=button, 无 JS 状态机)。**锁住态 CSS 让 .bar-tooltip 常驻揭示**(不再依赖 hover, 持续可见双窗 micro 适合对比)。取舍: 色条 2px 不占宽度预算; 锁住态=新交互(键盘 Tab 可达, 按 Esc 取消聚焦); 状态色条是纯视觉锚点, 与摘要条不同源(色条=整卡外缘, 摘要条=头部下方色块)。",
+    card2DName: "Provider 卡 · 方案 D 头部承担最紧窗(无摘要条)",
+    card2DDesc:
+      "头部右侧并入「最紧窗用量数字 + 窗名小字」, 该窗行隐藏用量避免重复(QuotaMeter 缺省即不渲染, 契约不破); 头部 hover 弹该最紧窗 BarRowTooltip。**风险数字内联到头部信息流, 不用摘要条形态**(数字融入头部, 不抽警示色带)。取舍: 隐含 S2「风险上抬」精神但换形态, 与 B 同属头部扩展, 区别在 D 显数字 / B 显综合态文字。",
+    card2AbnName: "Provider 卡 · 异常卡共用骨架(4 方案同一套)",
+    card2AbnDesc:
+      "auth_expired / error 共用骨架 body 变体, 不渲染假窗口行(§2.1)。auth_expired: 黄灯 + setup_hint 授权面板(保留 t_52e3a7fb 列式修复); error: 红字 + 无 hint。卡骨架与正常卡同构(data-health 一致), 排序扫描形态一致。",
+    card2Hours: "小时后重置",
+    card2Days: "天后重置",
+    card2Health: "综合健康",
+    card2MergedTip: "查看双窗合并详情",
+    card2HeadTip: "最紧窗详情",
   },
 } as const;
 
@@ -616,27 +615,27 @@ const en: Dict = {
     legendOk: "ok (healthy)",
     legendWarn: "warn (low)",
     legendBad: "bad (exhausted)",
-    // t_698a43c9 round2 (per final requirement comment #1043): Provider card interior-layout options (4 schemes; window rows always QuotaMeter default layout row)
-    cardS1Name: "Provider card · Scheme 1 baseline stacked list",
-    cardS1Desc:
-      "Windows area = one QuotaMeter (default layout) per window, stacked; 1px separators (--border) + 8px rhythm; head/body hierarchy explicit; closest to current state (baseline). Best for 1-4 windows; 5-6 get tall but stay scannable. Implementation: reuse existing ProviderCard shell, only containerize the windows area (.card-windows) — zero structural rework.",
-    cardS2Name: "Provider card · Scheme 2 head-fused (risk elevated)",
-    cardS2Desc:
-      "The tightest window is summarized in a warning strip (--warn 10% fill + 30% border) directly under the head, so risk is glanceable; the windows area still lists every window in time-span order (the tightest one is NOT pulled out of order, §6.3 contract kept). Trade-off: the risk is shown twice to buy glanceability, head density rises; multi-window cards never bury the risk. Works for 1-6 windows.",
-    cardS3Name: "Provider card · Scheme 3 zoned card (period zones)",
-    cardS3Desc:
-      "Windows area grouped by period: short (5h/daily) vs long (weekly/monthly+) each gets a zone label (--font-10 dim); 8px + 1px divider between zones, compact inside. Clearest hierarchy at 4-6 windows; labels are redundant at 1-2 windows. Implementation: reuse shell + group windows by span (zoneOf pure fn), minimal structural delta.",
-    cardS4Name: "Provider card · Scheme 4 compact density (tight rhythm)",
-    cardS4Desc:
-      "No window separators, 4px rhythm, ok (healthy) windows drop the reset line (state color already says healthy; reset is auxiliary) — saves one line per healthy window. At 5-6 windows total height shrinks ~20-30%; trade-off: window boundaries read by spacing (weaker cue than a divider line), first scan needs adapting. Implementation: CSS modifier + conditional prop only (resetText omitted = not rendered, QuotaMeter contract intact).",
-    cardAbnName: "Abnormal state card · shared skeleton (same for all four schemes)",
-    cardAbnDesc:
-      "auth_expired / error / stale never render fake window rows (§2.1): yellow lamp + setup_hint auth panel (auth_expired, keeps t_52e3a7fb column-layout fix) / red text (error) / grey text (stale). The card skeleton stays isomorphic with normal cards (same data-health) so sorting/scanning shape is consistent.",
-    cResetH: "resets in 3.2h",
-    cResetD: "resets in 5.8d",
-    stripTightest: "Tightest window",
-    zoneShort: "Short period",
-    zoneLong: "Long period",
+    // t_85237167: Provider card interior-layout options (4 schemes + abnormal skeleton, 9/5 rebuild)
+    card2AName: "Provider card · Scheme A simple two-row baseline",
+    card2ADesc:
+      "Minimal head (handle + name + StatusDot + badge); each window a QuotaMeter (row), 8px rhythm between windows, no new structure. **1:1 with the home page window rows, zero cognitive cost.** Each row embeds BarRowTooltip (micro); row hover reveals four elements. Tooltip relation: pure reuse, nothing added. Trade-off: ~88px tall for 2 windows is the most neutral baseline.",
+    card2BName: "Provider card · Scheme B head carries rollup (no summary strip)",
+    card2BDesc:
+      "Head right side merges 'dot + rollup label' into one line (whole-card health rollup); a small ⓘ at the card's top-right triggers a merged tooltip on hover (two BarRowTooltip instances stacked). **Rollup is information-elevation, NOT a summary strip** — we don't extract the tightest window's color; risk color stays on each row's own color. Trade-off: rollup line makes 'healthy / low / critical' glanceable, ⓘ is a new interaction; verify the 'dot+rollup+ⓘ' fits in the ~336px real panel width during selection.",
+    card2CName: "Provider card · Scheme C status bar + pinned tooltip",
+    card2CDesc:
+      "Whole-card left 2px status bar (--ok / --warn / --bad, mirrors tightest window health); the whole card is clickable to pin (tabIndex + role=button, no JS state machine). **Pinned state turns .bar-tooltip always-on via CSS** (no longer hover-gated; both windows' micro stays visible for side-by-side compare). Trade-off: the 2px bar costs no width budget; pinned is a new interaction (Tab-reachable, Esc unfocus); the bar is a pure visual anchor, semantically distinct from a summary strip.",
+    card2DName: "Provider card · Scheme D head carries tightest (no summary strip)",
+    card2DDesc:
+      "Head right side embeds 'tightest-window usage number + window label sub-line'; that row hides its usage to avoid duplication (QuotaMeter omits when prop undefined, contract intact); head hover reveals that tightest window's BarRowTooltip. **The risk number lives inside the head's information flow, not in a strip** (number inlines, no warning bar). Trade-off: shares S2's 'risk elevation' intent via a different shape; both B and D extend the head; D shows the number, B shows the rollup label.",
+    card2AbnName: "Provider card · Abnormal skeleton (shared by all 4 schemes)",
+    card2AbnDesc:
+      "auth_expired / error share one body variant; never render fake window rows (§2.1). auth_expired: yellow lamp + setup_hint auth panel (keeps t_52e3a7fb column-layout fix); error: red text, no hint. Skeleton stays isomorphic with normal cards (same data-health), so sorting/scan shape stays consistent.",
+    card2Hours: "h to reset",
+    card2Days: "d to reset",
+    card2Health: "Overall health",
+    card2MergedTip: "Show merged window details",
+    card2HeadTip: "Tightest window details",
   },
 };
 

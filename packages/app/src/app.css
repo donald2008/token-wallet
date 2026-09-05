@@ -1906,21 +1906,27 @@ body {
   gap: var(--space-8);
 }
 
-/* ============ Provider 卡片卡内排版方案段(t_698a43c9 round2, #1043 终稿, mock 供选型) ============
- * 目标结构(未来实现卡): ProviderCard 壳 = head(BrandLogo 拖把手 + 名称 + StatusDot +
- * 徽章文字) + body slot。窗口行一律 QuotaMeter 默认排版(row, t_23800bd4 主页同规);
- * 4 方案差异只在卡内窗口区组织(S1 竖排基准 / S2 头部融合警示带 / S3 周期分区 / S4 紧凑密度);
- * 异常 body = AbnormalBody 同构槽(黄灯/红字 + setup_hint 授权面板), 不渲染假窗口行。
- * 新前缀 .qcard-* / .qvar-canvas--cards(gallery 专属), 不占真卡 .card/.card-head,
- * 不与 e2e 真卡选择器(provider-card/.progress 之外)冲突; .progress 契约由 QuotaMeter 保证。 */
-.qvar-canvas--cards {
+/* Provider 卡片卡内排版方案段(t_85237167, 9/5 清空重建): 旧 .qcard-* 与
+ * .qvar-canvas--cards 已删(279858d+d304801 引入); 新方案 css 见各 ProviderCard mock
+ * 命名 .qcard2-* / .qvar-canvas--cards2(任务 B 重建后再写)。 */
+
+/* ============ Provider 卡片卡内排版 4 方案(t_85237167) ============
+ * 4 方案差异: A 基线 / B 头部综合态 / C 状态色条 + 锁住 / D 头部承担最紧窗
+ * 不占真卡 .card/.card-head, 新前缀 .qcard2-* / .qvar-canvas--cards2
+ * BarRowTooltip(micro) 契约零改; CSS 通过父级 .qcard2[data-pinned] /
+ *   .qcard2-trigger:hover 让 .bar-tooltip 常驻或合并触发, 全走 CSS, 零 JS 状态机 */
+
+/* 画布容器: 透明叠层 + 卡片间距 */
+.qvar-canvas--cards2 {
   background: transparent;
   border: 0;
   padding: 0;
   gap: var(--space-12);
 }
 
-.qcard {
+/* 4 方案共用卡壳 */
+.qcard2 {
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   background: var(--bg-elev);
@@ -1929,16 +1935,25 @@ body {
   padding: var(--space-8) var(--space-12);
 }
 
-.qcard-head {
+/* 头部: 4 方案共用结构(handle + name + StatusDot + 徽章/综合态) */
+.qcard2-head {
   display: flex;
   align-items: center;
   gap: var(--gap);
   margin-bottom: var(--space-4);
 }
 
-/* 拖把手示意(D-039): 真卡 = .brand-block.drag-handle(16px, grab 光标 + pointer 绑定);
- * mock 放大到 20px 盒 + 虚线缘仅为可读性提示「此处可拖」, 实现卡沿真卡结构落地 */
-.qcard-handle {
+/* 头部 wrap: 含触发器(ⓘ/head-tip)的方案 B/D 加一层 */
+.qcard2-head-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  margin-bottom: var(--space-4);
+}
+
+/* 拖把手 = BrandLogo(D-039): mock 放大到 20px 盒 + 虚线缘仅为可读性提示 */
+.qcard2-handle {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -1950,7 +1965,7 @@ body {
   color: var(--fg-dim);
 }
 
-.qcard-name {
+.qcard2-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1959,37 +1974,157 @@ body {
   font-weight: 600;
 }
 
-.qcard-badge {
+.qcard2-badge {
   font-size: var(--font-11);
   white-space: nowrap;
 }
 
-/* 窗口行列表: 窗间 1px 分隔线 + 8px 节奏(读作「一窗一单元」); 每窗 QuotaMeter 撑满行宽 */
-.qcard-windows {
+/* 方案 B: 综合态徽章(灯+文字同行, 一行内整合) */
+.qcard2-status-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--font-11);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.qcard2-status-group > [data-testid="status-dot"] {
+  flex: 0 0 auto;
+}
+.qcard2-status-label {
+  /* 与 dot 同行右, 不换行 */
+  white-space: nowrap;
+}
+
+/* 方案 D: 头部承担最紧窗用量(数字内联, 不是摘要条) */
+.qcard2-headline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  margin-right: var(--space-4);
+  white-space: nowrap;
+}
+.qcard2-headline-window {
+  font-size: var(--font-10);
+  color: var(--fg-dim);
+}
+.qcard2-headline-usage {
+  font-size: var(--font-11);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 方案 B/D 共用触发器 ⓘ (含 hover 揭示 tooltip 子层) */
+.qcard2-trigger {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-20);
+  height: var(--space-20);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-size: var(--font-10);
+  cursor: help;
+  position: relative;
+}
+.qcard2-trigger--head {
+  /* 方案 D 头部触发器: 用最紧窗数字当锚, 不显示 ⓘ 而显数字 */
+  cursor: help;
+  font-weight: 600;
+  width: auto;
+  padding: 0 var(--space-8);
+  border-color: color-mix(in srgb, var(--fg-dim) 30%, transparent);
+}
+
+/* 合并 tooltip(B 用 ⓘ, D 用 head-tip): 显隐纯 CSS, 跟随 BarRowTooltip 既有结构
+ * 不用 .bar-tooltip 自身(--space-8 padding + 阴影 + border-radius 已有), 直接用
+ * .bar-tooltip 容器 + 嵌套多个 BarRowTooltip 实例 */
+.qcard2-merged-tip,
+.qcard2-head-tip {
+  position: absolute;
+  top: calc(100% + var(--space-4));
+  right: 0;
+  z-index: 6;
+  display: none;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  -webkit-backdrop-filter: var(--card-blur, none);
+  backdrop-filter: var(--card-blur, none);
+  pointer-events: none;
+  min-width: 240px;
+}
+.qcard2-trigger:hover .qcard2-merged-tip,
+.qcard2-trigger:focus-within .qcard2-merged-tip,
+.qcard2-trigger--head:hover .qcard2-head-tip,
+.qcard2-trigger--head:focus-within .qcard2-head-tip {
+  display: flex;
+}
+
+/* 窗口行列表: 沿用主页 .bar-row 壳(BarRowTooltip 已挂 hover 揭示), 共享一套契约
+ * 这里只控制 qcard2 内的窗间节奏 */
+.qcard2-windows {
   display: flex;
   flex-direction: column;
+  gap: var(--space-8);
+}
+/* qcard2 内 .bar-row 的 tooltip 浮于卡之上不溢出 panel:
+ * 沿用既有 .bar-row + .bar-tooltip 契约(见 app.css 上方 .bar-row / .bar-tooltip);
+ * 仅在 qcard2 首行改为向下弹出(避免顶部裁剪, 与 bars 模板首行同规) */
+.qcard2 .bar-row:first-child .bar-tooltip {
+  bottom: auto;
+  top: calc(100% + var(--space-4));
 }
 
-.qcard-windows > .quota-meter + .quota-meter {
-  margin-top: var(--space-8);
-  padding-top: var(--space-8);
-  border-top: 1px solid var(--border);
+/* 方案 C: 整卡左竖 2px 状态色条(用 border-left 0 + ::before 2px, 不挤压内容) */
+.qcard2--status-bar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: currentColor;
+  border-top-left-radius: var(--radius-12);
+  border-bottom-left-radius: var(--radius-12);
+  pointer-events: none;
+}
+.qcard2--status-bar[data-health="ok"]::before { color: var(--ok); }
+.qcard2--status-bar[data-health="warn"]::before { color: var(--warn); }
+.qcard2--status-bar[data-health="bad"]::before { color: var(--bad); }
+
+/* 方案 C: 锁住态 — 整卡聚焦/激活, 让内部 .bar-tooltip 常驻揭示(不依赖 hover)
+ * 用 :focus-within(键盘 Tab 可达) + 自定义 [data-pinned] 属性;
+ * 实现在实现卡接 OneClickAuth 类交互, 当前为 mock 静态 */
+.qcard2--status-bar:focus-within .bar-tooltip,
+.qcard2--status-bar[data-pinned="true"] .bar-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+.qcard2--status-bar:focus-within,
+.qcard2--status-bar[data-pinned="true"] {
+  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: -1px;
 }
 
-/* 异常体(与 ProviderCard AbnormalBody 同构; setup-hint 保留 t_52e3a7fb 列式修复语义) */
-.qcard-abnormal {
+/* 异常卡共用骨架(4 方案同一套 body 变体, 共享 .qcard2-abnormal) */
+.qcard2-abnormal {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
 }
-
-.qcard-status-line {
+.qcard2-status-line {
   font-size: var(--font-12);
   font-weight: 600;
 }
-
-/* auth_expired 黄灯(§2.1): 自绘圆点, 填充 --warn(D-016), 光晕提示待处理(同 .lamp) */
-.qcard-lamp {
+/* auth_expired 黄灯(§2.1): 自绘圆点 + 光晕 */
+.qcard2-lamp {
   display: inline-block;
   margin-right: var(--space-4);
   font-size: 10px;
@@ -2000,8 +2135,7 @@ body {
     0 0 6px var(--warn);
   vertical-align: middle;
 }
-
-.qcard-hint {
+.qcard2-hint {
   font-size: var(--font-11);
   color: var(--warn-fg);
   background: color-mix(in srgb, var(--warn) 12%, transparent);
@@ -2014,21 +2148,17 @@ body {
   align-items: flex-start;
   gap: var(--space-8);
 }
-
-.qcard-hint-text {
+.qcard2-hint-text {
   flex: 1 1 100%; /* 独占整行, 不单行挤压 */
   min-width: 0;
   overflow-wrap: anywhere;
 }
-
-.qcard-hint-actions {
+.qcard2-hint-actions {
   display: flex;
   gap: var(--space-4);
   flex-wrap: wrap;
 }
-
-/* 示意 chip(非功能按钮): 实现卡替换为 HintCopyButton / OneClickAuth */
-.qcard-chip {
+.qcard2-chip {
   font-size: var(--font-10);
   line-height: 1.4;
   padding: var(--space-4) var(--space-8);
@@ -2036,60 +2166,7 @@ body {
   border-radius: var(--radius);
   color: var(--fg-dim);
 }
-
-.qcard-note {
+.qcard2-note {
   font-size: var(--font-10);
   color: var(--fg-dim);
-}
-
-/* S2 头部融合式(t_698a43c9 round2): 最紧窗警示色带摘要直呈头部下方; 窗口区完整列表不变 */
-.qcard-tightest-strip {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
-  border-radius: var(--radius);
-  padding: var(--space-4) var(--space-8);
-  margin-bottom: var(--space-8);
-}
-
-.qcard-strip-label {
-  font-size: var(--font-10);
-  font-weight: 600;
-  color: var(--warn-fg);
-}
-
-/* S3 分区卡片式: 分区标签(--font-10 dim) + 区间 8px + 1px 分隔线, 组内紧凑(4px) */
-.qcard-zone {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.qcard-zone + .qcard-zone {
-  margin-top: var(--space-8);
-  padding-top: var(--space-8);
-  border-top: 1px solid var(--border);
-}
-
-.qcard-zone-label {
-  font-size: var(--font-10);
-  font-weight: 600;
-  color: var(--fg-dim);
-  letter-spacing: 0.02em;
-}
-
-/* S3 区内窗间不再重复 1px 分隔线(分区本身就是边界), 只留 8px 间距 */
-.qcard-windows--zoned .qcard-zone > .quota-meter + .quota-meter {
-  margin-top: var(--space-8);
-  padding-top: 0;
-  border-top: 0;
-}
-
-/* S4 紧凑密度式: 无窗间分隔线, 行距压到 4px(ok 窗重置行由组件层缺省不渲染) */
-.qcard--compact .qcard-windows > .quota-meter + .quota-meter {
-  margin-top: var(--space-4);
-  padding-top: 0;
-  border-top: 0;
 }
