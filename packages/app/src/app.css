@@ -163,12 +163,12 @@ body {
 .app-title {
   font-weight: 600;
   letter-spacing: 0.2px;
-  /* t_2ac39613: 360px 宽度预算不足时禁止断词换行(token-wall/et 断词撑高 titlebar),
-     空间不够则标题截断省略号; 六工具按钮(nowrap)优先保留, 标题是唯一可牺牲项 */
+  /* t_2ca0af5e P0 终审打回: 默认态必须完整可见, 不再走 t_2ac39613 截断兜底.
+     360×600 实测: 标题文本宽 94 + spacer 8 = 102 < 内容区 320, 预算充足;
+     删 ellipsis/overflow/min-width:0 是契约固化(默认态保证完整); 如未来按钮
+     增多触发超预算, 走 .titlebar 横向溢出 → e2e docOverflow<=0 兜底,
+     不会无声截断. white-space:nowrap 仍保留(防 token-wallet 断词换行撑高栏). */
   white-space: nowrap;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .titlebar .spacer {

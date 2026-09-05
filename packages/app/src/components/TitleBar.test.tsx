@@ -112,13 +112,16 @@ describe("CSS 契约(D-038 + t_05271be0 #1/#2 回归 + t_d086543b)", () => {
     expect(ruleBlock(".btn")).toContain("white-space: nowrap");
   });
 
-  it(".app-title 禁止断词换行 + 截断省略(t_2ac39613 #1: token-wallet 不换行撑高)", () => {
+  it(".app-title 禁断词换行 + 默认态完整可见(t_2ca0af5e P0 终审: 360px 预算内不放 ellipsis 兜底)", () => {
     const block = ruleBlock(".app-title");
+    // 唯一保留: 防断词撑高 titlebar
     expect(block).toContain("white-space: nowrap");
-    expect(block).toContain("min-width: 0");
-    expect(block).toContain("overflow: hidden");
-    expect(block).toContain("text-overflow: ellipsis");
-    // spacer 允许收缩是截断生效的前提(否则 min-width:auto 阻止标题收缩)
+    // 删 t_2ac39613 截断兜底: 任务 P0 = 默认态必须完整可见, 不再走 silent ellipsis.
+    // 若未来按钮 +1 触发超预算, 走 .titlebar 横向溢出 → e2e docOverflow<=0 fail-loud 兜底.
+    expect(block).not.toContain("text-overflow: ellipsis");
+    expect(block).not.toContain("overflow: hidden");
+    expect(block).not.toContain("min-width: 0");
+    // spacer 允许收缩仍在(原 D-038 兜底前提保留, 给未来预算紧张时留余地, 不触发 silent 截断)
     expect(ruleBlock(".titlebar .spacer")).toContain("min-width: 0");
   });
 

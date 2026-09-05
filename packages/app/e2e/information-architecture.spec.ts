@@ -267,6 +267,16 @@ test("360px: 标题栏单行不换行 + 内容区无横向溢出 + 底边栏不�
     .evaluate((el) => el.getClientRects().length);
   pwExpect(titleRects).toBe(1);
 
+  // t_2ca0af5e P0 终审: 360px 默认态标题完整可见.
+  // DOM 文本与 CSS ellipsis 解耦 —— toHaveText / getClientRects 都不挡 ellipsis,
+  // 必须 scrollWidth <= clientWidth 直接断"文本是否被裁" (text-overflow:ellipsis
+  // 触发时 scrollWidth > clientWidth, 文本内容超出可视区).
+  const titleFit = await page.locator(".app-title").evaluate((el) => ({
+    scrollWidth: (el as HTMLElement).scrollWidth,
+    clientWidth: (el as HTMLElement).clientWidth,
+  }));
+  pwExpect(titleFit.scrollWidth).toBeLessThanOrEqual(titleFit.clientWidth);
+
   // 800px 视口下标题栏高度一致(t_2ac39613 断言口径)
   await page.setViewportSize({ width: 800, height: 600 });
   pwExpect(Math.round((await titlebar.boundingBox())!.height)).toBe(h360);
