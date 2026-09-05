@@ -38,3 +38,10 @@ playwright-report/
 data/
 *.jsonl
 !sketches/**/*.jsonl
+
+# Python venvs (MCP daemon local dev)
+.venv*/
+
+# Python bytecode
+__pycache__/
+*.pyc

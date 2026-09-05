@@ -306,6 +306,21 @@ token-wallet MCP Server 是**唯一数据访问面**：
 - **混币种按币种分行**（同一 agent 同窗口 USD 一行、CNY 一行），不做汇率换算；`total.cost_total` 在混币种时为 null；
 - **`unknown` 不计 tokens**，只进 `calls` 与 `by_status`；`partial` 正常计 tokens（报的就是已收部分）。
 
+### 2.2.1 status↔usage 交叉守卫（2026-09-06 daemon 卡回写，终审 P2 #2 裁决落地）
+
+§1.1 的 `oneOf` null 分支本身无法表达「status=completed/partial 时 usage 不得为 null」，以 `allOf` 守卫补强（实现层 pydantic/zod 均已内嵌同规则，fixture 见 §8 F6）：
+
+```json
+{ "allOf": [
+    { "if": { "properties": { "status": { "enum": ["completed", "partial"] } } },
+      "then": { "properties": { "usage": { "type": "object",
+                                           "$ref": "#/$defs/usage_body" } },
+                "required": ["usage"] } }
+] }
+```
+
+`status ∈ {completed, partial}` 且 `usage: null` → 校验失败（MCP 侧进 `rejected` 明细，error 说明交叉约束违例）。
+
 ### 2.3 `usage_report_echo`（读原文）
 
 **input JSON Schema**：
@@ -443,7 +458,7 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 - daemon **每日聚合任务**把 `usage_events` 按天 × agent × model 聚合写入 `usage_records`：
   - `source='agent'`，`provider_id = 'agent:' || agent_id`，`model` 照抄；
   - `window_start` / `window_end` = 当天 00:00 / 次日 00:00（daemon 本地时区，epoch 秒，对齐现表语义）；
-  - `tokens` = 三分项 tokens 之和；`status != 'unknown'` 的条目才参与聚合；
+  - **tokens 列语义（2026-09-06 修正，原「三分项之和」作废）**：`tokens = input_cache_miss + output`（计费输入 + 输出）。cache_hit 是打折甚至免费计费的，三分项直加 = 物理总量而非计费量，与 usage_records 现有行（云端计费 tokens）语义不齐；cache_hit 的量只作为 pricing 补算 cost 的输入，不进 tokens 列。`status != 'unknown'` 的条目才参与聚合；
   - **币种**：daemon 价目表全集群一口价（USD），聚合行 `cost_cny` 列存 USD 数值（列名系历史遗留，为不破坏 app 兼容不改名）；币种权威视图仍是 §2.2 `usage_summary`；
 - 聚合行供 app 长期趋势展示；**对账与明细永远以 `usage_events` / `usage_summary` 为准**。
 
@@ -489,7 +504,7 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 
 ## 8. Fixtures（5 组共享测试向量）
 
-> 约定：以下每组给出输入与期望结论。pydantic（daemon）与 zod（hook）测试都必须内嵌全部 5 组。
+> 约定：以下每组给出输入与期望结论。pydantic（daemon）与 zod（hook）测试都必须内嵌全部 5 组（+ F6 交叉守卫负例）。
 
 ### F1 正常 completed（期望：accepted=1）
 
@@ -666,6 +681,33 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
    "error": "<status 枚举违例 + tokens 负数>"},
   {"index": 1, "event_id": "not-a-uuid", "error": "<event_id pattern 违例>"}
 ]}`——第 3 条（F1）照常落库（部分失败不回滚）；客户端**不重发** rejected 条目。
+
+### F6 交叉守卫负例（2026-09-06 daemon 卡补，终审 P2 #2 配套；期望：rejected）
+
+`status=completed` 且 `usage: null` → 交叉约束违例（§2.2.1）：
+
+```json
+{
+  "reports": [{
+    "schema_version": 1,
+    "event_id": "01912345-6789-7abc-8def-0123456789b0",
+    "status": "completed",
+    "agent_id": "njbx02",
+    "harness": "hermes",
+    "session_id": null,
+    "ts": "2026-09-06T03:00:00+08:00",
+    "model": "glm-5.3-flash",
+    "provider": "zai",
+    "usage": null,
+    "context": { "kanban_task": null, "kind": "other" }
+  }]
+}
+```
+
+期望结果：`{"accepted": 0, "duplicated": 0, "rejected": [
+  {"index": 0, "event_id": "01912345-6789-7abc-8def-0123456789b0",
+   "error": "<completed + usage:null 交叉约束违例>"}
+]}`。
 
 ---
 
