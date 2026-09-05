@@ -1,0 +1,16 @@
+name: hook-usage-reporter
+version: 0.1.0
+description: "token-wallet usage reporter — post_api_request 提取 LLM 消耗, buffer/flush 上报 token-wallet MCP daemon (D-048 协议)."
+author: njbx02
+kind: backend
+provides_hooks:
+  - post_api_request
+  - on_stream_end
+  - on_session_end
+config:
+  enabled: false            # 缺省关: daemon 上线联调时开
+  endpoint: "http://127.0.0.1:9131/mcp"
+  key_env: "TOKEN_WALLET_MCP_KEY"
+  buffer_max: 50
+  flush_interval_s: 60
+  unreachable_drop_min: 30  # daemon 连续不可达超此分钟数则丢 buffer 防 OOM
