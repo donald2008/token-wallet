@@ -1,26 +1,25 @@
 /**
- * ProviderCardLayouts — Provider 卡片卡内排版 4 方案真组件(t_73c110ea, 9/7 用户拍板重建)
+ * ProviderCardLayouts — Provider 卡片卡内排版 3 方案真组件(t_73c110ea, 9/7 用户拍板重建)
  *
- * 设计前提(用户 9/7 硬约束):
- *  - 三窗 QuotaMeter(layout=row) **常驻直显**是卡片信息主体(5h/周/月, 同一套真实数据)
- *  - BarRowTooltip 仅作「可选密度增强」—— 行 hover 补 micro 视图, **不得**作为 QuotaMeter
- *    的唯一呈现方式(信息全靠悬浮才见 = 不合格)
- *  - 4 排版差异必须建立在**真排版维度**(卡头与三窗的空间关系/信息层级/密度), 不是头部装饰件堆叠
+ * 设计前提(用户 9/7 硬约束, 修订 #1116):
+ *  - 卡内三窗 QuotaMeter = **layout="micro"** 紧凑竖排形态常驻直显 —— 这就是 BarRowTooltip
+ *    已经在用的紧凑形态(无卡竖排超紧凑: 4px 条、重置并入用量行、title+bar+(usage|reset) 三层)
+ *  - **不是 row 布局**(卡体原文作废, 老大 9/7 修订明确: 卡内窗口展示 = 悬浮窗内那个 QuotaMeter 组件)
+ *  - 不再单独挂 <BarRowTooltip>: micro 本就是 BarRowTooltip 内的形态, 卡内常驻 = micro 直接展开
+ *  - 3 排版差异必须建立在**真排版维度**(卡头与三窗的空间关系/信息层级/密度), 不是头部装饰件堆叠
  *  - 不替换主页 ProviderCard; 纯方案页 QuotaGallery 渲染, 用户选型后另开实现卡
  *
  * 3 方案差异维度(每方案建立一个真维度):
- *   P1 · 基线竖排      头部 handle+name+状态 三件套一行 + 三窗 row 各一行(8px gap)
- *                      → 与主页 ProviderCard/BarsTemplate 1:1 完全一致, 认知零成本
- *   P2 · 头部综合态    头部右侧合并「最紧窗徽章+文字」一行 + 三窗 row(同 P1)
+ *   P1 · 基线竖排      头部 handle+name+状态 三件套一行 + 三窗 micro 各一行(4px gap)
+ *                      → 与主页 ProviderCard/BarsTemplate 形态对齐, 认知零成本
+ *   P2 · 头部综合态    头部右侧合并「最紧窗徽章+文字」一行 + 三窗 micro(同 P1)
  *                      → 信息上抬, 不引入摘要条(颜色走行内自身 color)
- *   P4 · 头部数字      头部右侧并入「最紧窗用量数字+窗名」一行 + 三窗 row(最紧窗 hideUsage)
+ *   P4 · 头部数字      头部右侧并入「最紧窗用量数字+窗名」一行 + 三窗 micro(最紧窗 hideUsage)
  *                      → 风险数字一瞥可见, 行内不重复数字(无摘要条形态)
  *
- * P3(双列 grid 并排)在 360px 屏下已实测文字重叠 + 列被裁切 —— QuotaMeter row 三件套
- * (56px 标题 + 进度条 + 用量)装不进 ~104px 列宽,激进收紧字号 + 隐藏 reset 行后仍重叠。
- * 故本轮不交付 P3(已记入取舍说明,后续如需 grid 方案需先扩 QuotaMeter row 极简版或加断点);
- * 留 3 种方案覆盖空间结构 / 信息层级 / 头部承载 三个真维度, 已满足任务「3-5 种」下限。
- * (P3Grid 组件函数 + .qcard3-grid-* css 已整体下架)
+ * P3(双列 grid 并排)在 360px 屏下已实测文字重叠 + 列被裁切 —— QuotaMeter 三件套
+ * 装不进 ~104px 列宽, 故本轮不交付 P3(留 3 种方案覆盖空间结构 / 信息层级 / 头部承载
+ * 三个真维度, 已满足任务「3-5 种」下限)
  *
  * 异常卡(auth_expired + error)共用同一套 AbnormalBody(不计入独立布局):
  *  - 沿用主页 .abnormal-body 形态(状态灯 + 文字 + setup_hint 授权面板 + 最近更新/alerts)
@@ -31,7 +30,10 @@
  *
  * 数据契约:
  *  - 同套真实数据 = kimi-code 三窗(rolling_5h + weekly + monthly), unit=requests(计数制)
- *  - mock 静态不接 IPC; 见 getProviderCardMockProviders()
+ *  - mockData.ts 当前 kimi-code 只有 2 窗(rolling_5h + weekly), 无 monthly;
+ *    getProviderCardMockProviders() 是方案页专用三窗样本(同 kimi-code 形态与 80%/20%/30% 比例),
+ *    **不动 mockData.ts 的场景面板样本**(改 mockData 会动主页)。注释口径与 mockData warn
+ *    场景保持语义一致: 80% / 20% / 30% 健康分布。
  *  - 新前缀 .qcard3-* / .qvar-canvas--cards3; 不占真卡 .card/.card-head, 不与 e2e
  *    真卡选择器(provider-card/.progress 之外)冲突
  *
@@ -40,13 +42,13 @@
  *  - 8px 网格 / tokens.css / D-016 三态(dark/light/glass)
  *  - useCardDragSort(D-039)零改 → 拖把手 = BrandLogo
  *  - 不动 ProviderCard / BarsTemplate / BarRowTooltip / QuotaMeter 本体
+ *    (micro layout 已存在, 零改; BarRowTooltip 与本卡 WindowRow 共享 micro 形态)
  */
 import { useState } from "react";
 import type { Metric, MetricUnit, ProviderSnapshot } from "../types";
 import { healthLabel, metricHealth, providerHealth, statusBadge } from "../health";
 import { t } from "../i18n";
 import { QuotaMeter, type QuotaState } from "./QuotaMeter";
-import { BarRowTooltip } from "./BarRowTooltip";
 import { resetText as progressResetText } from "./ProgressBar";
 import { BrandLogo } from "./brand-logos";
 import { StatusDot } from "./StatusDot";
@@ -60,9 +62,13 @@ function cardWindowTitle(key: string): string {
   return t(metricKey).startsWith("metric.") ? t("metric.fallback", { key }) : t(metricKey);
 }
 
-/** 三窗行(共享于 P1/P2/P4): QuotaMeter(row) + 行内 BarRowTooltip(micro)
- *  `hideUsage` = P4 头部承担最紧窗用量, 该窗 QuotaMeter 缺省即不渲染 .quota-usage,
- *  避免与头部数字重复。BarRowTooltip 始终挂, 不传 hideUsage(独立 QuotaMeter 渲染)。 */
+/** 三窗行(共享于 P1/P2/P4): QuotaMeter(layout=micro) **常驻直显**
+ *  用户 9/7 修订 #1116 硬约束: 卡内窗口展示 = 悬浮窗内那个 QuotaMeter 组件 = micro 紧凑竖排形态。
+ *  micro = BarRowTooltip 内 QuotaMeter 的同一形态(title+bar+(usage|reset) 三层 grid, 4px 条, font-10),
+ *  共享其 CSS `.quota-meter--layout-micro`(零改 QuotaMeter 契约, layout prop 已存在)。
+ *  `hideUsage` = P4 头部承担最紧窗用量, 该窗 QuotaMeter 不渲染 .quota-usage,
+ *  避免与头部数字重复。P1/P2/P4 不再单独挂 <BarRowTooltip>: micro 常驻 = 信息主体,
+ *  无 hover 依赖(信息全靠悬浮才见 = 不合格, 修订 #1116 明确)。 */
 type WindowRowProps = {
   metric: Metric;
   /** P4 让头部承担该窗用量时设为 true, 该窗 QuotaMeter 不渲染 .quota-usage */
@@ -75,7 +81,7 @@ function WindowRow({ metric, hideUsage = false }: WindowRowProps) {
   return (
     <div className="bar-row" data-testid="qcard3-bar-row" data-metric={metric.key}>
       <QuotaMeter
-        layout="row"
+        layout="micro"
         pct={metric.limit !== undefined && metric.limit > 0 ? metric.used / metric.limit : 0}
         state={state}
         title={cardWindowTitle(metric.key)}
@@ -84,8 +90,6 @@ function WindowRow({ metric, hideUsage = false }: WindowRowProps) {
         limit={metric.limit}
         unit={metric.unit}
       />
-      {/* 硬约束: BarRowTooltip 仅作可选密度增强, 不替代 QuotaMeter row 直显 */}
-      <BarRowTooltip metric={metric} />
     </div>
   );
 }

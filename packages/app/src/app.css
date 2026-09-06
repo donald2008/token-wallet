@@ -2005,16 +2005,19 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* 窗口行列表: 沿用主页 .bar-row 壳(BarRowTooltip 已挂 hover 揭示), 共享一套契约
- * 这里只控制 qcard3 内的窗间节奏 */
+/* 窗口行列表: 沿用主页 .bar-row 壳作为语义锚点(数据契约 + drag-sort 复用),
+ * 卡内 WindowRow 只挂 QuotaMeter(layout=micro), 不再挂 <BarRowTooltip>;
+ * 方案页常驻直显 = micro 直接展开, 信息无 hover 依赖(修订 #1116)。
+ * 这里只控制 qcard3 内的窗间节奏(micro 紧凑, 4px gap) */
 .qcard3-windows {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-4);
 }
-/* qcard3 内 .bar-row 的 tooltip 浮于卡之上不溢出 panel:
+/* qcard3 内 .bar-row 的 tooltip 浮于卡之上不溢出 panel(t_23800bd4 主页契约):
  * 沿用既有 .bar-row + .bar-tooltip 契约(见 app.css 上方 .bar-row / .bar-tooltip);
- * 仅在 qcard3 首行改为向下弹出(避免顶部裁剪, 与 bars 模板首行同规) */
+ * 仅在 qcard3 首行改为向下弹出(避免顶部裁剪, 与 bars 模板首行同规)。
+ * (本方案页 WindowRow 当前不挂 BarRowTooltip; 此条规则保留以保主场 .bar-row 契约) */
 .qcard3 .bar-row:first-child .bar-tooltip {
   bottom: auto;
   top: calc(100% + var(--space-4));

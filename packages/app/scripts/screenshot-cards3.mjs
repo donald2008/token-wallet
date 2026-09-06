@@ -1,6 +1,7 @@
-// t_73c110ea 截图脚本 — 4 排版 × 3 主题 × 360×600 视口
+// t_73c110ea 截图脚本 — 3 排版 × 3 主题 × 360×600 视口
 // 不依赖 e2e fixtures，直接走 vite dev URL + 同序列 UI 步骤
 // 主题切换: localStorage token-wallet.theme.v1 + token-wallet.glass.v1(theme.ts 实际键名)
+// 修订 #1116: 三窗 QuotaMeter(layout=micro) 常驻直显, 不再挂 BarRowTooltip
 import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
