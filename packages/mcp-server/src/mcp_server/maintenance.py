@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from .tzutil import day_bounds, local_tz
 
@@ -55,8 +55,14 @@ def aggregate_day(conn: sqlite3.Connection, day_start_epoch: int, _lock=None) ->
                        ?,
                        SUM(in_miss_tokens + out_tokens),
                        NULL,
-                       SUM(COALESCE(total_cost,
-                           COALESCE(in_hit_cost,0) + COALESCE(in_miss_cost,0) + COALESCE(out_cost,0))),
+                       -- 价目表为空/无此模型时补算不出 cost → NULL (零成本与
+                       -- 无数据不可分, 三层二审 P3); COALESCE 全空表达式自然为 NULL
+                       SUM(CASE WHEN total_cost IS NOT NULL THEN total_cost
+                                WHEN in_hit_cost IS NOT NULL OR in_miss_cost IS NOT NULL
+                                     OR out_cost IS NOT NULL THEN
+                                    COALESCE(in_hit_cost, 0) + COALESCE(in_miss_cost, 0)
+                                    + COALESCE(out_cost, 0)
+                                ELSE NULL END),
                        'agent'
                 FROM usage_events
                 WHERE ts_epoch >= ? AND ts_epoch < ?
@@ -83,7 +89,7 @@ def purge_expired(
 ) -> int:
     """DELETE usage_events WHERE ts_epoch < now - TTL 天。返回删除行数。"""
     if now_epoch is None:
-        now_epoch = int(datetime.now(timezone.utc).timestamp())
+        now_epoch = int(datetime.now().timestamp())  # epoch 时区无关
     cutoff = now_epoch - ttl_days * 86400
 
     def _impl():
@@ -106,7 +112,10 @@ def daily_maintenance(
     返回 {"aggregated_rows": N, "deleted_events": M} 供验收对账。
     """
     if now is None:
-        now = datetime.now().astimezone()
+        # daemon 本地时区 (tzutil 解析链: 显式/env/宿主, TOKEN_WALLET_TZ 可覆盖) —
+        # 三层二审 P3: 禁 datetime.now().astimezone() 绕过 (与聚合日界口径一致)
+        _tz, _ = local_tz()
+        now = datetime.now(_tz)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
     aggregated = aggregate_day(conn, int(yesterday_start.timestamp()), _lock=_lock)

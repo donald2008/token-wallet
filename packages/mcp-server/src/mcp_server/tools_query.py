@@ -24,6 +24,8 @@ from .tzutil import local_tz
 
 STATUS_KEYS = ("completed", "partial", "unknown")
 GROUP_DIMS = ("agent", "provider", "model", "day", "status")
+# 币种维度 (§2.2 混币种分行): 分组键尾部追加币种; 行 group 串不含币种
+_NO_CURRENCY = "\0none"  # cost null 条目桶 (行 currency=null)
 
 _SUMMARY_SELECT = """
     SELECT agent_id, provider, model, status, ts_epoch,
@@ -61,6 +63,9 @@ class SummaryEngine:
             key_parts = []
             for dim in q.group_by:
                 key_parts.append(self._dim_value(dim, r, ep))
+            # 混币种按币种拆行 (§2.2): 币种进分组键, 同组 USD/CNY 各一行;
+            # 无任何 cost 的条目单列一桶 (行 currency=null, 桶名不出现在 group 串)
+            key_parts.append(self._currency_key(r))
             key = tuple(key_parts)
             g = groups.setdefault(
                 key,
@@ -80,7 +85,7 @@ class SummaryEngine:
             g["hit"] += r["in_hit_tokens"] or 0
             g["miss"] += r["in_miss_tokens"] or 0
             g["out"] += r["out_tokens"] or 0
-            # 混币种分行 (§2.2): 按 (币种) 累计 cost; cost null 的条目不进 cost 合计
+            # 行级 cost 归集: 按 (币种) 累计; cost null 的条目不进 cost 合计
             self._accumulate_cost(g["currencies"], r)
 
         out_rows = [self._to_row(key, g) for key, g in sorted(groups.items(), key=lambda kv: kv[0])]
@@ -111,6 +116,24 @@ class SummaryEngine:
             return datetime.fromtimestamp(ep, tz=self._tz).strftime("%Y-%m-%d")
         raise ValueError(f"unknown group dim: {dim}")
 
+    def _currency_key(self, r: sqlite3.Row) -> str:
+        """行拆分的币种键 (§2.2 混币种分行): 该条目 cost 归属的币种。
+
+        与 _accumulate_cost 同口径: total 优先, 缺则退三分项; 多分项币种以
+        total 语义为准取第一个出现的 (同条目混币种 = hook 数据违例, 边缘可忽略);
+        无任何 cost → _NO_CURRENCY 桶 (行 currency=null)。
+        """
+        if r["total_cost"] is not None:
+            return r["total_currency"] or _NO_CURRENCY
+        for c_col, cur_col in (
+            ("in_hit_cost", "in_hit_currency"),
+            ("in_miss_cost", "in_miss_currency"),
+            ("out_cost", "out_currency"),
+        ):
+            if r[c_col] is not None:
+                return r[cur_col] or _NO_CURRENCY
+        return _NO_CURRENCY
+
     @staticmethod
     def _accumulate_cost(currencies: dict, r: sqlite3.Row) -> None:
         """行级 cost 归集: 三分项 *_cost + total_cost, 按 currency 累加。
@@ -134,15 +157,17 @@ class SummaryEngine:
 
     @staticmethod
     def _to_row(key: tuple, g: dict) -> SummaryRow:
-        # 混币种行: >1 币种 → cost_total=null, currency=null (不做汇率换算)
-        if len(g["currencies"]) == 1:
-            cur, amount = next(iter(g["currencies"].items()))
-            cost_total: Optional[float] = round(amount, 6)
-            currency: Optional[str] = cur or None
+        # 币种已在分组键尾位拆行 (§2.2): 单行内只会归集到一个币种 (或 null 桶)
+        dims = key[:-1]
+        cur_key = key[-1]
+        if cur_key == _NO_CURRENCY:
+            cost_total: Optional[float] = None
+            currency: Optional[str] = None
         else:
-            cost_total, currency = None, None
+            cost_total = round(g["currencies"].get(cur_key, 0.0), 6)
+            currency = cur_key
         return SummaryRow(
-            group="|".join(key),
+            group="|".join(dims),
             calls=g["calls"],
             input_cache_hit_tokens=g["hit"],
             input_cache_miss_tokens=g["miss"],

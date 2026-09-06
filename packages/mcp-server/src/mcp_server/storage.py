@@ -243,17 +243,20 @@ class EventStorage:
     def attach_computed(raw: dict[str, Any], row: sqlite3.Row) -> dict[str, Any]:
         """附 daemon 补齐的 computed 字段 (§2.3), 不写回 raw_json 原文。
 
-        fingerprint 照 §3 规则从原文重算; *_computed_cost = 价目表补算值
-        (列里非空价与原文价同值时不重复输出, 仅补算出的才附)。
+        fingerprint 照 §3 规则从原文重算 — 全事件必附 (unknown/usage=null 时
+        三 tokens 取 0, 三层二审 P3: unknown 事件 _computed 不得为 {} 缺 fingerprint);
+        *_computed_cost = 价目表补算值 (仅补算出的才附, 原文有价不重复输出)。
         """
         usage = raw.get("usage")
-        computed: dict[str, Any] = {}
         if isinstance(usage, dict):
             hit = (usage.get("input_cache_hit") or {}).get("tokens") or 0
             miss = (usage.get("input_cache_miss") or {}).get("tokens") or 0
             out = (usage.get("output") or {}).get("tokens") or 0
-            computed["tokens_billable"] = miss + out
-            computed["fingerprint"] = compute_fingerprint(
+        else:
+            hit = miss = out = 0  # status=unknown, usage=null 占位 (§3 tokens=0)
+        computed: dict[str, Any] = {
+            "tokens_billable": miss + out,
+            "fingerprint": compute_fingerprint(
                 session_id=raw.get("session_id"),
                 ts_epoch=row["ts_epoch"],
                 model=raw.get("model") or row["model"],
@@ -263,7 +266,9 @@ class EventStorage:
                 out_tokens=out,
                 kind=(raw.get("context") or {}).get("kind"),
                 status=raw.get("status") or row["status"],
-            )
+            ),
+        }
+        if isinstance(usage, dict):
             # 补算 cost: 列值 ≠ 原文价 (原文价 null 而列非空) → 附补算值 (§2.3)
             for slot, c_col, cur_col in (
                 ("input_cache_hit", "in_hit_cost", "in_hit_currency"),

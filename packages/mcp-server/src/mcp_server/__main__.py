@@ -20,7 +20,7 @@ from starlette.middleware import Middleware
 from .auth import BearerAuthMiddleware
 from .storage import EventStorage
 from .tools_query import EchoEngine, SummaryEngine
-from .tools_report import report_usage
+from .tools_report import report_usage as report_usage_impl
 
 
 def _data_dir() -> Path:
@@ -43,14 +43,15 @@ def build_server(*, db_path: str, ttl_days: int) -> FastMCP:
     )
 
     @mcp.tool(name="report_usage")  # 工具名照 spec §2.1 (终审复验 P2 #1: 禁用实现别名)
-    def report_usage_tool(payload: dict) -> dict:
+    def report_usage(reports: list[dict]) -> dict:
         """批量上报 Agent LLM 用量 (1-100 条 AgentUsageReport v1)。
 
-        payload = {"reports": [...]}。event_id 幂等: 重试/重发复用同一 event_id,
-        命中判重返回 duplicated (不是错误); schema 违例进 rejected 逐条明细,
-        部分失败不回滚。
+        input = spec §2.1 批量信封: 参数平铺为 reports 数组 — 客户端直接发
+        {"reports": [...]} (三层二审 P1: 禁 payload 嵌套包装)。
+        event_id 幂等: 重试/重发复用同一 event_id, 命中判重返回 duplicated
+        (不是错误); schema 违例进 rejected 逐条明细, 部分失败不回滚。
         """
-        return report_usage(payload, storage)
+        return report_usage_impl({"reports": reports}, storage)
 
     @mcp.tool
     def usage_summary(
@@ -115,9 +116,17 @@ def build_server(*, db_path: str, ttl_days: int) -> FastMCP:
         import time
         from datetime import datetime, timedelta
 
+        from .tzutil import local_tz
+
+        # 时区统一走 tzutil (§4.3, 三层二审 P3): TOKEN_WALLET_TZ 可覆盖宿主
+        tz, _ = local_tz()
         while True:
-            now = datetime.now().astimezone()
-            nxt = (now + timedelta(days=1)).replace(hour=3, minute=37, second=0, microsecond=0)
+            now = datetime.now(tz)
+            # 下次执行 = 今天 03:37 若未过, 否则明日 03:37
+            # (三层二审 P3: 恒取明日会跳过当日维护 — 当日启动已过点才顺延)
+            nxt = now.replace(hour=3, minute=37, second=0, microsecond=0)
+            if nxt <= now:
+                nxt += timedelta(days=1)
             time.sleep(max(0.0, (nxt - now).total_seconds()))
             try:
                 result = _run_maintenance()

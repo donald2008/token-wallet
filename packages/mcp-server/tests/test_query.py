@@ -13,7 +13,7 @@ from mcp_server.schema import (  # noqa: E402
     UsageReportEchoInput,
     UsageSummaryInput,
 )
-from mcp_server.storage import EventStorage  # noqa: E402
+from mcp_server.storage import EventStorage, compute_fingerprint  # noqa: E402
 from mcp_server.tools_query import EchoEngine, SummaryEngine  # noqa: E402
 from mcp_server.tools_report import report_usage  # noqa: E402
 
@@ -94,12 +94,64 @@ class TestSummary:
     def test_group_by_day(self, storage, engines):
         """day 日界 = daemon 本地时区 (§2.2, 终审 P1)。"""
         summary, _ = engines
+        # 显式注入东八区 (三层二审 P3: 宿主时区不可控, 不得依赖宿主日界)
+        from mcp_server.tools_query import SummaryEngine
+
+        scoped = SummaryEngine(storage.conn, tz_name="Asia/Shanghai")
         report_usage(ALL_FIXTURES["F1"], storage)  # ts=2026-09-06 01:49:30+08:00
-        out = summary.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00",
-                                                group_by=["agent", "day"]))
+        out = scoped.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00",
+                                               group_by=["agent", "day"]))
         # +08:00 09-06 01:49 在东八区属 09-06 (UTC 日界才会切到 09-05)
         assert out.rows[0].group == "home-computer|2026-09-06"
         assert out.rows[0].calls == 1
+
+    def test_mixed_currency_split_rows(self, storage, engines):
+        """混币种按币种分行 (§2.2): 同 agent 同窗口 USD 一行、CNY 一行。"""
+        import copy
+
+        summary, _ = engines
+        base = ALL_FIXTURES["F1"]["reports"][0]
+        usd = copy.deepcopy(base)
+        usd["event_id"] = "01912345-6789-7abc-8def-0123456790ab"
+        usd["usage"]["total"] = {"cost": 0.123, "currency": "USD"}
+        cny = copy.deepcopy(base)
+        cny["event_id"] = "01912345-6789-7abc-8def-0123456791ab"
+        cny["ts"] = "2026-09-06T01:50:30+08:00"
+        cny["usage"]["total"] = {"cost": 0.456, "currency": "CNY"}
+        assert report_usage({"reports": [usd, cny]}, storage)["accepted"] == 2
+
+        out = summary.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00",
+                                                group_by=["agent"]))
+        # 两行: group 相同 (dims 连接), currency 拆开
+        assert len(out.rows) == 2
+        by_cur = {r.currency: r for r in out.rows}
+        assert set(by_cur) == {"USD", "CNY"}
+        assert by_cur["USD"].cost_total == 0.123
+        assert by_cur["CNY"].cost_total == 0.456
+        assert by_cur["USD"].calls == 1 and by_cur["CNY"].calls == 1
+        # tokens 按行归属 (每事件只进其币种行), total 混币种 → cost_total null
+        assert by_cur["USD"].input_cache_miss_tokens == 1200
+        assert out.total.calls == 2
+        assert out.total.cost_total is None and out.total.currency is None
+
+    def test_currency_null_cost_row_still_emitted(self, storage, engines):
+        """无 cost 事件 (currency null) 单独成行, 不吞 tokens。"""
+        import copy
+
+        summary, _ = engines
+        base = ALL_FIXTURES["F1"]["reports"][0]
+        no_cost = copy.deepcopy(base)
+        no_cost["event_id"] = "01912345-6789-7abc-8def-0123456792ab"
+        no_cost["ts"] = "2026-09-06T01:51:30+08:00"
+        assert report_usage({"reports": [no_cost]}, storage)["accepted"] == 1
+
+        out = summary.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00",
+                                                group_by=["agent"]))
+        assert len(out.rows) == 1
+        r = out.rows[0]
+        assert r.currency is None and r.cost_total is None
+        assert r.input_cache_miss_tokens == 1200  # cost null ≠ tokens 丢弃
+        assert out.total.input_cache_miss_tokens == 1200
 
     def test_timezone_is_daemon_local_iana(self, storage, engines):
         """timezone 字段 = daemon 本地时区 IANA 名, day/since 缺省同口径 (§2.2)。"""
@@ -161,6 +213,35 @@ class TestSummary:
         out = echo.echo(UsageReportEchoInput(limit=2))
         assert out.total_count == 5 and len(out.events) == 2
 
+    def test_echo_computed_pinned_fingerprint_all_statuses(self, storage, engines):
+        """echo _computed 钉住 (三层二审 P3): 全状态事件都有 fingerprint。
+
+        fingerprint 与 usage_events 落库列一致 (照 §3 从原文重算), unknown
+        事件 tokens_billable=0 且 _computed 非空。
+        """
+        for key in ("F1", "F3"):  # completed + unknown
+            report_usage(ALL_FIXTURES[key], storage)
+        _, echo = engines
+        out = echo.echo(UsageReportEchoInput(limit=10))
+        assert out.total_count == 2
+        by_eid = {ev["event_id"]: ev for ev in out.events}
+        for ev in out.events:
+            comp = ev["_computed"]
+            assert "fingerprint" in comp and len(comp["fingerprint"]) == 64
+            # 与落库 fingerprint 列一致 (echo 回读 = 存储侧重算同源)
+            row = storage.conn.execute(
+                "SELECT fingerprint FROM usage_events WHERE event_id=?",
+                (ev["event_id"],)).fetchone()
+            assert comp["fingerprint"] == row["fingerprint"]
+        # unknown (usage=null): tokens_billable=0, 无 computed_cost, fingerprint 照 §3
+        unk = by_eid["01912345-6789-7abc-8def-0123456789ad"]
+        assert unk["_computed"]["tokens_billable"] == 0
+        assert "computed_cost" not in unk["_computed"]
+        assert unk["_computed"]["fingerprint"] == compute_fingerprint(
+            session_id=None, ts_epoch=int(_report_of("F3").ts_dt.timestamp()),
+            model="", provider="", hit_tokens=0, miss_tokens=0, out_tokens=0,
+            kind="other", status="unknown")
+
 
 class TestTtlMaintenance:
     def test_aggregate_then_delete(self, storage, engines):
@@ -221,6 +302,20 @@ class TestTtlMaintenance:
         rows = storage.conn.execute(
             "SELECT provider_id, tokens FROM usage_records WHERE source='agent'").fetchall()
         assert rows and rows[0]["tokens"] == 500 + 210
+
+    def test_aggregate_cost_null_when_no_pricing(self, storage):
+        """价目表为空 (补算不出 cost) → 聚合行 cost_cny=NULL, 非 0 (三层二审 P3)。"""
+        report_usage(ALL_FIXTURES["F2"], storage)  # F2 全部 cost=null
+        storage.ensure_usage_records_table()
+        from mcp_server.tzutil import day_bounds, local_tz
+        tz, _ = local_tz()
+        day = day_bounds(int(_report_of("F2").ts_dt.timestamp()), tz)[0]
+        maintenance.aggregate_day(storage.conn, day)
+        rows = storage.conn.execute(
+            "SELECT tokens, cost_cny FROM usage_records WHERE source='agent'").fetchall()
+        assert len(rows) == 1
+        assert rows[0]["cost_cny"] is None  # 零成本与无数据可区分
+        assert rows[0]["tokens"] == 500 + 210
 
     def test_aggregate_idempotent(self, storage):
         """同一天重跑聚合不产生重复行 (派生数据重算语义)。"""
