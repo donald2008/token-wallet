@@ -43,3 +43,43 @@ providers ──> core(采集/归一化/缓存) ──> StorageBackend ──> M
   (ai-microservice-registry 模式, 服务名 `token-wallet-mcp`)
 - TTL: env `USAGE_TTL_DAYS`, 缺省 90(usage_events 明细; usage_records 聚合长期保留)
 - 桌面 app 以远程模式指向 :9131, 切远程后停止本地采集(本地模式边界见 spec §6)
+
+## 部署(daemon 实现, Python)
+
+```bash
+# 1. 环境(任意 Python >=3.11)
+cd packages/mcp-server
+python3 -m venv .venv && .venv/bin/pip install -e .
+
+# 2. key 注入(不要写进 unit 文件)
+#    Consul KV: ai-hermes/security/providers/token-wallet-mcp-key
+#    渲染到 ~/.config/token-wallet/mcp.env :
+#      TOKEN_WALLET_MCP_KEY=<consul 值>
+mkdir -p ~/.config/token-wallet
+
+# 3. systemd user unit
+mkdir -p ~/.config/systemd/user
+cp deploy/token-wallet-mcp.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now token-wallet-mcp
+loginctl enable-linger $(whoami)   # 未登录也常驻
+
+# 4. 验证
+systemctl --user status token-wallet-mcp
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:9131/mcp   # 401 = 鉴权面正常
+```
+
+env 一览: `TOKEN_WALLET_MCP_KEY`(必填, 无缺省) / `TOKEN_WALLET_DB_PATH`
+(缺省 `~/.local/share/token-wallet/token-wallet.db`) / `TOKEN_WALLET_PORT`(9131)
+/ `TOKEN_WALLET_HOST`(0.0.0.0) / `USAGE_TTL_DAYS`(90)。
+
+TTL 维护手动触发(验收/运维, 不在 agent 数据面 tools/list):
+
+```bash
+cd packages/mcp-server && PYTHONPATH=src .venv/bin/python -c \
+  'from mcp_server.__main__ import run_maintenance_once; \
+   print(run_maintenance_once(db_path="~/.local/share/token-wallet/token-wallet.db", ttl_days=90))'
+```
+
+测试: `.venv/bin/pip install pytest && .venv/bin/python -m pytest tests/ -q`
+(含 spec §8 fixture F1-F5 + F6 交叉守卫负例, F5 按"每组独立库"跑)。

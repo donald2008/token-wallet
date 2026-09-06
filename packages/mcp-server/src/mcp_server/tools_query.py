@@ -22,24 +22,39 @@ GROUP_DIMS = ("agent", "provider", "model", "day", "status")
 
 
 class SummaryEngine:
-    def __init__(self, conn: sqlite3.Connection):
+    def __init__(self, conn: sqlite3.Connection, lock=None):
         self.conn = conn
+        self._lock = lock  # EventStorage 的锁; None = 无并发(单测直连)
 
     # ------------------------------------------------------------------ #
 
     def summary(self, q: UsageSummaryInput) -> UsageSummaryOutput:
         where, params = self._filters(q)
-        rows = self.conn.execute(
-            f"""
-            SELECT agent_id, provider, model, status, ts_epoch,
-                   in_hit_tokens, in_miss_tokens, out_tokens,
-                   in_hit_cost, in_hit_currency,
-                   in_miss_cost, in_miss_currency,
-                   out_cost, out_currency, total_cost, total_currency
-            FROM usage_events{where}
-            """,
-            params,
-        ).fetchall()
+        if self._lock is not None:
+            with self._lock:
+                rows = self.conn.execute(
+                    f"""
+                    SELECT agent_id, provider, model, status, ts_epoch,
+                           in_hit_tokens, in_miss_tokens, out_tokens,
+                           in_hit_cost, in_hit_currency,
+                           in_miss_cost, in_miss_currency,
+                           out_cost, out_currency, total_cost, total_currency
+                    FROM usage_events{where}
+                    """,
+                    params,
+                ).fetchall()
+        else:
+            rows = self.conn.execute(
+                f"""
+                SELECT agent_id, provider, model, status, ts_epoch,
+                       in_hit_tokens, in_miss_tokens, out_tokens,
+                       in_hit_cost, in_hit_currency,
+                       in_miss_cost, in_miss_currency,
+                       out_cost, out_currency, total_cost, total_currency
+                FROM usage_events{where}
+                """,
+                params,
+            ).fetchall()
 
         tz = timezone.utc  # daemon 本地时区; 部署机 njbx02 = CST(+08:00) 与 UTC 偏移一致语义
         since = self._parse_or(q.since, default_start=True)

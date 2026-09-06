@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -76,14 +77,21 @@ def compute_fingerprint(
 
 
 class EventStorage:
-    """usage_events 读写 (daemon 私有 SQLite)。"""
+    """usage_events 读写 (daemon 私有 SQLite)。
+
+    线程安全: fastmcp tool handler 跑在与初始化不同的线程 →
+    check_same_thread=False + 全部读写经 self._lock 串行化
+    (单连接 + 锁, SQLite 单文件低并发场景最简正确形态)。
+    """
 
     def __init__(self, db_path: str | Path):
         self.db_path = str(db_path)
-        self.conn = sqlite3.connect(self.db_path)
+        self._lock = threading.Lock()
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode = WAL;")
         self.conn.execute("PRAGMA foreign_keys = ON;")
+        self.conn.execute("PRAGMA busy_timeout = 5000;")
         self.conn.executescript(SCHEMA_SQL)
         self.conn.commit()
         self._ensure_source_column()
@@ -138,48 +146,49 @@ class EventStorage:
             (usage.input_cache_hit, usage.input_cache_miss, usage.output, usage.total)
             if usage is not None else ({}, {}, {}, {})
         )
-        cur = self.conn.execute(
-            """
-            INSERT OR IGNORE INTO usage_events (
-              event_id, schema_version, status, agent_id, harness, session_id,
-              ts, ts_epoch, model, provider,
-              in_hit_tokens, in_hit_cost, in_hit_currency,
-              in_miss_tokens, in_miss_cost, in_miss_currency,
-              out_tokens, out_cost, out_currency,
-              total_cost, total_currency,
-              kanban_task, kind, usage_null, fingerprint, raw_json
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                report.event_id,
-                report.schema_version,
-                report.status,
-                report.agent_id,
-                report.harness,
-                report.session_id,
-                report.ts,
-                int(report.ts_dt.timestamp()),
-                report.model,
-                report.provider,
-                hit.tokens if usage else 0,
-                hit.cost if usage else None,
-                hit.currency if usage else None,
-                miss.tokens if usage else 0,
-                miss.cost if usage else None,
-                miss.currency if usage else None,
-                out.tokens if usage else 0,
-                out.cost if usage else None,
-                out.currency if usage else None,
-                total.cost if usage else None,
-                total.currency if usage else None,
-                report.context.kanban_task,
-                report.context.kind,
-                usage_null,
-                fingerprint,
-                report.model_dump_json(),
-            ),
-        )
-        self.conn.commit()
+        with self._lock:
+            cur = self.conn.execute(
+                """
+                INSERT OR IGNORE INTO usage_events (
+                  event_id, schema_version, status, agent_id, harness, session_id,
+                  ts, ts_epoch, model, provider,
+                  in_hit_tokens, in_hit_cost, in_hit_currency,
+                  in_miss_tokens, in_miss_cost, in_miss_currency,
+                  out_tokens, out_cost, out_currency,
+                  total_cost, total_currency,
+                  kanban_task, kind, usage_null, fingerprint, raw_json
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    report.event_id,
+                    report.schema_version,
+                    report.status,
+                    report.agent_id,
+                    report.harness,
+                    report.session_id,
+                    report.ts,
+                    int(report.ts_dt.timestamp()),
+                    report.model,
+                    report.provider,
+                    hit.tokens if usage else 0,
+                    hit.cost if usage else None,
+                    hit.currency if usage else None,
+                    miss.tokens if usage else 0,
+                    miss.cost if usage else None,
+                    miss.currency if usage else None,
+                    out.tokens if usage else 0,
+                    out.cost if usage else None,
+                    out.currency if usage else None,
+                    total.cost if usage else None,
+                    total.currency if usage else None,
+                    report.context.kanban_task,
+                    report.context.kind,
+                    usage_null,
+                    fingerprint,
+                    report.model_dump_json(),
+                ),
+            )
+            self.conn.commit()
         return cur.rowcount == 1
 
     # -- 查询 ---------------------------------------------------------------
@@ -208,14 +217,15 @@ class EventStorage:
             where.append("ts_epoch <= ?")
             params.append(until_epoch)
         clause = f" WHERE {' AND '.join(where)}" if where else ""
-        total = self.conn.execute(
-            f"SELECT COUNT(*) AS c FROM usage_events{clause}", params
-        ).fetchone()["c"]
-        rows = self.conn.execute(
-            f"SELECT raw_json FROM usage_events{clause} "
-            "ORDER BY ts_epoch DESC, id DESC LIMIT ?",
-            [*params, limit],
-        ).fetchall()
+        with self._lock:
+            total = self.conn.execute(
+                f"SELECT COUNT(*) AS c FROM usage_events{clause}", params
+            ).fetchone()["c"]
+            rows = self.conn.execute(
+                f"SELECT raw_json FROM usage_events{clause} "
+                "ORDER BY ts_epoch DESC, id DESC LIMIT ?",
+                [*params, limit],
+            ).fetchall()
         events = []
         for r in rows:
             raw = json.loads(r["raw_json"])

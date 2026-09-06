@@ -35,7 +35,7 @@ class TestSummary:
             assert report_usage(ALL_FIXTURES[key], storage)["accepted"] == 1
         summary, echo = engines
 
-        out = summary.summary(UsageSummaryInput(group_by=["agent"]))
+        out = summary.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00", group_by=["agent"]))
         by_group = {r.group: r for r in out.rows}
         assert set(by_group) == {"home-computer", "njbx02", "desktop-e5jupfs"}
 
@@ -94,7 +94,7 @@ class TestSummary:
     def test_group_by_day(self, storage, engines):
         summary, _ = engines
         report_usage(ALL_FIXTURES["F1"], storage)
-        out = summary.summary(UsageSummaryInput(group_by=["agent", "day"]))
+        out = summary.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00", group_by=["agent", "day"]))
         assert len(out.rows) == 1
         assert out.rows[0].group == "home-computer|2026-09-05"  # ts=+08:00 01:49 → UTC 09-05 17:49
         assert out.rows[0].calls == 1
@@ -103,7 +103,7 @@ class TestSummary:
         for key in ("F1", "F2", "F3"):
             report_usage(ALL_FIXTURES[key], storage)
         summary, _ = engines
-        out = summary.summary(UsageSummaryInput(group_by=["status"]))
+        out = summary.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00", group_by=["status"]))
         groups = {r.group: r for r in out.rows}
         assert set(groups) == {"completed", "partial", "unknown"}
         assert groups["unknown"].calls == 1
@@ -149,7 +149,8 @@ class TestTtlMaintenance:
         for key in ("F1", "F2", "F3"):
             report_usage(ALL_FIXTURES[key], storage)
         summary, _ = engines
-        before = summary.summary(UsageSummaryInput(group_by=["agent"]))
+        before = summary.summary(
+            UsageSummaryInput(since="2026-09-01T00:00:00+08:00", group_by=["agent"]))
         before_by_group = {r.group: r for r in before.rows}
 
         storage.ensure_usage_records_table()

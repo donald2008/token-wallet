@@ -31,7 +31,7 @@ def _data_dir() -> Path:
 
 def build_server(*, db_path: str, ttl_days: int) -> FastMCP:
     storage = EventStorage(db_path)
-    summary_engine = SummaryEngine(storage.conn)
+    summary_engine = SummaryEngine(storage.conn, lock=storage._lock)
     echo_engine = EchoEngine(storage)
 
     mcp = FastMCP(
@@ -42,7 +42,7 @@ def build_server(*, db_path: str, ttl_days: int) -> FastMCP:
         ),
     )
 
-    @mcp.tool
+    @mcp.tool(name="report_usage")  # 工具名照 spec §2.1 (终审复验 P2 #1: 禁用实现别名)
     def report_usage_tool(payload: dict) -> dict:
         """批量上报 Agent LLM 用量 (1-100 条 AgentUsageReport v1)。
 
@@ -115,20 +115,33 @@ def build_server(*, db_path: str, ttl_days: int) -> FastMCP:
             nxt = (now + timedelta(days=1)).replace(hour=3, minute=37, second=0, microsecond=0)
             time.sleep(max(0.0, (nxt - now).total_seconds()))
             try:
-                result = maintenance.daily_maintenance(storage.conn, ttl_days)
+                result = _run_maintenance()
                 print(f"[token-wallet-mcp] maintenance: {result}", flush=True)
             except Exception as e:  # 维护失败不杀 daemon, 次日重试
                 print(f"[token-wallet-mcp] maintenance failed: {e}", file=sys.stderr, flush=True)
 
     threading.Thread(target=_maintenance_loop, name="ttl-maintenance", daemon=True).start()
 
-    # 挂维护手动触发为工具 (验收用: TTL 维护手动触发一次, 验证先聚合后删)
-    @mcp.tool
-    def run_maintenance_now() -> dict:
-        """手动触发每日维护 (先聚合昨天后按 TTL 删原始), 返回 {aggregated_rows, deleted_events}。"""
-        return maintenance.daily_maintenance(storage.conn, ttl_days)
+    # 手动触发入口 (验收/运维用): 不挂 @mcp.tool —— 不出现在 agent 数据面
+    # tools/list (终审复验 P2 #2)。需触发时走 systemd exec 或 python -c 调 maintenance。
+    def _run_maintenance() -> dict:
+        with storage._lock:
+            storage.ensure_usage_records_table()
+        return maintenance.daily_maintenance(storage.conn, ttl_days, _lock=storage._lock)
+
+    _run_maintenance.__name__ = "run_maintenance_now"
+    globals()["_run_maintenance_entry"] = _run_maintenance
 
     return mcp
+
+
+def run_maintenance_once(*, db_path: str, ttl_days: int) -> dict:
+    """CLI 手动触发维护 (验收用): python -c 'from mcp_server.__main__ import run_maintenance_once; ...'。"""
+    storage = EventStorage(db_path)
+    storage.ensure_usage_records_table()
+    from . import maintenance
+
+    return maintenance.daily_maintenance(storage.conn, ttl_days, _lock=storage._lock)
 
 
 def main() -> None:
