@@ -308,7 +308,7 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
   );
 }
 
-/* ============ 导出: 4 方案定义 + 异常段数据契约 ============ */
+/* ============ 导出: 3 方案定义 + 异常段数据契约 ============ */
 
 export interface CardVariantDef {
   /** 方案代号(显示在 qvar-tag) */
@@ -348,12 +348,16 @@ export const PROVIDER_CARD_LAYOUTS: CardVariantDef[] = [
 ];
 
 /**
- * 4 方案的真实数据快照(同 S1-S4 同规升级: **三窗齐全** rolling_5h + weekly + monthly,
- * 同套 kimi-code 真实形态)。请求计数制(unit=requests), 主页窗口行同形态。
+ * 3 方案的真实数据快照(P1/P2/P4 三窗齐全, 真实形态与 mockData warn 场景语义一致:
+ * 80% / 20% / 30% 健康分布)。
  *
- * 异常卡数据(auth_expired + error)同 S1-S4: aliyun auth_expired 带 setup_hint,
- * deepseek error 警示。异常段**不算独立布局**, 共用 AbnormalBody(与主页 ProviderCard
- * AbnormalBody 结构同构)。
+ * 请求计数制(unit=requests), 主页窗口行同形态。mockData.ts 的 kimi-code 当前只有
+ * rolling_5h + weekly 两窗(无 monthly), 本函数是方案页专用三窗样本, 作用域限定
+ * 方案页 — 不动 mockData.ts 的场景面板样本(改 mockData 会动主页 ScenarioBar)。
+ *
+ * 异常卡数据(auth_expired + error)与方案页 3 方案共用同一套 AbnormalBody(不计入
+ * 独立布局): aliyun auth_expired 带 setup_hint, deepseek error 警示。
+ * 结构与主页 ProviderCard AbnormalBody 同构。
  */
 export function getProviderCardMockProviders(): {
   ok: ProviderSnapshot;
