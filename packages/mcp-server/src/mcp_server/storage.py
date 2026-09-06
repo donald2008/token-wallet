@@ -9,7 +9,6 @@ import hashlib
 import json
 import sqlite3
 import threading
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -135,17 +134,21 @@ class EventStorage:
 
     # -- 写入 ---------------------------------------------------------------
 
-    def insert_report(self, report: Any, fingerprint: str) -> bool:
+    def insert_report(self, report: Any, fingerprint: str, *, computed_costs=None) -> bool:
         """落一条已校验的 UsageReport。返回 False = 命中任一级判重 (duplicated)。
 
-        raw_json 保持提交原文不变 (§4.1); daemon 补算 cost 写回 *_cost/*_currency 列。
+        raw_json = report 原样序列化 = 提交原文 (§4.1 终审 P1 #2: 价目表补算值
+        经 computed_costs 参数传入写 *_cost 列, 不改写 report 再序列化);
+        computed_costs 形态见 pricing.compute_report_costs。
         """
         usage = report.usage
         usage_null = 1 if usage is None else 0
         hit, miss, out, total = (
             (usage.input_cache_hit, usage.input_cache_miss, usage.output, usage.total)
-            if usage is not None else ({}, {}, {}, {})
+            if usage is not None else (None, None, None, None)
         )
+        cc = computed_costs or {}
+        hit_cc, miss_cc, out_cc, total_cc = cc.get("hit"), cc.get("miss"), cc.get("out"), cc.get("total")
         with self._lock:
             cur = self.conn.execute(
                 """
@@ -171,16 +174,16 @@ class EventStorage:
                     report.model,
                     report.provider,
                     hit.tokens if usage else 0,
-                    hit.cost if usage else None,
-                    hit.currency if usage else None,
+                    (hit_cc[0] if hit_cc else (hit.cost if hit else None)) if usage else None,
+                    (hit_cc[1] if hit_cc else (hit.currency if hit else None)) if usage else None,
                     miss.tokens if usage else 0,
-                    miss.cost if usage else None,
-                    miss.currency if usage else None,
+                    (miss_cc[0] if miss_cc else (miss.cost if miss else None)) if usage else None,
+                    (miss_cc[1] if miss_cc else (miss.currency if miss else None)) if usage else None,
                     out.tokens if usage else 0,
-                    out.cost if usage else None,
-                    out.currency if usage else None,
-                    total.cost if usage else None,
-                    total.currency if usage else None,
+                    (out_cc[0] if out_cc else (out.cost if out else None)) if usage else None,
+                    (out_cc[1] if out_cc else (out.currency if out else None)) if usage else None,
+                    (total_cc[0] if total_cc else (total.cost if total else None)) if usage else None,
+                    (total_cc[1] if total_cc else (total.currency if total else None)) if usage else None,
                     report.context.kanban_task,
                     report.context.kind,
                     usage_null,
@@ -222,37 +225,56 @@ class EventStorage:
                 f"SELECT COUNT(*) AS c FROM usage_events{clause}", params
             ).fetchone()["c"]
             rows = self.conn.execute(
-                f"SELECT raw_json FROM usage_events{clause} "
+                f"SELECT raw_json, ts_epoch, provider, model, status, kind, "
+                f"kanban_task, "
+                f"in_hit_cost, in_hit_currency, in_miss_cost, in_miss_currency, "
+                f"out_cost, out_currency, total_cost, total_currency "
+                f"FROM usage_events{clause} "
                 "ORDER BY ts_epoch DESC, id DESC LIMIT ?",
                 [*params, limit],
             ).fetchall()
         events = []
         for r in rows:
             raw = json.loads(r["raw_json"])
-            events.append(self._attach_computed(raw))
+            events.append(self.attach_computed(raw, r))
         return events, total
 
     @staticmethod
-    def _attach_computed(raw: dict[str, Any]) -> dict[str, Any]:
-        """附 daemon 补齐的 computed 字段 (不写回 raw_json 原文)。"""
+    def attach_computed(raw: dict[str, Any], row: sqlite3.Row) -> dict[str, Any]:
+        """附 daemon 补齐的 computed 字段 (§2.3), 不写回 raw_json 原文。
+
+        fingerprint 照 §3 规则从原文重算; *_computed_cost = 价目表补算值
+        (列里非空价与原文价同值时不重复输出, 仅补算出的才附)。
+        """
         usage = raw.get("usage")
-        computed: dict[str, Any] = {"_computed": {"fingerprint": None, "tokens_billable": None}}
+        computed: dict[str, Any] = {}
         if isinstance(usage, dict):
             hit = (usage.get("input_cache_hit") or {}).get("tokens") or 0
             miss = (usage.get("input_cache_miss") or {}).get("tokens") or 0
             out = (usage.get("output") or {}).get("tokens") or 0
-            computed["_computed"]["tokens_billable"] = miss + out
-        return {**computed, **raw}
-
-    # -- 聚合底料 -----------------------------------------------------------
-
-
-def day_bounds_utc(epoch: int) -> tuple[int, int]:
-    """某 epoch 秒所在 UTC 日的 [当日 00:00, 次日 00:00) 边界 (epoch 秒)。
-
-    ts 带时区偏移落库为 epoch, 聚合窗口以 epoch 直接比对 — "天" 边界取 UTC
-    (daemon 部署机 njbx02 = CST, 与 +08:00 ts 的自然日边界一致)。
-    """
-    dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
-    day_start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    return int(day_start.timestamp()), int((day_start + timedelta(days=1)).timestamp())
+            computed["tokens_billable"] = miss + out
+            computed["fingerprint"] = compute_fingerprint(
+                session_id=raw.get("session_id"),
+                ts_epoch=row["ts_epoch"],
+                model=raw.get("model") or row["model"],
+                provider=raw.get("provider") or row["provider"],
+                hit_tokens=hit,
+                miss_tokens=miss,
+                out_tokens=out,
+                kind=(raw.get("context") or {}).get("kind"),
+                status=raw.get("status") or row["status"],
+            )
+            # 补算 cost: 列值 ≠ 原文价 (原文价 null 而列非空) → 附补算值 (§2.3)
+            for slot, c_col, cur_col in (
+                ("input_cache_hit", "in_hit_cost", "in_hit_currency"),
+                ("input_cache_miss", "in_miss_cost", "in_miss_currency"),
+                ("output", "out_cost", "out_currency"),
+                ("total", "total_cost", "total_currency"),
+            ):
+                db_cost, db_cur = row[c_col], row[cur_col]
+                comp = usage.get(slot) or {}
+                if db_cost is not None and comp.get("cost") is None:
+                    computed.setdefault("computed_cost", {})[slot] = {
+                        "cost": db_cost, "currency": db_cur,
+                    }
+        return {"_computed": computed, **raw}

@@ -21,18 +21,6 @@ from .schema import (
 from .storage import EventStorage, compute_fingerprint
 
 
-def _apply_pricing(report) -> None:
-    """cost=null 的分项按价目表补算 (§1.2); 价目表无此模型保持 null。"""
-    if report.usage is None:
-        return
-    for name in ("input_cache_hit", "input_cache_miss", "output"):
-        comp = getattr(report.usage, name)
-        if comp.cost is None:
-            cost, currency = pricing.compute_cost(name, comp.tokens, report.model)
-            comp.cost = cost
-            comp.currency = currency
-
-
 def report_usage(payload: dict[str, Any], storage: EventStorage) -> dict:
     # 信封级校验只看结构 (§2.1 语义 5): reports 非法即整体 tool error
     if not isinstance(payload, dict) or set(payload) != {"reports"}:
@@ -58,13 +46,15 @@ def report_usage(payload: dict[str, Any], storage: EventStorage) -> dict:
         usage = report.usage
         if usage is None:  # unknown 占位: 三 tokens 取 0 (§3)
             hit = miss = out = 0
+            computed_costs = None
         else:
             hit, miss, out = (
                 usage.input_cache_hit.tokens,
                 usage.input_cache_miss.tokens,
                 usage.output.tokens,
             )
-            _apply_pricing(report)  # 落库前补算, 写回 *_cost 列 (raw_json 仍为原文)
+            # 价目表补算 (§1.2) 纯函数计算, 不改写 report (P1: raw_json=提交原文, §4.1)
+            computed_costs = pricing.compute_report_costs(report)
         fp = compute_fingerprint(
             session_id=report.session_id,
             ts_epoch=int(report.ts_dt.timestamp()),
@@ -76,7 +66,7 @@ def report_usage(payload: dict[str, Any], storage: EventStorage) -> dict:
             kind=report.context.kind,
             status=report.status,
         )
-        if storage.insert_report(report, fp):
+        if storage.insert_report(report, fp, computed_costs=computed_costs):
             accepted += 1
         else:
             duplicated += 1  # 两级判重命中: 透明计数, 不是错误 (§3)

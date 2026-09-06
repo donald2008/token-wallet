@@ -72,7 +72,7 @@ class TestSummary:
             report_usage(ALL_FIXTURES[key], storage)
         summary, echo = engines
 
-        events, total = echo.echo(UsageReportEchoInput(limit=50)).events, None
+        events = echo.echo(UsageReportEchoInput(limit=50)).events
         out = echo.echo(UsageReportEchoInput(limit=50))
         assert out.total_count == 3 and len(out.events) == 3
         raw_by_agent = {}
@@ -92,12 +92,31 @@ class TestSummary:
             assert row.output_tokens == raw["out"]
 
     def test_group_by_day(self, storage, engines):
+        """day 日界 = daemon 本地时区 (§2.2, 终审 P1)。"""
         summary, _ = engines
-        report_usage(ALL_FIXTURES["F1"], storage)
-        out = summary.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00", group_by=["agent", "day"]))
-        assert len(out.rows) == 1
-        assert out.rows[0].group == "home-computer|2026-09-05"  # ts=+08:00 01:49 → UTC 09-05 17:49
+        report_usage(ALL_FIXTURES["F1"], storage)  # ts=2026-09-06 01:49:30+08:00
+        out = summary.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00",
+                                                group_by=["agent", "day"]))
+        # +08:00 09-06 01:49 在东八区属 09-06 (UTC 日界才会切到 09-05)
+        assert out.rows[0].group == "home-computer|2026-09-06"
         assert out.rows[0].calls == 1
+
+    def test_timezone_is_daemon_local_iana(self, storage, engines):
+        """timezone 字段 = daemon 本地时区 IANA 名, day/since 缺省同口径 (§2.2)。"""
+        # 显式注入时区 (CI 宿主时区不可控): 东八区固定断言
+        from mcp_server.tools_query import SummaryEngine
+
+        scoped = SummaryEngine(storage.conn, tz_name="Asia/Shanghai")
+        report_usage(ALL_FIXTURES["F1"], storage)
+        out = scoped.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00",
+                                               group_by=["agent", "day"]))
+        assert out.timezone == "Asia/Shanghai"
+        assert out.rows[0].group == "home-computer|2026-09-06"
+        # since 缺省 = 今天 00:00 本地时区 → 昨天 F1 不在窗口内 (缺省窗)
+        out_default = scoped.summary(UsageSummaryInput(group_by=["agent"]))
+        assert out_default.total.calls == 0  # F1 ts=09-06, 今天(测试运行日)之后无事件
+        # window.since 缺省值 = 本地时区当日 00:00 的 ISO 串 (+08:00)
+        assert out_default.window.since.endswith("+08:00")
 
     def test_group_by_status(self, storage, engines):
         for key in ("F1", "F2", "F3"):
@@ -154,8 +173,10 @@ class TestTtlMaintenance:
         before_by_group = {r.group: r for r in before.rows}
 
         storage.ensure_usage_records_table()
-        # 聚合 F1/F2/F3 各自所在日 (ts 落在 2026-09-05 UTC / 09-06 +08)
-        days = {int(r.ts_dt.timestamp()) // 86400 * 86400
+        # 聚合各事件所在「天」— 日界 = daemon 本地时区 (§4.2, 终审 P1 口径)
+        from mcp_server.tzutil import day_bounds, local_tz
+        tz, _ = local_tz()
+        days = {day_bounds(int(r.ts_dt.timestamp()), tz)[0]
                 for k in ("F1", "F2", "F3")
                 for r in [_report_of(k)]}
         for d in days:
@@ -205,7 +226,9 @@ class TestTtlMaintenance:
         """同一天重跑聚合不产生重复行 (派生数据重算语义)。"""
         report_usage(ALL_FIXTURES["F2"], storage)
         storage.ensure_usage_records_table()
-        day = int(_report_of("F2").ts_dt.timestamp()) // 86400 * 86400
+        from mcp_server.tzutil import day_bounds, local_tz
+        tz, _ = local_tz()
+        day = day_bounds(int(_report_of("F2").ts_dt.timestamp()), tz)[0]
         maintenance.aggregate_day(storage.conn, day)
         maintenance.aggregate_day(storage.conn, day)
         n = storage.conn.execute(

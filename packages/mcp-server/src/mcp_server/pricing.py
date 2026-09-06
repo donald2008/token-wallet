@@ -38,3 +38,31 @@ def compute_cost(component: str, tokens: int, model: str) -> tuple[Optional[floa
     per_m = {"input_cache_hit": rate[1], "input_cache_miss": rate[0], "output": rate[2]}[component]
     cost = tokens * per_m / 1_000_000
     return cost, CURRENCY
+
+
+def compute_report_costs(report) -> Optional[dict]:
+    """整条 report 的 cost 补算 — 纯函数, 不改写 report (raw_json 保持提交原文, §4.1)。
+
+    返回 {("hit"|"miss"|"out"|"total"): (cost, currency)}; 仅含补算出的分项;
+    价目表无此模型 / usage=None → None。补算值由 storage 写 *_cost 列并附进
+    echo 的 _computed (§2.3), 绝不进入 raw_json (终审 P1 #2)。
+    """
+    usage = getattr(report, "usage", None)
+    if usage is None:
+        return None
+    computed: dict[str, tuple[float, str]] = {}
+    for slot, name in (("hit", "input_cache_hit"), ("miss", "input_cache_miss"), ("out", "output")):
+        comp = getattr(usage, name)
+        if comp.cost is None:
+            cost, currency = compute_cost(name, comp.tokens, report.model)
+            if cost is not None:
+                computed[slot] = (cost, currency)
+    # total.cost 也是 null 时按三分项补算值求和; 任一分项缺价则 total 不补 (宁缺勿错)
+    if usage.total.cost is None:
+        parts = [computed[s] for s in ("hit", "miss", "out") if s in computed]
+        if len(parts) == 3:
+            computed["total"] = (
+                sum(p[0] for p in parts),
+                parts[0][1],
+            )
+    return computed or None

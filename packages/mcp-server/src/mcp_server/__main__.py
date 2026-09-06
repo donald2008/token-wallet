@@ -106,6 +106,11 @@ def build_server(*, db_path: str, ttl_days: int) -> FastMCP:
     # TTL 维护: 后台线程每日 03:37 本地时区执行 (先聚合后删, §4.3)
     from . import maintenance
 
+    def _run_maintenance() -> dict:
+        with storage._lock:
+            storage.ensure_usage_records_table()
+        return maintenance.daily_maintenance(storage.conn, ttl_days, _lock=storage._lock)
+
     def _maintenance_loop() -> None:
         import time
         from datetime import datetime, timedelta
@@ -124,13 +129,7 @@ def build_server(*, db_path: str, ttl_days: int) -> FastMCP:
 
     # 手动触发入口 (验收/运维用): 不挂 @mcp.tool —— 不出现在 agent 数据面
     # tools/list (终审复验 P2 #2)。需触发时走 systemd exec 或 python -c 调 maintenance。
-    def _run_maintenance() -> dict:
-        with storage._lock:
-            storage.ensure_usage_records_table()
-        return maintenance.daily_maintenance(storage.conn, ttl_days, _lock=storage._lock)
-
-    _run_maintenance.__name__ = "run_maintenance_now"
-    globals()["_run_maintenance_entry"] = _run_maintenance
+    build_server._run_maintenance = _run_maintenance  # type: ignore[attr-defined]
 
     return mcp
 

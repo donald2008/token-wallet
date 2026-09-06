@@ -76,9 +76,10 @@ env 一览: `TOKEN_WALLET_MCP_KEY`(必填, 无缺省) / `TOKEN_WALLET_DB_PATH`
 TTL 维护手动触发(验收/运维, 不在 agent 数据面 tools/list):
 
 ```bash
+# 注意: python -c '单引号里的 ~ 不会展开' — 必须用绝对路径(或脚本内 Path.home())
 cd packages/mcp-server && PYTHONPATH=src .venv/bin/python -c \
   'from mcp_server.__main__ import run_maintenance_once; \
-   print(run_maintenance_once(db_path="~/.local/share/token-wallet/token-wallet.db", ttl_days=90))'
+   print(run_maintenance_once(db_path="/home/<user>/.local/share/token-wallet/token-wallet.db", ttl_days=90))'
 ```
 
 测试: `.venv/bin/pip install pytest && .venv/bin/python -m pytest tests/ -q`

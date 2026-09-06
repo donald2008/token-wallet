@@ -1,9 +1,13 @@
-"""usage_summary / usage_report_echo — spec §2.2 / §2.3。"""
+"""usage_summary / usage_report_echo — spec §2.2 / §2.3。
+
+时区契约 (§2.2): day 分组 / since 缺省 / timezone 字段一律 daemon 本地时区,
+响应 timezone = IANA 名 (如 Asia/Shanghai), App 不自行换算。
+"""
 from __future__ import annotations
 
 import sqlite3
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from .schema import (
@@ -16,47 +20,36 @@ from .schema import (
     UsageSummaryInput,
     UsageSummaryOutput,
 )
+from .tzutil import local_tz
 
 STATUS_KEYS = ("completed", "partial", "unknown")
 GROUP_DIMS = ("agent", "provider", "model", "day", "status")
 
+_SUMMARY_SELECT = """
+    SELECT agent_id, provider, model, status, ts_epoch,
+           in_hit_tokens, in_miss_tokens, out_tokens,
+           in_hit_cost, in_hit_currency,
+           in_miss_cost, in_miss_currency,
+           out_cost, out_currency, total_cost, total_currency
+    FROM usage_events{where}
+"""
+
 
 class SummaryEngine:
-    def __init__(self, conn: sqlite3.Connection, lock=None):
+    def __init__(self, conn: sqlite3.Connection, lock=None, tz_name: Optional[str] = None):
         self.conn = conn
         self._lock = lock  # EventStorage 的锁; None = 无并发(单测直连)
+        # daemon 本地时区 + IANA 名 (§2.2); 显式 tz_name 供测试注入
+        self._tz, self._tz_name = local_tz(tz_env=tz_name)
 
     # ------------------------------------------------------------------ #
 
     def summary(self, q: UsageSummaryInput) -> UsageSummaryOutput:
         where, params = self._filters(q)
-        if self._lock is not None:
-            with self._lock:
-                rows = self.conn.execute(
-                    f"""
-                    SELECT agent_id, provider, model, status, ts_epoch,
-                           in_hit_tokens, in_miss_tokens, out_tokens,
-                           in_hit_cost, in_hit_currency,
-                           in_miss_cost, in_miss_currency,
-                           out_cost, out_currency, total_cost, total_currency
-                    FROM usage_events{where}
-                    """,
-                    params,
-                ).fetchall()
-        else:
-            rows = self.conn.execute(
-                f"""
-                SELECT agent_id, provider, model, status, ts_epoch,
-                       in_hit_tokens, in_miss_tokens, out_tokens,
-                       in_hit_cost, in_hit_currency,
-                       in_miss_cost, in_miss_currency,
-                       out_cost, out_currency, total_cost, total_currency
-                FROM usage_events{where}
-                """,
-                params,
-            ).fetchall()
+        with self._lock or _NULLLOCK:
+            rows = self.conn.execute(_SUMMARY_SELECT.format(where=where), params).fetchall()
 
-        tz = timezone.utc  # daemon 本地时区; 部署机 njbx02 = CST(+08:00) 与 UTC 偏移一致语义
+        tz = self._tz
         since = self._parse_or(q.since, default_start=True)
         until = self._parse_or(q.until, default_start=False)
 
@@ -97,7 +90,7 @@ class SummaryEngine:
                 since=datetime.fromtimestamp(since, tz=tz).isoformat(),
                 until=datetime.fromtimestamp(until, tz=tz).isoformat(),
             ),
-            timezone="UTC" if tz == timezone.utc else str(tz),
+            timezone=self._tz_name,
             generated_at=datetime.now(tz).isoformat(),
             rows=out_rows,
             total=total,
@@ -105,8 +98,7 @@ class SummaryEngine:
 
     # ------------------------------------------------------------------ #
 
-    @staticmethod
-    def _dim_value(dim: str, r: sqlite3.Row, ep: int) -> str:
+    def _dim_value(self, dim: str, r: sqlite3.Row, ep: int) -> str:
         if dim == "agent":
             return r["agent_id"]
         if dim == "provider":
@@ -115,8 +107,8 @@ class SummaryEngine:
             return r["model"] or ""
         if dim == "status":
             return r["status"]
-        if dim == "day":
-            return datetime.fromtimestamp(ep, tz=timezone.utc).strftime("%Y-%m-%d")
+        if dim == "day":  # daemon 本地时区日界 (§2.2, 终审 P1: 禁 UTC 硬编码)
+            return datetime.fromtimestamp(ep, tz=self._tz).strftime("%Y-%m-%d")
         raise ValueError(f"unknown group dim: {dim}")
 
     @staticmethod
@@ -210,16 +202,28 @@ class SummaryEngine:
         clause = f" WHERE {' AND '.join(where)}" if where else ""
         return clause, params
 
-    @staticmethod
-    def _parse_or(ts: Optional[str], *, default_start: bool) -> float:
-        """since 缺省 = 今天 00:00 (daemon 本地时区); until 缺省 = 当前时刻 (§2.2)。"""
+    def _parse_or(self, ts: Optional[str], *, default_start: bool) -> float:
+        """since 缺省 = 今天 00:00 (daemon 本地时区, §2.2); until 缺省 = 当前时刻。"""
         if ts:
             from .schema import parse_ts
 
             return parse_ts(ts).timestamp()
-        now = datetime.now(timezone.utc).astimezone()
+        now = datetime.now(self._tz)
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         return day_start.timestamp() if default_start else now.timestamp()
+
+
+class _NullLock:
+    """无并发场景 (单测直连) 的锁替身, 收敛 SummaryEngine 锁/无锁 SQL 双分支 (P3)。"""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+_NULLLOCK = _NullLock()
 
 
 class EchoEngine:

@@ -14,15 +14,20 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
+from .tzutil import day_bounds, local_tz
+
 
 def aggregate_day(conn: sqlite3.Connection, day_start_epoch: int, _lock=None) -> int:
-    """聚合某一天 (epoch 秒起的 24h) 的 usage_events → usage_records(source='agent')。
+    """聚合某一天 (tz 当日 00:00 → 次日 00:00) 的 usage_events → usage_records(source='agent')。
 
+    日界 = daemon 本地时区 (§4.2, 终审 P1: 禁 UTC 硬编码); day_start_epoch
+    须为本地时区当日 00:00 的 epoch 秒 (day_bounds 自动归一)。
     返回写入的聚合行数。幂等性: 同 (provider_id, model, window_start) 已有
     source='agent' 行则先删再插 (聚合是派生数据, 重算安全)。
     daemon 运行态传 EventStorage._lock 串行化; 单测直连可省。
     """
-    day_end_epoch = day_start_epoch + 86400
+    _tz, _ = local_tz()
+    day_start_epoch, day_end_epoch = day_bounds(day_start_epoch, _tz)
 
     def _impl():
         conn.execute("BEGIN")
@@ -95,12 +100,13 @@ def purge_expired(
 def daily_maintenance(
     conn: sqlite3.Connection, ttl_days: int, *, now: datetime | None = None, _lock=None
 ) -> dict:
-    """每日维护入口 (daemon 本地时区凌晨执行): 先聚合前一天, 后按 TTL 删原始。
+    """每日维护入口 (daemon 本地时区凌晨执行, §4.3): 先聚合前一天, 后按 TTL 删原始。
 
+    「前一天」边界 = daemon 本地时区 (与 §4.2 聚合窗口口径一致)。
     返回 {"aggregated_rows": N, "deleted_events": M} 供验收对账。
     """
     if now is None:
-        now = datetime.now(timezone.utc).astimezone()
+        now = datetime.now().astimezone()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
     aggregated = aggregate_day(conn, int(yesterday_start.timestamp()), _lock=_lock)
