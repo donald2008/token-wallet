@@ -3,7 +3,8 @@ import type { ProviderSnapshot } from "../types";
 import { providerHealth, statusBadge } from "../health";
 import { getTemplateFor } from "../templates/registry";
 import { t } from "../i18n";
-import { BrandLogo } from "./brand-logos";
+import { BrandHandle } from "./ProviderCardLayouts";
+import { StatusDot } from "./StatusDot";
 import type { DragHandleProps } from "../useCardDragSort";
 import { commandAuthCancel, commandAuthFinish, commandAuthStart } from "../ipc";
 
@@ -343,19 +344,23 @@ export function ProviderCard({
       data-health={health}
     >
       <div className="card-head">
-        <span
-          className={`brand-block${dragHandle ? " drag-handle" : ""}`}
+        {/* P1 形态(handle+name+StatusDot+状态徽章 三件套一行, 9/7 用户拍板, t_27eeadad):
+         *   头部 BrandHandle = BrandLogo 拖把手(D-039) + display_name + StatusDot + statusBadge,
+         *   删除钮沿用主页契约(D-038)不动。dragHandle 绑定到把手块保持 D-039 拖动排序契约。 */}
+        <BrandHandle
+          p={p}
+          size={16}
+          className={`brand-handle${dragHandle ? " drag-handle" : ""}`}
+          testIdPrefix=""
           title={dragHandle ? t("card.dragSort", { name: p.display_name }) : p.provider_id}
           data-testid={dragHandle ? `drag-handle-${p.provider_id}` : undefined}
           {...dragHandle}
-        >
-          {/* P1(t_696ec820): 内置单色 SVG 品牌图标; descriptor.logo 生效(未收录回退品牌色块) */}
-          <BrandLogo platform={p.logo ?? p.provider_id} size={16} />
-        </span>
+        />
         <span className="card-name" title={p.display_name}>
           {p.display_name}
         </span>
-        <span className={`card-status-text text-${health}`}>{statusBadge(p)}</span>
+        <StatusDot health={health} size={8} />
+        <span className={`card-status-text text-${health}`} data-testid="card-status-badge">{statusBadge(p)}</span>
         {onDelete && !confirming && (
           <button
             type="button"

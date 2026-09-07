@@ -53,7 +53,7 @@ function render(el: React.ReactElement) {
   act(() => root.render(el));
 }
 
-const SCHEMES = ["p1", "p2", "p4"] as const;
+const SCHEMES = ["p1", "p2", "p4", "p5"] as const;
 
 function canvasOf(key: string): HTMLElement {
   return container.querySelector<HTMLElement>(`[data-testid='qvar-canvas-cards3-${key}']`)!;
@@ -147,21 +147,21 @@ describe("QuotaGallery Provider 卡片排版方案页 v2 (t_73c110ea 9/7 重建)
     expect(firstUsages[2]).toContain("(30%)");
   });
 
-  it("健康分布(同三窗真实数据): ok 6 + warn 3 + bad 0 (3 张 ok 卡各 1 warn + 2 ok)", () => {
+  it("健康分布(同三窗真实数据): ok 8 + warn 4 + bad 0 (4 张 ok 卡各 1 warn + 2 ok, P5 同 kimi 三窗)", () => {
     render(<QuotaGallery onBack={() => {}} />);
     const fills = Array.from(container.querySelectorAll(".progress-fill"));
     const byHealth = (h: string) => fills.filter((f) => f.getAttribute("data-health") === h).length;
-    // 3 张 ok 卡: 每张 3 个 progress-fill(3 行内 micro), 总 9
-    // 健康分布: rolling_5h 80% warn(3) + weekly 20% ok(3) + monthly 30% ok(3)
-    expect(byHealth("ok")).toBe(6);
-    expect(byHealth("warn")).toBe(3);
+    // 4 张 ok 卡: 每张 3 个 progress-fill(3 行内 micro), 总 12
+    // 健康分布: rolling_5h 80% warn(4) + weekly 20% ok(4) + monthly 30% ok(4)
+    expect(byHealth("ok")).toBe(8);
+    expect(byHealth("warn")).toBe(4);
     expect(byHealth("bad")).toBe(0);
   });
 
-  it("总 progressbar = 9 (3 ok 卡 × 3 窗 × 1 micro QuotaMeter), 异常段 = 0", () => {
+  it("总 progressbar = 12 (4 ok 卡 × 3 窗 × 1 micro QuotaMeter, P5 是 t_5b092750 9/7 加的方案),  异常段 = 0", () => {
     render(<QuotaGallery onBack={() => {}} />);
-    expect(container.querySelectorAll('[role="progressbar"]').length).toBe(9);
-    expect(container.querySelectorAll(".progress").length).toBe(9);
+    expect(container.querySelectorAll('[role="progressbar"]').length).toBe(12);
+    expect(container.querySelectorAll(".progress").length).toBe(12);
     // 异常段无 progressbar
     const abnCanvas = container.querySelector<HTMLElement>("[data-testid='qvar-canvas-cards3-abn']")!;
     expect(abnCanvas.querySelectorAll('[role="progressbar"]').length).toBe(0);
@@ -219,6 +219,37 @@ describe("QuotaGallery Provider 卡片排版方案页 v2 (t_73c110ea 9/7 重建)
       const rowMeter = row.querySelector<HTMLElement>("[data-testid='quota-meter'][data-layout='micro']")!;
       expect(rowMeter.querySelector(".quota-usage")).toBeTruthy();
     }
+  });
+
+  it("P5 短窗并排: 卡头同 P1, .qcard3-windows-row 两列含 5h+周, .qcard3-windows-row--wide 独占月; 三窗 micro 复用, .progress/role=progressbar 契约零破(t_5b092750 用户 9/7 拍板)", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    const card = cardOf("p5");
+    // 卡头同 P1: qcard3-badge + qcard3-head; 无 headline/status-group(无 4 方案语义)
+    expect(card.classList.contains("qcard3--monitor-short-side")).toBe(true);
+    expect(card.getAttribute("data-variant")).toBe("monitor-short-side");
+    expect(card.querySelector(".qcard3-badge")).toBeTruthy();
+    expect(card.querySelector(".qcard3-headline")).toBeFalsy();
+    expect(card.querySelector(".qcard3-status-group")).toBeFalsy();
+    // 旧 P1 经典容器 .qcard3-windows 不存在(本卡专属 .qcard3-windows-row)
+    expect(card.querySelector(".qcard3-windows")).toBeFalsy();
+    // 第一行: 两列 grid 含 5h + 周
+    const row2 = card.querySelector<HTMLElement>("[data-testid='qcard3-windows-row']");
+    expect(row2).toBeTruthy();
+    const row2Bars = Array.from(row2!.querySelectorAll<HTMLElement>("[data-testid='qcard3-bar-row']"));
+    expect(row2Bars.map((b) => b.getAttribute("data-metric"))).toEqual(["rolling_5h", "weekly"]);
+    // 第二行: 全宽 wide 修饰符 + 独占 monthly
+    const wideRow = card.querySelector<HTMLElement>("[data-testid='qcard3-windows-row-wide']");
+    expect(wideRow).toBeTruthy();
+    expect(wideRow!.classList.contains("qcard3-windows-row--wide")).toBe(true);
+    expect(wideRow!.querySelector("[data-metric='monthly']")).toBeTruthy();
+    // 三窗全复用 micro QuotaMeter(layout="micro", .progress + role=progressbar 契约零破)
+    const meters = Array.from(card.querySelectorAll<HTMLElement>("[data-testid='quota-meter'][data-layout='micro']"));
+    expect(meters.length).toBe(3);
+    expect(card.querySelectorAll(".progress").length).toBe(3);
+    expect(card.querySelectorAll('[role="progressbar"]').length).toBe(3);
+    // 与 P1 标题/用量一致(同数据快照)
+    const titles = meters.map((m) => m.querySelector(".quota-title")!.textContent!);
+    expect(titles).toEqual(EXPECTED_TITLES);
   });
 
   it("异常段: auth_expired 卡含 status-line + setup_hint(hint-copy-btn); error 卡无 hint 但含 status-line", () => {

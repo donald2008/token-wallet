@@ -1,25 +1,27 @@
 /**
- * ProviderCardLayouts — Provider 卡片卡内排版 3 方案真组件(t_73c110ea, 9/7 用户拍板重建)
+ * ProviderCardLayouts — Provider 卡片卡内排版 4 方案真组件(t_73c110ea 9/7 重建, t_5b092750 9/7 加 P5)
  *
  * 设计前提(用户 9/7 硬约束, 修订 #1116):
  *  - 卡内三窗 QuotaMeter = **layout="micro"** 紧凑竖排形态常驻直显 —— 这就是 BarRowTooltip
  *    已经在用的紧凑形态(无卡竖排超紧凑: 4px 条、重置并入用量行、title+bar+(usage|reset) 三层)
  *  - **不是 row 布局**(卡体原文作废, 老大 9/7 修订明确: 卡内窗口展示 = 悬浮窗内那个 QuotaMeter 组件)
  *  - 不再单独挂 <BarRowTooltip>: micro 本就是 BarRowTooltip 内的形态, 卡内常驻 = micro 直接展开
- *  - 3 排版差异必须建立在**真排版维度**(卡头与三窗的空间关系/信息层级/密度), 不是头部装饰件堆叠
+ *  - 排版差异必须建立在**真排版维度**(卡头与三窗的空间关系/信息层级/密度), 不是头部装饰件堆叠
  *  - 不替换主页 ProviderCard; 纯方案页 QuotaGallery 渲染, 用户选型后另开实现卡
  *
- * 3 方案差异维度(每方案建立一个真维度):
+ * 4 方案差异维度(每方案建立一个真维度):
  *   P1 · 基线竖排      头部 handle+name+状态 三件套一行 + 三窗 micro 各一行(4px gap)
  *                      → 与主页 ProviderCard/BarsTemplate 形态对齐, 认知零成本
  *   P2 · 头部综合态    头部右侧合并「最紧窗徽章+文字」一行 + 三窗 micro(同 P1)
  *                      → 信息上抬, 不引入摘要条(颜色走行内自身 color)
  *   P4 · 头部数字      头部右侧并入「最紧窗用量数字+窗名」一行 + 三窗 micro(最紧窗 hideUsage)
  *                      → 风险数字一瞥可见, 行内不重复数字(无摘要条形态)
+ *   P5 · 短窗并排      头部同 P1; 5h+周 **同窗两列 grid**, 月度 **独占下一行全宽**
+ *                      → 短窗紧排 + 月窗横铺, 来自用户 9/7 拍的 token-monitor 布局(本卡新增)
  *
- * P3(双列 grid 并排)在 360px 屏下已实测文字重叠 + 列被裁切 —— QuotaMeter 三件套
- * 装不进 ~104px 列宽, 故本轮不交付 P3(留 3 种方案覆盖空间结构 / 信息层级 / 头部承载
- * 三个真维度, 已满足任务「3-5 种」下限)
+ * P3(三列 grid 并排)在 360px 屏下已实测文字重叠 + 列被裁切 —— QuotaMeter 三件套
+ * 装不进 ~104px 列宽, 故本轮不交付 P3(留 4 种方案覆盖空间结构 / 信息层级 / 头部承载 /
+ * 短窗并排 四个真维度, 已满足任务「3-5 种」上限)
  *
  * 异常卡(auth_expired + error)共用同一套 AbnormalBody(不计入独立布局):
  *  - 沿用主页 .abnormal-body 形态(状态灯 + 文字 + setup_hint 授权面板 + 最近更新/alerts)
@@ -45,6 +47,7 @@
  *    (micro layout 已存在, 零改; BarRowTooltip 与本卡 WindowRow 共享 micro 形态)
  */
 import { useState } from "react";
+import type React from "react";
 import type { Metric, MetricUnit, ProviderSnapshot } from "../types";
 import { healthLabel, metricHealth, providerHealth, statusBadge } from "../health";
 import { t } from "../i18n";
@@ -94,14 +97,47 @@ function WindowRow({ metric, hideUsage = false }: WindowRowProps) {
   );
 }
 
-/** 头部品牌块(handle, 拖把手载体 = BrandLogo) + 名称 */
+/** 头部品牌把手(主页 + 方案页共用): BrandLogo 拖把手载体(D-039);
+ * 主页传 dragHandle 时把 spread 在 .brand-block.drag-handle 上;
+ * 方案页无拖动, 仅展示。size 默认 16(主页与现有契约一致); 方案页调用方传 14。
+ * 透传 title/data-testid 等 span 属性给容器(主页 card-del/drag-handle 契约需要 title)。
+ * .brand-block 类一直保留(主页 CSS 选择器族 + 16x16 容器尺寸契约),
+ * 无论 className 是否含 "brand-handle" 子串 —— 拖把手状态只追加 .drag-handle。 */
+export function BrandHandle({
+  p,
+  size = 16,
+  className = "brand-handle",
+  testIdPrefix = "qcard3-handle",
+  ...rest
+}: {
+  p: Pick<ProviderSnapshot, "logo" | "provider_id">;
+  size?: number;
+  /** 主页传 "brand-handle" 或 "brand-handle drag-handle"; 方案页传 "qcard3-handle"。
+   *  .brand-block 始终追加在末尾(主页 CSS 契约 + 16x16 容器尺寸契约)。 */
+  className?: string;
+  /** 主页不挂 testid(沿用既有 card-del-* 形态); 方案页传 "qcard3-handle" */
+  testIdPrefix?: string;
+} & Omit<React.HTMLAttributes<HTMLSpanElement>, "children" | "className" | "data-testid">) {
+  // 透传的 data-testid 优先(主页传 `drag-handle-${id}`), 缺省才走 testIdPrefix
+  const dataTestId = (rest as { "data-testid"?: string })["data-testid"] ?? (testIdPrefix || undefined);
+  const cls = className.includes("brand-block") ? className : `${className} brand-block`;
+  return (
+    <span
+      className={cls}
+      aria-hidden={testIdPrefix ? "true" : undefined}
+      data-testid={dataTestId}
+      {...rest}
+    >
+      <BrandLogo platform={p.logo ?? p.provider_id} size={size} />
+    </span>
+  );
+}
+
+/** 头部品牌把手 + 名称(P1/P2/P4/P5 方案页共用); 主页 ProviderCard 不直接用, 仅展示卡名 */
 function CardHandle({ p }: { p: ProviderSnapshot }) {
   return (
     <>
-      <span className="qcard3-handle" aria-hidden="true" data-testid="qcard3-handle">
-        {/* 拖把手载体 = BrandLogo(D-039); 实现卡沿真卡结构用 brand-block.drag-handle 绑 makeHandleProps */}
-        <BrandLogo platform={p.logo ?? p.provider_id} size={14} />
-      </span>
+      <BrandHandle p={p} size={14} />
       <span className="qcard3-name" title={p.display_name} data-testid="qcard3-name">
         {p.display_name}
       </span>
@@ -189,6 +225,68 @@ function P2HeadRollup({ p, m, abnormal }: { p: ProviderSnapshot; m: Metric[]; ab
             <WindowRow key={mm.key} metric={mm} />
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ P5 · monitor 短窗并排(t_5b092750 用户 9/7 拍板)
+ *
+ * 用户原话「5h与周在同一行, 月度在另外一行」(来自 token-monitor 窗口布局):
+ *   ┌─ OpenCode ─────────────────┐
+ *   │ [Logo] OpenCode      [●]   │  ← P1 同款卡头(handle+名称+StatusDot+徽章)
+ *   │ ┌─5小时窗─┐ ┌─周窗────┐    │
+ *   │ │ title   │ │ title   │    │  ← 5h + 周 **同一行两列 grid**
+ *   │ │ ███ 4px │ │ ███ 4px │    │
+ *   │ │ 用|重置  │ │ 用|重置  │    │
+ *   │ └─────────┘ └─────────┘    │
+ *   │ ┌─月窗─────────────────┐   │  ← 月度 **独占一行全宽**
+ *   │ │ title                 │   │
+ *   │ │ ████████ 4px          │   │
+ *   │ │ 用量|重置              │   │
+ *   │ └───────────────────────┘   │
+ *   └────────────────────────────┘
+ *
+ * 与 P1 头部同款; 三窗全复用 layout="micro" 紧凑 QuotaMeter — 不重造单元, 只重排窗口间的网格。
+ * 360px 双列硬门槛: 与 P3 三列 grid 在 360px 文字重叠 / 列被裁切不同, P5 用两列 + 1 列宽行,
+ * 列内仍是 micro 形态(title+bar+(usage|reset) grid, font-10), 360px 文字不裁(实测截图证明)。 */
+
+function P5MonitorShortSide({ p, m, abnormal }: { p: ProviderSnapshot; m: Metric[]; abnormal: boolean }) {
+  const health = providerHealth(p);
+  // 排版契约: rolling_5h + weekly 同窗, monthly 独占下一行
+  const short = m.filter((mm) => mm.key !== "monthly");
+  const wide = m.find((mm) => mm.key === "monthly");
+  return (
+    <div
+      className="qcard3 qcard3--monitor-short-side"
+      data-testid="qcard3"
+      data-variant="monitor-short-side"
+      data-health={health}
+    >
+      <div className="qcard3-head" data-testid="qcard3-head">
+        <CardHandle p={p} />
+        <StatusDot health={health} size={8} />
+        <span className={`qcard3-badge text-${health}`} data-testid="qcard3-badge">
+          {statusBadge(p)}
+        </span>
+      </div>
+      {abnormal ? (
+        <AbnormalBody p={p} />
+      ) : (
+        <>
+          {/* 第一行: 5h + 周 两列并排(同 .qcard3-windows-row, gap=8) */}
+          <div className="qcard3-windows-row" data-testid="qcard3-windows-row">
+            {short.map((mm) => (
+              <WindowRow key={mm.key} metric={mm} />
+            ))}
+          </div>
+          {/* 第二行: 月独占, 全宽(列内 micro 自身仍横铺) */}
+          {wide && (
+            <div className="qcard3-windows-row qcard3-windows-row--wide" data-testid="qcard3-windows-row-wide">
+              <WindowRow metric={wide} />
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -308,7 +406,7 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
   );
 }
 
-/* ============ 导出: 3 方案定义 + 异常段数据契约 ============ */
+/* ============ 导出: 4 方案定义 + 异常段数据契约 ============ */
 
 export interface CardVariantDef {
   /** 方案代号(显示在 qvar-tag) */
@@ -345,17 +443,24 @@ export const PROVIDER_CARD_LAYOUTS: CardVariantDef[] = [
     descKey: "quota.cardP4Desc",
     render: ({ p, m, abnormal }) => <P4HeadNumber p={p} m={m} abnormal={abnormal} />,
   },
+  {
+    tag: "P5",
+    testKey: "p5",
+    nameKey: "quota.cardP5Name",
+    descKey: "quota.cardP5Desc",
+    render: ({ p, m, abnormal }) => <P5MonitorShortSide p={p} m={m} abnormal={abnormal} />,
+  },
 ];
 
 /**
- * 3 方案的真实数据快照(P1/P2/P4 三窗齐全, 真实形态与 mockData warn 场景语义一致:
+ * 4 方案的真实数据快照(P1/P2/P4/P5 三窗齐全, 真实形态与 mockData warn 场景语义一致:
  * 80% / 20% / 30% 健康分布)。
  *
  * 请求计数制(unit=requests), 主页窗口行同形态。mockData.ts 的 kimi-code 当前只有
  * rolling_5h + weekly 两窗(无 monthly), 本函数是方案页专用三窗样本, 作用域限定
  * 方案页 — 不动 mockData.ts 的场景面板样本(改 mockData 会动主页 ScenarioBar)。
  *
- * 异常卡数据(auth_expired + error)与方案页 3 方案共用同一套 AbnormalBody(不计入
+ * 异常卡数据(auth_expired + error)与方案页 4 方案共用同一套 AbnormalBody(不计入
  * 独立布局): aliyun auth_expired 带 setup_hint, deepseek error 警示。
  * 结构与主页 ProviderCard AbnormalBody 同构。
  */

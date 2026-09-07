@@ -110,12 +110,12 @@ test("方案页: 3 排版 + 异常段, 同一套三窗真实数据, QuotaMeter(m
 
   // (P3 双列 grid 在 360px 屏实测文字重叠 + 列被裁切, 本轮不交付, 故 e2e 不验证 P3)
 
-  // 总契约: 9 条 progressbar/进度条 (3 ok 卡 × 3 窗 × 1 micro QuotaMeter, 修订 #1116 减半)
-  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(9);
-  await pwExpect(gallery.locator(".progress")).toHaveCount(9);
-  // 健康分布: rolling_5h 80% warn × 3 卡 = 3 warn; weekly + monthly ok × 3 卡 × 2 = 6 ok
-  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(6);
-  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(3);
+  // 总契约: 12 条 progressbar/进度条 (4 ok 卡 × 3 窗 × 1 micro QuotaMeter, t_5b092750 9/7 加的 P5 同步)
+  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(12);
+  await pwExpect(gallery.locator(".progress")).toHaveCount(12);
+  // 健康分布: rolling_5h 80% warn × 4 卡 = 4 warn; weekly + monthly ok × 4 卡 × 2 = 8 ok
+  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(8);
+  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(4);
   await pwExpect(gallery.locator(".progress-fill[data-health='bad']")).toHaveCount(0);
 
   // 旧契约清空(无 5 排版段, 无旧 4 方案卡片段)

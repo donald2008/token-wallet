@@ -231,6 +231,74 @@ describe("setup_hint 复制钮(契约4)", () => {
   });
 });
 
+// ---- t_27eeadad: 主页 P1 形态接入(9/7 用户拍板) ----
+describe("主页 P1 形态头部(9/7 用户拍板)", () => {
+  it("head 行 = handle + name + StatusDot + 状态徽章 四件套", () => {
+    const card = renderCard(snap("ok", [windowMetric(100, 1200)]));
+    const head = card.querySelector(".card-head")!;
+    expect(head).toBeTruthy();
+    // 拖把手(沿用 .brand-block,选择器族零改)
+    expect(head.querySelectorAll(".brand-block").length).toBe(1);
+    // 卡名
+    expect(head.querySelector(".card-name")!.textContent).toBe("Kimi-Code #1");
+    // StatusDot: P1 形态新增(原主页只有状态徽章文字,现在加圆点)
+    expect(head.querySelectorAll(".status-dot").length).toBe(1);
+    const dot = head.querySelector(".status-dot")!;
+    expect(dot.getAttribute("data-health")).toBe("ok");
+    // 状态徽章文字(t_553dcb5a: statusBadge = 文案表达原因)
+    expect(head.querySelector(".card-status-text")!.textContent).toBe("健康");
+  });
+
+  it("异常卡(auth_expired)head 仍有 StatusDot + 黄灯状态徽章", () => {
+    const card = renderCard({ ...snap("auth_expired"), setup_hint: "去重授权" });
+    const head = card.querySelector(".card-head")!;
+    const dot = head.querySelector(".status-dot")!;
+    expect(dot.getAttribute("data-health")).toBe("warn"); // auth_expired 裁决为 warn(§2.1)
+    expect(head.querySelector(".card-status-text")!.textContent).toBe("待授权");
+  });
+
+  it("BarsTemplate 渲染 QuotaMeter(layout=micro) 三窗常驻直显, 不再挂 BarRowTooltip", () => {
+    const card = renderCard(snap("ok", [
+      windowMetric(100, 1200),
+      { ...windowMetric(1200, 6000), key: "weekly", reset_at: NOW + 5 * 86400 },
+      { ...windowMetric(1800, 6000), key: "monthly", reset_at: NOW + 21 * 86400 },
+    ]));
+    // 沿用 .bar-row 壳(主页 e2e 契约 + drag-sort 复用)
+    const rows = card.querySelectorAll(".bar-row");
+    expect(rows.length).toBe(3);
+    // DOM 契约: .progress / .progress-fill[data-health] / role=progressbar 仍由 QuotaMeter 保证
+    // (QuotaMeter 内部: .quota-meter > .progress > .progress-fill,progress 4 层选)
+    expect(card.querySelectorAll(".bar-row > .quota-meter > .progress").length).toBe(3);
+    expect(card.querySelectorAll('.bar-row > .quota-meter > .progress[role="progressbar"]').length).toBe(3);
+    expect(card.querySelectorAll(".bar-row > .quota-meter > .progress > .progress-fill[data-health]").length).toBe(3);
+    // micro 排版: QuotaMeter 挂 quota-meter--layout-micro modifier
+    const meters = card.querySelectorAll(".bar-row > .quota-meter");
+    expect(meters.length).toBe(3);
+    meters.forEach((m) => {
+      expect((m as HTMLElement).getAttribute("data-layout")).toBe("micro");
+      expect(m.classList.contains("quota-meter--layout-micro")).toBe(true);
+    });
+    // 硬契约: 主页窗口行不再挂 BarRowTooltip
+    expect(card.querySelectorAll(".bar-tooltip").length).toBe(0);
+    expect(card.querySelectorAll('[data-testid="bar-tooltip"]').length).toBe(0);
+    // data-tightest 仍由最紧窗标志(主页 e2e 契约; 此处 3 窗全 ok 不标红, 标红另在 titlebar-bars.spec.ts golden 验)
+    expect(card.querySelectorAll(".bar-row[data-tightest]").length).toBe(0);
+  });
+
+  it("三窗含风险窗时, data-tightest 标志位 = 1(主页 opencode golden 同规, t_05271be0)", () => {
+    const card = renderCard(snap("ok", [
+      windowMetric(100, 1200), // rolling_5h 8% ok
+      { ...windowMetric(6000, 6000), key: "weekly", reset_at: NOW + 5 * 86400 }, // weekly 100% bad(耗尽)
+      { ...windowMetric(1800, 6000), key: "monthly", reset_at: NOW + 21 * 86400 }, // monthly 30% ok
+    ]));
+    expect(card.querySelectorAll(".bar-row[data-tightest]").length).toBe(1);
+    // tightest = weekly(最高 used/limit)
+    const tight = card.querySelector(".bar-row[data-tightest]")!;
+    expect(tight.getAttribute("data-metric")).toBe("weekly");
+    expect(tight.querySelector(".progress-fill")!.getAttribute("data-health")).toBe("bad");
+  });
+});
+
 // ---- CSS 契约: hover 淡入 + 气泡浮层(不挤压 360px 卡头) ----
 describe("卡内删除 CSS 契约(D-038)", () => {
   const css = readFileSync(resolve(process.cwd(), "src/app.css"), "utf8");

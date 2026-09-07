@@ -130,17 +130,19 @@ describe("BarsTemplate: 窗口行 = QuotaMeter 四元素实例(t_23800bd4)", () 
     container.remove();
   });
 
-  it("窗口行由 QuotaMeter layout=row 渲染, 四元素齐全 + .progress 契约保留", () => {
+  it("窗口行由 QuotaMeter layout=micro 渲染(t_27eeadad P1 化), 四元素齐全 + .progress 契约保留", () => {
     act(() => root.render(<BarsTemplate p={snap([wm("rolling_5h", 120, 1200)])} />));
     const meter = container.querySelector(".bar-row > [data-testid='quota-meter']")!;
     expect(meter).toBeTruthy();
-    expect(meter.getAttribute("data-layout")).toBe("row");
+    // t_27eeadad: 主页 P1 化后 QuotaMeter 排版变体从 row → micro(micro 与方案页 P1 同构)
+    expect(meter.getAttribute("data-layout")).toBe("micro");
+    expect(meter.classList.contains("quota-meter--layout-micro")).toBe(true);
     expect(meter.querySelector(".quota-title")!.textContent).toBe("5 小时窗");
     expect(meter.querySelector(".quota-reset")!.textContent!.length).toBeGreaterThan(0);
     expect(meter.querySelector("[role='progressbar']")).toBeTruthy();
     expect(meter.querySelector(".progress-fill")!.getAttribute("data-health")).toBe("ok");
-    // requests 单位语义: 计数 + 本地化单位标签, 不是百分比
-    expect(meter.querySelector(".quota-usage")!.textContent).toBe("120 / 1200 次 (10%)");
+    // t_27eeadad: 不再挂 BarRowTooltip(主页窗口行无 .bar-tooltip 节点)
+    expect(container.querySelectorAll(".bar-tooltip").length).toBe(0);
   });
 
   it("percent 单位窗口 → 用量行百分比格式", () => {

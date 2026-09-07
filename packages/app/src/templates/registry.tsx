@@ -3,9 +3,11 @@ import type { Metric, PlanType, ProviderSnapshot } from "../types";
 import { metricHealth } from "../health";
 import { t, currentLocale } from "../i18n";
 import { QuotaMeter } from "../components/QuotaMeter";
-// resetText 仍由 ProgressBar 导出(t_a398348b 兄弟卡活跃改动该文件, 不搬家避免互踩)
+// resetText 仍由 ProgressBar 导出(t_a398348b 兄弟卡活跃改动该文件, 不搬家避免互踩;
+// t_27eeadad 主页 P1 化: BarRowTooltip 不再挂载, ProgressBar.tsx 文件保留作为 BarRowTooltip
+// 组件依赖源 + 旧回归护栏产物, 主页不再 import 它的 BarRowTooltip)
 import { resetText } from "../components/ProgressBar";
-import { BarRowTooltip } from "../components/BarRowTooltip";
+// import { BarRowTooltip } from "../components/BarRowTooltip";
 
 /**
  * 模板注册表(D-004): Template(信息结构与视觉形态)与 Theme(配色)分离。
@@ -107,26 +109,38 @@ function windowTitle(key: string): string {
 
 export function BarsTemplate({ p }: { p: ProviderSnapshot }) {
   const metrics = sortByWindowSpan(p.metrics);
-  const tightest = tightestMetric(p.metrics);
+  const tightest = tightestMetric(metrics);
   return (
     <div className="bars-template" data-testid="bars-template">
+      {/* t_27eeadad: 主页 P1 形态接入(9/7 用户拍板, t_a398348b 悬浮 tooltip 使命完成)
+       *   - 三窗 QuotaMeter(layout="micro") 紧凑竖排常驻直显,与方案页 P1 同构
+       *     (复用 QuotaMeter 已有的 micro 排版 modifier,不动 QuotaMeter 本体)
+       *   - 不再挂 <BarRowTooltip>: micro 常驻 = 信息主体,悬浮复读同一信息是冗余
+       *   - 沿用 .bar-row 瘦壳作为语义锚点(data-tightest 仍由最紧窗标志,主页 e2e 契约)
+       *   - DOM 契约 .progress/.progress-fill[data-health]/role=progressbar 由 QuotaMeter 保证 */}
       {metrics.map((m) => {
-        // 最紧窗口(used/limit 最高)标红 —— 风险带(warn/bad)才标, 健康窗口不误标红(颜色即状态)
-        const tight = m === tightest && metricHealth(m) !== "ok";
+        const h = metricHealth(m);
+        const tight = m === tightest && h !== "ok";
+        const state = h === "unknown" ? "ok" : (h as "ok" | "warn" | "bad");
+        const reset = resetText(m.reset_at);
         return (
-          <div className="bar-row" data-tightest={tight || undefined} key={m.key}>
+          <div
+            className="bar-row"
+            data-testid="bar-row"
+            data-metric={m.key}
+            data-tightest={tight || undefined}
+            key={m.key}
+          >
             <QuotaMeter
-              layout="row"
+              layout="micro"
               pct={m.limit !== undefined && m.limit > 0 ? m.used / m.limit : 0}
-              state={metricHealth(m) === "unknown" ? "ok" : (metricHealth(m) as "ok" | "warn" | "bad")}
+              state={state}
               title={windowTitle(m.key)}
-              resetText={resetText(m.reset_at)}
+              resetText={reset || undefined}
               used={m.used}
               limit={m.limit}
               unit={m.unit}
             />
-            {/* t_a398348b 交接契约: 悬停 tooltip 挂 .bar-row 壳内末位(组件/CSS/测试零改) */}
-            <BarRowTooltip metric={m} />
           </div>
         );
       })}
