@@ -66,7 +66,8 @@ test("主页 P1 化: provider-card 内 .bar-tooltip == 0(无悬停复读, t_27ee
   const monthlyMeter = monthlyRow.locator(".quota-meter");
   await pwExpect(monthlyMeter).toHaveAttribute("data-layout", "micro");
   await pwExpect(monthlyMeter.locator(".quota-title")).toHaveText("月窗");
-  await pwExpect(monthlyMeter.locator(".quota-usage")).toHaveText("48% / 100%");
+  // micro 排版短格式(t_f7d1beeb 9/7): micro quota-usage 只显百分比, 不走 usageText 完整文案
+  await pwExpect(monthlyMeter.locator(".quota-usage")).toHaveText("48%");
   await pwExpect(monthlyMeter.locator(".progress-fill")).toHaveAttribute("data-health", "ok");
 });
 

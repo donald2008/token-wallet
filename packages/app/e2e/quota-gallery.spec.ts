@@ -83,9 +83,10 @@ test("方案页: 3 排版 + 异常段, 同一套三窗真实数据, QuotaMeter(m
   for (const key of ["p1", "p2"] as const) {
     const card = page.getByTestId(`qvar-canvas-cards3-${key}`).locator("[data-testid='qcard3']");
     const microMeters = card.locator("[data-testid='quota-meter'][data-layout='micro']");
-    await pwExpect(microMeters.locator(".quota-usage").nth(0)).toContainText("(80%)"); // 5h 80%
-    await pwExpect(microMeters.locator(".quota-usage").nth(1)).toContainText("(20%)"); // weekly 20%
-    await pwExpect(microMeters.locator(".quota-usage").nth(2)).toContainText("(30%)"); // monthly 30%
+    // micro 短格式(t_f7d1beeb 9/7): quota-usage 只显百分比, 无括号 / 无单位标签
+    await pwExpect(microMeters.locator(".quota-usage").nth(0)).toContainText("80%"); // 5h 80%
+    await pwExpect(microMeters.locator(".quota-usage").nth(1)).toContainText("20%"); // weekly 20%
+    await pwExpect(microMeters.locator(".quota-usage").nth(2)).toContainText("30%"); // monthly 30%
   }
 
   // P4 头部数字(最紧窗数字内联):
