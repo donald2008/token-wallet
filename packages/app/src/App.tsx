@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Bootstrap } from "./types";
 import { globalHealth, sortProviders, tooltipSummary, DEFAULT_SORT_CONFIG, type SortConfig } from "./health";
 import {
@@ -410,51 +411,59 @@ function AppShell() {
       </div>
       {/* t_d086543b: 底边栏(侧栏取消后全局动作落位) —— 添加 / 设置 左右分布 */}
       <BottomBar onAdd={openAddModal} onOpenSettings={openSettings} />
-      {settingsOpen && (
-        // 设置模态弹窗(P0-6): 半透明遮罩叠在面板上方, 点遮罩关闭; 弹层自身圆角+阴影(D-031 无边框窗口)
-        <div className="settings-overlay" data-testid="settings-overlay" onClick={closeSettings}>
-          <div
-            className="settings-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={t("common.settings")}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <SettingsView
-              variant="modal"
-              themeMode={themeMode}
-              onThemeMode={setThemeMode}
-              glass={glass}
-              onGlass={setGlass}
-              glassAlpha={glassAlpha}
-              onGlassAlpha={setGlassAlpha}
-              onBack={closeSettings}
-              onOpenQuota={() => {
-                closeSettings();
-                setView("quota");
-              }}
-            />
-          </div>
-        </div>
-      )}
-      {addOpen && (
-        // D-038: 添加向导弹窗(与设置弹窗同形态: 遮罩 + 圆角弹层, × / 遮罩 / ESC 关闭)
-        <div className="settings-overlay" data-testid="add-overlay" onClick={closeAddModal}>
-          <div
-            className="settings-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={t("common.add")}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <AddProviderWizard
-              variant="modal"
-              onBack={closeAddModal}
-              onSavedProvider={onProviderSaved}
-            />
-          </div>
-        </div>
-      )}
+      {settingsOpen &&
+        createPortal(
+          // 设置模态弹窗(P0-6): 半透明遮罩叠在面板上方, 点遮罩关闭; 弹层自身圆角+阴影(D-031 无边框窗口)
+          // t_c20d4d11 round-3 B3-2: portal 到 body 顶层 —— .panel 挂 backdrop-filter 成 backdrop root,
+          // 弹窗留在 panel 内其 backdrop-filter 采样被截断(Chromium 嵌套限制, 实测 modal blur 无效);
+          // portal 脱离后 modal backdrop-filter 正确模糊透出 dashboard 内容(色块化, 前景文字可读)。
+          <div className="settings-overlay" data-testid="settings-overlay" onClick={closeSettings}>
+            <div
+              className="settings-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("common.settings")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SettingsView
+                variant="modal"
+                themeMode={themeMode}
+                onThemeMode={setThemeMode}
+                glass={glass}
+                onGlass={setGlass}
+                glassAlpha={glassAlpha}
+                onGlassAlpha={setGlassAlpha}
+                onBack={closeSettings}
+                onOpenQuota={() => {
+                  closeSettings();
+                  setView("quota");
+                }}
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
+      {addOpen &&
+        createPortal(
+          // D-038: 添加向导弹窗(与设置弹窗同形态: 遮罩 + 圆角弹层, × / 遮罩 / ESC 关闭)
+          // t_c20d4d11 round-3 B3-2: 与 settings 同因 portal 到 body(见上注释)
+          <div className="settings-overlay" data-testid="add-overlay" onClick={closeAddModal}>
+            <div
+              className="settings-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("common.add")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <AddProviderWizard
+                variant="modal"
+                onBack={closeAddModal}
+                onSavedProvider={onProviderSaved}
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -1047,15 +1047,30 @@ body {
 }
 
 /* ---- 设置弹窗(P0-6): 半透明遮罩叠在面板上方, 弹层自画圆角+阴影(无边框透明窗口) ---- */
+/* t_c20d4d11 round-3 B3-2: position: fixed + inset: 8px — 弹窗经 React portal 渲染到 body
+   顶层(见 App.tsx), 不再嵌套在 .panel 内。fixed 相对视口对齐原 .panel 几何(panel margin 8px);
+   若仍 absolute 相对 panel 会因 DOM 父级变为 body 而错位。 */
 .settings-overlay {
-  position: absolute;
-  inset: 0;
+  position: fixed;
+  inset: 8px;
   z-index: 10;
   border-radius: var(--radius-16); /* 与 .panel 圆角卡片协调(被 overflow:hidden 裁齐) */
   background: rgba(0, 0, 0, 0.45);
   display: flex;
   /* P1: 显式排除 drag 区干扰 — 弹窗控件(取消/×)命中不被 -webkit-app-region: drag 祖先吃掉 */
   -webkit-app-region: no-drag;
+}
+
+/* t_c20d4d11 9/7 round-3 B3-2: 玻璃态(theme=*-glass)下 modal 自身补 backdrop-filter 兜底。
+   15% 档 modal 背景 15% 半透明, 无 blur 时透出 dashboard 锐利内容叠影不可读。
+   ⚠️ 弹窗已 portal 到 body 顶层(脱离 .panel backdrop root): modal backdrop-filter 现在能
+   正确采样整页背景(卡片+文字+黑罩)并整块模糊成色块, 前景文字锐利可读。
+   与 alpha 滑槽正交(兜底常开, 不受 alpha 影响)。
+   dark/light 玻璃主题共用: backdrop-filter 作用于 modal 背后所有内容, 与主题色无关 */
+:root[data-theme="dark-glass"] .settings-modal,
+:root[data-theme="light-glass"] .settings-modal {
+  -webkit-backdrop-filter: var(--card-blur);
+  backdrop-filter: var(--card-blur);
 }
 
 .settings-modal {
