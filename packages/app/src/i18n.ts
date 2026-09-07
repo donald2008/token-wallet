@@ -254,6 +254,9 @@ const zh = {
     closeAria: "关闭设置",
     theme: "主题",
     glass: "玻璃特效(半透明面板 · 背景模糊)",
+    // t_c20d4d11 9/7 玻璃透明度滑槽: 范围 15%-100%, 默认 100% 不透明
+    glassAlpha: "玻璃透明度",
+    glassAlphaHint: "默认不透明, 拖低滑槽变半透明(背景模糊常开 32px)。停手自动保存。",
     themeHint:
       "默认追随系统外观, 可在此覆盖。标题栏 ☀ 钮可快切浅色/深色/跟随系统, 与此处三档同走一套主题。",
     sort: "排序",
@@ -543,6 +546,9 @@ const en: Dict = {
     closeAria: "Close settings",
     theme: "Theme",
     glass: "Glass effect (translucent panel · blurred background)",
+    // t_c20d4d11 9/7 glass alpha slider: 15%-100%, default 100% opaque
+    glassAlpha: "Glass opacity",
+    glassAlphaHint: "Opaque by default; drag down for translucency (background blur stays at 32px). Saves on release.",
     themeHint:
       "Defaults to system (prefers-color-scheme); override here. The ☀ button in the title bar cycles the same three modes sharing one theme state.",
     sort: "Sort order",

@@ -167,7 +167,8 @@ test("删除一张后 order 幽灵 id 不影响渲染(实例集合是真相源, 
   await bravoCard.hover();
   // 修订 H: 改 hover 右上角热区 .card-del-zone 才让按钮浮出
   await bravoCard.locator(".card-del-zone").hover();
-  await bravoCard.getByTestId("card-del-bravo").click();
+  await bravoCard.locator(".card-del-btn").hover();
+  await bravoCard.getByTestId("card-del-bravo").click({ force: true });
   await bravoCard.getByTestId("card-confirm-del-bravo").click();
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(2);
 

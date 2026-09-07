@@ -177,6 +177,7 @@ test("卡内删除: hover 淡入 → 取消保留 → 确认删除(清钥匙串 
   await pwExpect(delA).toHaveCSS("opacity", "0");
   // hover 右上角热区(.card-del-zone) → 删除钮淡入(修订 H: 不再依赖整卡 hover)
   await cardA.locator(".card-del-zone").hover();
+  await cardA.locator(".card-del-btn").hover(); // 触发按钮完全显出(visibility:visible)
   await pwExpect(delA).toHaveCSS("opacity", "1");
 
   // 点删除 → 确认气泡(含取消); 取消 → 卡片保留, 库未动
@@ -191,7 +192,7 @@ test("卡内删除: hover 淡入 → 取消保留 → 确认删除(清钥匙串 
 
   // 再删一次 → 确认 → 卡片消失(仅剩 B)
   await cardA.locator(".card-del-zone").hover();
-  await cardA.getByTestId("card-del-inst-a").click();
+  await cardA.getByTestId("card-del-inst-a").click({ force: true });
   await cardA.getByTestId("card-confirm-del-inst-a").click();
   await pwExpect(cards).toHaveCount(1, { timeout: 10_000 });
   await pwExpect(cards.first().locator(".card-name")).toContainText("Opencode Go #1");

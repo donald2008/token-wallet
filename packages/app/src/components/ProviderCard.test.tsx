@@ -310,19 +310,23 @@ describe("卡内删除 CSS 契约(D-038)", () => {
     return m![1];
   }
 
-  // t_433892c6 9/7 修订 H: 删除钮改右上角 hover 热区触发 — 默认 pointer-events:none 不接管卡内 hover
-  it(".card-del-btn 默认 opacity 0 + 过渡 + pointer-events:none; 热区 hover / focus 时淡入且接收点击", () => {
+  // t_433892c6 9/7 修订 H: 删除钮改右上角 hover 热区触发 — 默认 visibility:hidden 脱离 hit-test
+  it(".card-del-btn 默认 visibility:hidden + opacity:0; 热区 hover / focus 时显出且接收点击", () => {
     const block = ruleBlock(".card-del-btn");
     expect(block).toContain("opacity: 0");
-    expect(block).toContain("transition: opacity");
-    // 修订 H: 默认 pointer-events:none(避免卡内 hover 误触显出), 仅「热区 hover / focus-visible」时 auto
-    expect(block).toContain("pointer-events: none");
-    // 触发选择器不再是「整卡 hover」, 改用「右上角热区 hover / focus-within / focus-visible」
+    expect(block).toContain("visibility: hidden");
+    expect(block).toContain("z-index: 2");
+    // 触发选择器: 按钮自身 hover/focus-within/focus-visible 显出; 热区 hover 用兄弟 ~ 选择器触发
     expect(css).toContain(".card-del-zone:hover ~ .card-del-btn");
     expect(css).toContain(".card:focus-within .card-del-btn");
     expect(css).toContain(".card-del-btn:focus-visible");
+    // 按钮自身 hover 也触发显示(契约 self-hover)
+    expect(css).toMatch(/\.card-del-btn:hover[\s\S]*?opacity:\s*1/);
     // 热区选择器存在(透明 40×40 锚定卡右上角)
     expect(ruleBlock(".card-del-zone")).toContain("width: 40px");
+    // 让位契约: 按钮 hover → 热区 pointer-events 关掉(:has() 支持)
+    expect(css).toContain(".card:has(.card-del-btn:hover) .card-del-zone");
+    expect(css).toContain(".card:has(.card-del-btn:focus-visible) .card-del-zone");
   });
 
   it(".card-confirm 绝对定位浮在卡右上 + 红调边框(卡头布局不被挤压)", () => {

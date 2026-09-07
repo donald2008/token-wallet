@@ -65,6 +65,8 @@ async function renderSettings(variant: "page" | "modal" = "modal"): Promise<HTML
         onThemeMode={() => {}}
         glass={false}
         onGlass={() => {}}
+        glassAlpha={1.0}
+        onGlassAlpha={() => {}}
 
         onBack={() => {}}
       />,
@@ -147,6 +149,8 @@ describe("排序区只留手动提示(t_d086543b)", () => {
           onThemeMode={() => {}}
           glass={false}
           onGlass={() => {}}
+        glassAlpha={1.0}
+        onGlassAlpha={() => {}}
           onBack={() => {}}
         />,
       );
@@ -189,6 +193,8 @@ describe("自动更新四态(D-046)", () => {
           onThemeMode={() => {}}
         glass={false}
         onGlass={() => {}}
+        glassAlpha={1.0}
+        onGlassAlpha={() => {}}
 
           onBack={() => {}}
         />,
@@ -290,6 +296,8 @@ describe("语言分段控件(Phase B i18n)", () => {
             onThemeMode={() => {}}
         glass={false}
         onGlass={() => {}}
+        glassAlpha={1.0}
+        onGlassAlpha={() => {}}
 
             onBack={() => {}}
           />

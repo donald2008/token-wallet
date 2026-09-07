@@ -391,18 +391,43 @@ body {
  * 键盘可达性保留: .card:focus-within / .card-del-btn:focus-visible → opacity:1(沿用旧契约)。 */
 .card-del-btn {
   position: absolute;
-  top: var(--space-4);
-  right: var(--space-4);
-  padding: var(--space-4);
+  /* 修订 H fix final: 把按钮 padding 加大到 16px, 配合 ::before 伪元素做"热区扩展",
+   * hover 按钮或热区都显示按钮; 默认 visibility:hidden 脱离 hit-test tree, 浮出后
+   * z-index:2 + visibility:visible 不被任何元素拦截。e2e `card.del-btn.hover()`
+   * 命中按钮本身(默认 hit-test), 然后 click 立即命中。 */
+  top: 0;
+  right: 0;
+  padding: var(--space-16);
   border-color: transparent;
+  background: transparent;
   opacity: 0;
-  transition: opacity 0.15s ease;
-  /* 修订 H: 默认 opacity:0 时不要让按钮接管 hover(否则热区以外的卡区 hover 也触发出)——
-   * 默认 pointer-events:none 完全不可点; 仅「热区 hover / focus-visible」时 auto 接收。 */
-  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0s linear 0.15s;
+  z-index: 2;
+  cursor: pointer;
 }
-/* 右上角透明 hover 热区(40×40 含按钮 24×24 + 上下左右各 8px 缓冲); hover 该区才让按钮浮出。
- * 父 .card 不需要额外位置, 走 .card position:relative。background 透明不可见, 仅作 hover 锚。 */
+/* 按钮内的 svg 容器(原 padding=4 的 24×24 盒), 用 negative inset 居中到 40×40 热区中心 */
+.card-del-btn > svg,
+.card-del-btn > .card-del-icon {
+  pointer-events: none; /* 命中按钮本体, 不命中 svg */
+}
+.card-del-btn:hover,
+.card:focus-within .card-del-btn,
+.card-del-btn:focus-visible {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.15s ease, visibility 0s linear 0s;
+}
+.card-del-btn:hover {
+  border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.15s ease, visibility 0s linear 0s;
+}
+/* 透明 hover 热区: 40×40 锚右上角, hover 该区显出按钮。
+ * 父 .card 已有 position:relative。background 透明不可见, 仅作 hover 锚。
+ * pointer-events: auto 接 hover, 不挡按钮浮出后的 click (z-index:1 < 2)。 */
 .card-del-zone {
   position: absolute;
   top: 0;
@@ -411,17 +436,18 @@ body {
   height: 40px;
   pointer-events: auto;
   background: transparent;
-  z-index: 1; /* 浮于卡内容之上, .card-del-btn 自带 transition 仍可接收点击 */
+  z-index: 3; /* 高于按钮 z-index:2, 浮出后仍接 hover, 兼容 :has() 让位降级 */
 }
-.card-del-zone:hover ~ .card-del-btn,
-.card:focus-within .card-del-btn,
-.card-del-btn:focus-visible {
+.card-del-zone:hover ~ .card-del-btn {
   opacity: 1;
-  pointer-events: auto;
+  visibility: visible;
+  transition: opacity 0.15s ease, visibility 0s linear 0s;
 }
-.card-del-btn:hover {
-  border-color: var(--bad);
-  background: color-mix(in srgb, var(--bad) 12%, transparent);
+/* 让位契约: 按钮 hover 时, 热区 pointer-events 短暂让位, 避免 click 时 elementFromPoint 命中热区
+ * (Chrome 105+/Safari 15.4+/FF 121+ :has() 支持)。 */
+.card:has(.card-del-btn:hover) .card-del-zone,
+.card:has(.card-del-btn:focus-visible) .card-del-zone {
+  pointer-events: none;
 }
 
 /* 删除确认气泡: 浮在卡右上(绝对定位不挤压 360px 卡头), 红调边框 */
@@ -1364,6 +1390,42 @@ body {
   align-items: center;
   gap: var(--space-4);
   font-size: 12px;
+}
+/* t_c20d4d11 9/7: 玻璃透明度滑槽 — 容器 + 实时数值 + 原生 range 主题化 */
+.slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding: var(--space-8);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+  border: 1px solid var(--border);
+}
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.slider-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.slider {
+  width: 100%;
+  height: var(--space-16);
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent); /* 原生 range 主题化(Chrome/Safari/Firefox 全支持) */
+}
+.slider:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-4);
 }
 /* t_52e3a7fb: 玻璃/自启复选框原原生描边过弱看不清勾选态 —— 加大命中区 + accent 蓝勾选
  * (accent-color 让原生 checkbox 勾选态用主题强调色, 深浅主题均清晰)。 */

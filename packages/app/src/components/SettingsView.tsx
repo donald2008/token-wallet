@@ -16,6 +16,7 @@ import {
 import { t, tKey, type Lang } from "../i18n";
 import { useLang } from "../i18nReact";
 import { BrandLogo } from "./brand-logos";
+import { GLASS_ALPHA_MIN, GLASS_ALPHA_MAX, persistGlassAlpha } from "../theme";
 
 const THEME_OPTIONS: { id: ThemeMode; labelKey: string }[] = [
   { id: "system", labelKey: "theme.system" },
@@ -35,6 +36,10 @@ interface Props {
   /** 玻璃特效开关(2026-09-03): 半透明面板 + 背景模糊, 正交于主题三态 */
   glass: boolean;
   onGlass: (g: boolean) => void;
+  /** t_c20d4d11 9/7: 玻璃透明度滑槽(默认 1.0 不透明)。关闭玻璃时 alpha 保留, 切回恢复 */
+  glassAlpha: number;
+  /** 拖动即变(实时写 CSS, 不持久化); 停手落 localStorage 由 SettingsView onPointerUp 触发 */
+  onGlassAlpha: (a: number) => void;
   onBack: () => void;
   /** theme-glass 实验入口: 打开进度条形态方案页(可选, 缺省不渲染入口) */
   onOpenQuota?: () => void;
@@ -58,6 +63,8 @@ export function SettingsView({
   onThemeMode,
   glass,
   onGlass,
+  glassAlpha,
+  onGlassAlpha,
   onBack,
   variant = "page",
   onOpenQuota,
@@ -140,6 +147,39 @@ export function SettingsView({
             />
             <span>{t("set.glass")}</span>
           </label>
+          {/* t_c20d4d11 9/7: 玻璃透明度滑槽 — 范围 15%~100%, 默认 100% 不透明。
+              拖动即变(onChange 实时写 CSS 变量, theme.css 用 color-mix 算实际背景色);
+              停手即存(onPointerUp + onBlur 落 localStorage)。玻璃开关 off 时 alpha 控件仍显示
+              (保留设置), 但视觉上不影响非玻璃主题面板 */}
+          <div className="slider-row" data-testid="glass-alpha-row">
+            <label htmlFor="glass-alpha-input" className="slider-label">
+              {t("set.glassAlpha")}
+              <span className="slider-value" data-testid="glass-alpha-value">
+                {Math.round(glassAlpha * 100)}%
+              </span>
+            </label>
+            <input
+              id="glass-alpha-input"
+              type="range"
+              className="slider"
+              data-testid="glass-alpha-input"
+              min={GLASS_ALPHA_MIN}
+              max={GLASS_ALPHA_MAX}
+              step={0.05}
+              value={glassAlpha}
+              aria-label={t("set.glassAlpha")}
+              onChange={(e) => onGlassAlpha(Number(e.target.value))}
+              onPointerUp={(e) => persistGlassAlpha(Number((e.target as HTMLInputElement).value))}
+              onBlur={(e) => persistGlassAlpha(Number(e.target.value))}
+              onKeyUp={(e) => {
+                // 键盘可达性: 方向键 / Tab 失焦时落盘
+                if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") {
+                  persistGlassAlpha(Number((e.target as HTMLInputElement).value));
+                }
+              }}
+            />
+            <p className="hint">{t("set.glassAlphaHint")}</p>
+          </div>
           <p className="hint">{t("set.themeHint")}</p>
         </section>
 

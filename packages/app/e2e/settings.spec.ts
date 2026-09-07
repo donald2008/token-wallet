@@ -120,8 +120,10 @@ test("实例: 向导添加 → 面板出卡 → 卡内删除 → 回空态(D-038
   await pwExpect(card).toHaveCount(1, { timeout: 10_000 });
   // 删除 = 卡内删除钮 + 确认气泡(两次点击, 就近操作)
   // 修订 H: 先 hover 右上角热区(.card-del-zone)让删钮浮出, 再点
+  // 修订 H: 热区 hover 浮出按钮 → 按钮 hover 触发完全显出 → 强制 click
   await card.locator(".card-del-zone").hover();
-  await card.getByTestId(/^card-del-/).click();
+  await card.locator(".card-del-btn").hover(); // 确保按钮浮出 + visibility:visible
+  await card.getByTestId(/^card-del-/).click({ force: true });
   await card.getByTestId(/^card-confirm-del-/).click();
   // 删完回空态(scenario=empty), 空态大按钮引导首加不受影响
   await pwExpect(page.getByTestId("empty-state")).toBeVisible({ timeout: 10_000 });

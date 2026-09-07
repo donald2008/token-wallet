@@ -40,12 +40,20 @@
  * 玻璃特效(2026-09-03, 借鉴 token-monitor): 面板底色改半透明 + 桌面背景模糊。
  * 窗口本来就 transparent(frame:false), backdrop-filter 直接透桌; 语义色不变。
  * dark-glass / light-glass 复用上方暗/亮语义色, 仅覆盖底/边框/投影。
+ *
+ * t_c20d4d11 9/7 用户拍板: 玻璃透明度滑槽(默认 1.0 不透明)。
+ * 落点: --glass-alpha 由 useTheme().glassAlpha 写到 <html style>。
+ * 实际背景透明度 = 写死基线(0.72/0.66) × --glass-alpha, color-mix 拼接。
+ * 默认 1.0 → 原始 0.72/0.66(暗/亮玻璃基线, 不透明感强); 0.15 → 11%/10% 极透。
+ * color-mix 浏览器支持: Chrome 111+ / Safari 16.2+ / FF 113+, Tauri WebView2 = Edge Chromium 全支持。
+ * 注意: --glass-alpha 必须与 --glass-blur 一样从 tokens.css 取定义占位, 否则 color-mix 会回退 fallback。
  */
 :root[data-theme="dark-glass"] {
-  --bg: rgba(20, 23, 28, 0.72);
-  --bg-elev: rgba(28, 33, 41, 0.66);
-  --bg-hover: rgba(35, 42, 53, 0.8);
-  --border: rgba(44, 53, 66, 0.55);
+  /* dark-glass 基线 0.72(中等不透明); 受 --glass-alpha(默认 1) 调节 */
+  --bg: color-mix(in srgb, #14171c calc(72% * var(--glass-alpha, 1)), transparent);
+  --bg-elev: color-mix(in srgb, #1c2129 calc(66% * var(--glass-alpha, 1)), transparent);
+  --bg-hover: color-mix(in srgb, #232a35 calc(80% * var(--glass-alpha, 1)), transparent);
+  --border: color-mix(in srgb, #2c3542 calc(55% * var(--glass-alpha, 1)), transparent);
   --card-blur: blur(var(--glass-blur)) saturate(115%);
 }
 
@@ -74,9 +82,10 @@
 }
 
 :root[data-theme="light-glass"] {
-  --bg: rgba(246, 247, 249, 0.66);
-  --bg-elev: rgba(255, 255, 255, 0.6);
-  --bg-hover: rgba(238, 241, 245, 0.75);
-  --border: rgba(221, 227, 234, 0.6);
+  /* light-glass 基线 0.66(白色基底); 受 --glass-alpha(默认 1) 调节 */
+  --bg: color-mix(in srgb, #f6f7f9 calc(66% * var(--glass-alpha, 1)), transparent);
+  --bg-elev: color-mix(in srgb, #ffffff calc(60% * var(--glass-alpha, 1)), transparent);
+  --bg-hover: color-mix(in srgb, #eef1f5 calc(75% * var(--glass-alpha, 1)), transparent);
+  --border: color-mix(in srgb, #dde3ea calc(60% * var(--glass-alpha, 1)), transparent);
   --card-blur: blur(var(--glass-blur)) saturate(115%);
 }
