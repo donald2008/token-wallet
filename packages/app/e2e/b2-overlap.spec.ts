@@ -1,4 +1,5 @@
 import { test, expect } from "./fixtures";
+import path from "node:path";
 
 // B-2 regression: 删钮 hover 浮出后与 status badge 零重叠(老大 #1184 裁决)
 // B-3 fix (老大 #1188): 真三主题循环 — 每主题写 token-wallet.theme.v1 + glass.v1
@@ -92,8 +93,12 @@ test("B-2/B-3: card-del-btn 与 card-status-badge 零几何重叠 — 真三主�
       `overlapArea @${name} btn=${JSON.stringify(btnBox)} badge=${JSON.stringify(badgeBox2)} (x=${overlapX} y=${overlapY})`,
     ).toBe(0);
 
-    // ④ hover 态真 distinct 截图(主题已真实切换) — 绝对路径直落仓根 tracked 目录
-    const ROOT_VERIFICATION = "/root/work/token-wallet/verification/b2-hover";
+    // ④ hover 态真 distinct 截图(主题已真实切换) — 仓内相对路径: e2e/ 上溯三级到仓根
+    // (ESM spec 无 __dirname, 用 import.meta.dirname; 截图落仓根 verification/b2-hover/ tracked 目录)
+    const ROOT_VERIFICATION = path.join(
+      import.meta.dirname,
+      "../../../verification/b2-hover",
+    );
     await page.screenshot({
       path: `${ROOT_VERIFICATION}/${name}-hover.png`,
       fullPage: false,
