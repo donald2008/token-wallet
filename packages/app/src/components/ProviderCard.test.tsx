@@ -318,8 +318,8 @@ describe("卡内删除 CSS 契约(D-038)", () => {
     expect(block).toContain("opacity: 0");
     // 关键: 默认 pointer-events:auto(opacity:0 不影响 hit-test, 按钮始终接收 pointer events)
     expect(block).toContain("pointer-events: auto");
-    // 按钮 position:absolute 锚卡右上角, 与 status badge 同侧右对齐
-    expect(block).toContain("top: var(--space-4)");
+    // 按钮 position:absolute 锚卡右上角, top 下移到 badge 行之下(B-2 零重叠)
+    expect(block).toContain("top: var(--space-28)");
     expect(block).toContain("right: var(--space-4)");
     // 触发选择器: 按钮自身 hover/focus-within/focus-visible 显出
     expect(css).toContain(".card:focus-within .card-del-btn");
@@ -331,8 +331,8 @@ describe("卡内删除 CSS 契约(D-038)", () => {
     expect(css).not.toMatch(/\.card-del-zone[\s\{]/);
     // :has() 让位规则已删除
     expect(css).not.toContain(":has(.card-del-btn");
-    // z-index 博弈已删除(按钮默认无 z-index)
-    expect(block).not.toContain("z-index:");
+    // z-index:1 显式 stacking context(防 animation 窗口行压住 hover, B-2 修复加)
+    expect(block).toContain("z-index: 1");
   });
 
   it(".card-confirm 绝对定位浮在卡右上 + 红调边框(卡头布局不被挤压)", () => {

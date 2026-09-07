@@ -402,12 +402,21 @@ body {
  * 键盘可达性: .card:focus-within / .card-del-btn:focus-visible → opacity:1(沿用旧契约)。 */
 .card-del-btn {
   position: absolute;
-  top: var(--space-4);
+  /* t_433892c6 9/7 修订 H(老大 #1184 B-2 裁决): 按钮下移到 badge 行之下避开几何重叠。
+   * 实测: status badge box y=61.5-78.5 (17px 高, card 内 9.5-26.5), button top 4px
+   * 盒 y=57-88 与之重叠 23×17px (三主题一致) — hover 徽章误触删除钮 + 盖状态文字。
+   * 修复: button top 下移到 var(--space-28) = 28px 相对 card (badge 底 26.5 + 1.5px gap),
+   * 零重叠。hover 链不破 (仍是按钮自为热区), 浮出时落在窗口行区不盖 badge。 */
+  top: var(--space-28);
   right: var(--space-4);
   padding: var(--space-8); /* 28px 热区(padding 8 + icon 13 + padding 8), 触控友好 */
   border-color: transparent;
   background: transparent;
   opacity: 0;
+  /* z-index:1 显式创建 stacking context — 窗口行 quota-meter 有 animation(stacking
+   * context 无 z), 若不加 button 会被压在 quota-meter 之下导致 hover 拦截(B-2 修复
+   * 下移后实测 quota-meter intercepts pointer events)。 */
+  z-index: 1;
   pointer-events: auto; /* 关键: opacity:0 不影响 hit-test, 按钮始终接收 pointer events */
   transition: opacity 0.15s ease;
   cursor: pointer;
