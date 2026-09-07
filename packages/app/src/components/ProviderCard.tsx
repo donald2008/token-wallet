@@ -362,13 +362,12 @@ export function ProviderCard({
         <StatusDot health={health} size={8} />
         <span className={`card-status-text text-${health}`} data-testid="card-status-badge">{statusBadge(p)}</span>
         {onDelete && !confirming && (
-          // t_433892c6 9/7 修订 H: 右上角 40×40 透明 hover 热区, hover 该区才让删除钮浮出;
-          // 默认 pointer-events:none 不挡卡内其他 hover(读数/拖拽), 与旧「整卡 hover 即显」误触断绝。
-          // 父 .card 已有 position:relative(用于 .card-confirm), 兄弟 ~ 选择器匹配 .card-del-btn。
-          // 故意不带 data-testid(避免污染 e2e 的 [data-testid^="card-del-"] 选择器, 该选择器只指按钮本体)。
-          <div className="card-del-zone" aria-hidden="true" />
-        )}
-        {onDelete && !confirming && (
+          // t_433892c6 9/7 修订 H(老大 #1175 回归): 删钮 = 按钮自身 hover 热区,
+          // 删 .card-del-zone 透明 div + :has() 让位规则 + z-index 博弈 三层机制。
+          // 按钮 position:absolute 锚卡右上角, opacity:0 + pointer-events:auto
+          // (opacity 不影响 hit-test, 按钮始终在 hit-test tree), :hover 触发 opacity:1。
+          // 旧三层机制(c1d380f)结构死锁: zone 与 status badge 几何重叠 → zone 不 :hover
+          // → button 永不显; 本方案直接按钮自为热区, 一行 CSS 闭环。
           <button
             type="button"
             className="btn btn-icon btn-danger card-del-btn"

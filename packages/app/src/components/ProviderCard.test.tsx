@@ -310,33 +310,29 @@ describe("卡内删除 CSS 契约(D-038)", () => {
     return m![1];
   }
 
-  // t_433892c6 9/7 修订 H: 删除钮改右上角 hover 热区触发 — 默认 visibility:hidden 脱离 hit-test
-  it(".card-del-btn 默认 visibility:hidden + opacity:0; 热区 hover / focus 时显出且接收点击", () => {
+  // t_433892c6 9/7 修订 H(老大 #1175 回归): 删钮 = 按钮自为热区, 一行 CSS 闭环。
+  // 默认 opacity:0 + pointer-events:auto(opacity 不影响 hit-test, 按钮始终在 hit-test tree),
+  // :hover/.card:focus-within/:focus-visible 触发 opacity:1。无 zone、无 :has()、无 z-index。
+  it(".card-del-btn 默认 opacity:0 + pointer-events:auto; hover / focus 时显出", () => {
     const block = ruleBlock(".card-del-btn");
     expect(block).toContain("opacity: 0");
-    expect(block).toContain("visibility: hidden");
-    // review fix B-1: 按钮 z-index 抬到 4(高于热区 z-index:3), 透明热区不再拦截 button click。
-    // 让位契约(.card:has(.card-del-btn:hover) .card-del-zone pointer-events:none)在 hover
-    // 按钮时按钮还是 visibility:hidden 不在 hit-test tree, :has() 检测不到 hover → 让位失效,
-    // 改为抬升 z-index 是 CSS 单行修复。
-    expect(block).toContain("z-index: 4");
-    // B-1 续: 按钮 z-index 高于热区后, 默认还得 pointer-events:none 才能让 .card-del-zone
-    // 接到 hover 触发按钮浮出, 否则 button 一直在 z=4 占 hit-test → zone hover 永远失败。
-    expect(block).toContain("pointer-events: none");
-    // 触发选择器: 按钮自身 hover/focus-within/focus-visible 显出; 热区 hover 用兄弟 ~ 选择器触发
-    expect(css).toContain(".card-del-zone:hover ~ .card-del-btn");
+    // 关键: 默认 pointer-events:auto(opacity:0 不影响 hit-test, 按钮始终接收 pointer events)
+    expect(block).toContain("pointer-events: auto");
+    // 按钮 position:absolute 锚卡右上角, 与 status badge 同侧右对齐
+    expect(block).toContain("top: var(--space-4)");
+    expect(block).toContain("right: var(--space-4)");
+    // 触发选择器: 按钮自身 hover/focus-within/focus-visible 显出
     expect(css).toContain(".card:focus-within .card-del-btn");
     expect(css).toContain(".card-del-btn:focus-visible");
-    // 触发态切回 pointer-events: auto 接收 click
-    expect(css).toMatch(/\.card-del-btn:hover[\s\S]*?pointer-events:\s*auto/);
-    // 按钮自身 hover 也触发显示(契约 self-hover)
+    // 按钮自身 hover 触发显示(契约 self-hover) + 红色背景
     expect(css).toMatch(/\.card-del-btn:hover[\s\S]*?opacity:\s*1/);
-    // 热区选择器存在(48×48 锚定卡头部下方, 避开 card-head inline flex 重叠)
-    expect(ruleBlock(".card-del-zone")).toContain("width: 48px");
-    // 热区 pointer-events:auto 接 hover
-    expect(ruleBlock(".card-del-zone")).toContain("pointer-events: auto");
-    expect(css).toContain(".card:has(.card-del-btn:hover) .card-del-zone");
-    expect(css).toContain(".card:has(.card-del-btn:focus-visible) .card-del-zone");
+    expect(css).toMatch(/\.card-del-btn:hover[\s\S]*?var\(--bad\)/);
+    // .card-del-zone 透明 div 已删除(c1d380f 三层机制结构死锁, 老大 #1175 裁决回归)
+    expect(css).not.toMatch(/\.card-del-zone[\s\{]/);
+    // :has() 让位规则已删除
+    expect(css).not.toContain(":has(.card-del-btn");
+    // z-index 博弈已删除(按钮默认无 z-index)
+    expect(block).not.toContain("z-index:");
   });
 
   it(".card-confirm 绝对定位浮在卡右上 + 红调边框(卡头布局不被挤压)", () => {

@@ -87,10 +87,10 @@ test("P1 头: handle+name+StatusDot+状态徽章 三件套一行, 删除钮仍�
   await pwExpect(head.locator(".card-name")).toHaveText("opencode Go #1");
   await pwExpect(head.locator(".status-dot")).toHaveCount(1); // P1 新增
   await pwExpect(head.locator(".card-status-text").first()).not.toBeEmpty(); // 状态徽章
-  // 删除钮: 需 hover 卡片才能 visibility:opacity 1(D-038 opacity 0 默认态)
-  // 修订 H: 改 hover 右上角热区 .card-del-zone 才让按钮浮出
-  await card.locator(".card-del-zone").hover();
-  await pwExpect(card.locator('[data-testid="card-del-inst-oc-1"]')).toBeVisible();
+  // 删除钮: hover 右上角按钮才显出(opacity 0 → 1, D-038; 修订 H 自为热区)
+  // t_433892c6 9/7 修订 H(老大 #1175 回归): button opacity:0 + pointer-events:auto, :hover 触发 opacity:1
+  await card.locator('[data-testid^="card-del-"]').hover();
+  await pwExpect(card.locator('[data-testid^="card-del-"]').first()).toBeVisible();
 });
 
 test("三态截图取证(dark/light/glass 各 hover monthly 行落 /tmp, 主页 P1 形态)", async ({

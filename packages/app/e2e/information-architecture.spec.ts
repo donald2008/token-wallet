@@ -173,26 +173,16 @@ test("卡内删除: hover 淡入 → 取消保留 → 确认删除(清钥匙串 
   const delA = cardA.getByTestId("card-del-inst-a");
 
   // 未 hover 卡片/热区 → 删除钮淡出(opacity 0, 不占常态视觉)
-    await page.mouse.move(2, 2);
-    await pwExpect(delA).toHaveCSS("opacity", "0");
-    // t_433892c6 review fix B-1 final round 5: button 默认 visibility:hidden + pointer-events:none
-    // 脱 hit-test, .card-del-zone 48×48 在卡头部下方(top:32px, 避开 card-head inline flex)
-    // 接 mouse hover → ~ .card-del-btn visibility:visible + pointer-events:auto + opacity:1 →
-    // button z=4 进 hit-test → click 命中。e2e 删 btn.hover()(按钮默认不进 hit-test, 严格
-    // actionability 等不到 visible 30s timeout), 改 zone hover → button 已 visible → click。
-    await cardA.locator(".card-del-zone").hover();
-    await pwExpect(delA).toHaveCSS("opacity", "1");
-    await pwExpect(delA).toHaveCSS("visibility", "visible");
+  await page.mouse.move(2, 2);
+  await pwExpect(delA).toHaveCSS("opacity", "0");
+  // t_433892c6 9/7 修订 H(老大 #1175 回归): 按钮自为热区(opacity:0+pointer-events:auto
+  // 不影响 hit-test), :hover 触发 opacity:1。无 zone div / :has() / z-index 博弈。
+  await delA.hover();
+  await pwExpect(delA).toHaveCSS("opacity", "1");
 
-    // 点删除 → 确认气泡(含取消); 取消 → 卡片保留, 库未动
-    // t_433892c6 review fix B-1 final round 6: click({force:true}) 绕 strict actionability。
-    // zone pointer-events:auto + button z=4 visibility:visible 命中 click → zone 拦截 click event
-    // (zone onClick 兜底空, 不触发 onDelete)。真实用户鼠标从 zone 中心移到 button 中心,
-    // 一帧内 hit-test button(z=4 > zone z=3)命中 button onClick, 不走 zone 拦截;
-    // 但 playwright mouse.move 跨元素触发两次 hover enter + click, 与 e2e click 不一致,
-    // 故 click({force:true}) 跳过 strict actionability 拦截检查, 直派 click event 到 button。
-    await delA.click({ force: true });
-    const bubble = cardA.getByTestId("card-confirm-row-inst-a");
+  // 点删除 → 确认气泡(含取消); 取消 → 卡片保留, 库未动
+  await delA.click();
+  const bubble = cardA.getByTestId("card-confirm-row-inst-a");
   await pwExpect(bubble).toBeVisible();
   await pwExpect(bubble).toContainText("删除并清钥匙串?");
   await cardA.getByTestId("card-cancel-del-inst-a").click();
@@ -201,8 +191,8 @@ test("卡内删除: hover 淡入 → 取消保留 → 确认删除(清钥匙串 
   pwExpect(await mockSqliteProviderIds(page)).toContain("inst-a");
 
   // 再删一次 → 确认 → 卡片消失(仅剩 B)
-  await cardA.locator(".card-del-zone").hover();
-  await cardA.getByTestId("card-del-inst-a").click({ force: true });
+  await delA.hover();
+  await cardA.getByTestId("card-del-inst-a").click();
   await cardA.getByTestId("card-confirm-del-inst-a").click();
   await pwExpect(cards).toHaveCount(1, { timeout: 10_000 });
   await pwExpect(cards.first().locator(".card-name")).toContainText("Opencode Go #1");
