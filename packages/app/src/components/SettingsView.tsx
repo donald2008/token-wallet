@@ -168,13 +168,13 @@ export function SettingsView({
               step={0.05}
               value={glassAlpha}
               aria-label={t("set.glassAlpha")}
-              onChange={(e) => onGlassAlpha(Number(e.target.value))}
-              onPointerUp={(e) => persistGlassAlpha(Number((e.target as HTMLInputElement).value))}
-              onBlur={(e) => persistGlassAlpha(Number(e.target.value))}
+              onChange={(e) => onGlassAlpha(Number(e.currentTarget.value))}
+              onPointerUp={(e) => persistGlassAlpha(Number(e.currentTarget.value))}
+              onBlur={(e) => persistGlassAlpha(Number(e.currentTarget.value))}
               onKeyUp={(e) => {
                 // 键盘可达性: 方向键 / Tab 失焦时落盘
                 if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") {
-                  persistGlassAlpha(Number((e.target as HTMLInputElement).value));
+                  persistGlassAlpha(Number(e.currentTarget.value));
                 }
               }}
             />

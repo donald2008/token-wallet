@@ -49,11 +49,11 @@
  * 注意: --glass-alpha 必须与 --glass-blur 一样从 tokens.css 取定义占位, 否则 color-mix 会回退 fallback。
  */
 :root[data-theme="dark-glass"] {
-  /* dark-glass 基线 0.72(中等不透明); 受 --glass-alpha(默认 1) 调节 */
-  --bg: color-mix(in srgb, #14171c calc(72% * var(--glass-alpha, 1)), transparent);
-  --bg-elev: color-mix(in srgb, #1c2129 calc(66% * var(--glass-alpha, 1)), transparent);
-  --bg-hover: color-mix(in srgb, #232a35 calc(80% * var(--glass-alpha, 1)), transparent);
-  --border: color-mix(in srgb, #2c3542 calc(55% * var(--glass-alpha, 1)), transparent);
+  /* dark-glass: 直接 alpha 映射(默认 1.0 → 完全不透明, 0.15 → 最透明白字仍可读下限) */
+  --bg: color-mix(in srgb, #14171c calc(var(--glass-alpha, 1) * 100%), transparent);
+  --bg-elev: color-mix(in srgb, #1c2129 calc(var(--glass-alpha, 1) * 100%), transparent);
+  --bg-hover: color-mix(in srgb, #232a35 calc(var(--glass-alpha, 1) * 100%), transparent);
+  --border: color-mix(in srgb, #2c3542 calc(var(--glass-alpha, 1) * 100%), transparent);
   --card-blur: blur(var(--glass-blur)) saturate(115%);
 }
 
@@ -82,10 +82,10 @@
 }
 
 :root[data-theme="light-glass"] {
-  /* light-glass 基线 0.66(白色基底); 受 --glass-alpha(默认 1) 调节 */
-  --bg: color-mix(in srgb, #f6f7f9 calc(66% * var(--glass-alpha, 1)), transparent);
-  --bg-elev: color-mix(in srgb, #ffffff calc(60% * var(--glass-alpha, 1)), transparent);
-  --bg-hover: color-mix(in srgb, #eef1f5 calc(75% * var(--glass-alpha, 1)), transparent);
-  --border: color-mix(in srgb, #dde3ea calc(60% * var(--glass-alpha, 1)), transparent);
+  /* light-glass: 直接 alpha 映射(默认 1.0 → 完全不透明, 0.15 → 最透明白字仍可读下限) */
+  --bg: color-mix(in srgb, #f6f7f9 calc(var(--glass-alpha, 1) * 100%), transparent);
+  --bg-elev: color-mix(in srgb, #ffffff calc(var(--glass-alpha, 1) * 100%), transparent);
+  --bg-hover: color-mix(in srgb, #eef1f5 calc(var(--glass-alpha, 1) * 100%), transparent);
+  --border: color-mix(in srgb, #dde3ea calc(var(--glass-alpha, 1) * 100%), transparent);
   --card-blur: blur(var(--glass-blur)) saturate(115%);
 }

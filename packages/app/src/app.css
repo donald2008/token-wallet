@@ -1366,7 +1366,11 @@ body {
   gap: var(--space-4);
   font-size: 12px;
 }
-/* t_c20d4d11 9/7: 玻璃透明度滑槽 — 容器 + 实时数值 + 原生 range 主题化 */
+/* t_c20d4d11 9/7: 玻璃透明度滑槽 — 容器 + 实时数值 + 原生 range 主题化
+ * t_c20d4d11 9/7 round-2(W1): 直引 --bg-elev, 不再 color-mix(--bg-elev, ...) 递归.
+ * 旧版在 dark-glass 下 --bg-elev 已是 color-mix(... calc(var(--glass-alpha) * 100%), transparent),
+ * 再 color-mix(--bg-elev 80%, transparent) 是嵌套 color-mix: 不支持 color-mix 浏览器整条
+ * 失效(无背景), slider-row 仅剩边框/容器不可见. 直引 --bg-elev 在 glass 主题下背景等同面板. */
 .slider-row {
   display: flex;
   flex-direction: column;
@@ -1374,7 +1378,7 @@ body {
   margin-top: var(--space-4);
   padding: var(--space-8);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+  background: var(--bg-elev);
   border: 1px solid var(--border);
 }
 .slider-label {
