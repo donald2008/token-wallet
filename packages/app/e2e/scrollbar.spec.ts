@@ -21,10 +21,10 @@ async function agree(page: import("@playwright/test").Page) {
 /** 卡片右缘 + 过滤钮组右缘(漂移断言的观测点)。 */
 async function rightEdges(page: import("@playwright/test").Page) {
   const card = await page.locator('[data-testid="provider-card"]').first().boundingBox();
-  const icons = await page.getByTestId("filter-icons").boundingBox();
+  // t_f7d1beeb 9/7 修订 E: filter-icons 已隐藏, 不再断言 iconsRight。
+  // scrollbar-gutter: stable 的核心契约 = 卡片右缘在滚动条出现/消失时零位移。
   pwExpect(card).not.toBeNull();
-  pwExpect(icons).not.toBeNull();
-  return { cardRight: card!.x + card!.width, iconsRight: icons!.x + icons!.width };
+  return { cardRight: card!.x + card!.width };
 }
 
 test("滚动条槽常驻: 滚动条出现前后卡片/钮组右缘零位移(漂移回归)", async ({ hostPage, page }) => {
@@ -51,8 +51,8 @@ test("滚动条槽常驻: 滚动条出现前后卡片/钮组右缘零位移(漂�
 
   const after = await rightEdges(page);
   // 交集断言: 滚动条出现挤压内容宽度 → 右缘左移 = 修复前必挂的漂移特征; stable 下必须零位移
+  // t_f7d1beeb 9/7 修订 E 后: 仅断言 cardRight 零位移(filter-icons 已隐藏, 不再断言 iconsRight)
   pwExpect(Math.abs(after.cardRight - before.cardRight)).toBeLessThan(0.5);
-  pwExpect(Math.abs(after.iconsRight - before.iconsRight)).toBeLessThan(0.5);
 });
 
 test("细滚动条: ::-webkit-scrollbar 宽 8px, thumb 主题化着色(非默认灰条)", async ({ hostPage, page }) => {

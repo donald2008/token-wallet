@@ -24,12 +24,15 @@ export function BottomBar({ onAdd, onOpenSettings }: Props) {
     <nav className="bottombar" data-testid="bottombar" aria-label={t("side.aria")}>
       <button
         type="button"
-        className="btn bottombar-btn"
+        className="btn bottombar-btn bottombar-btn--icon-only"
         data-testid="add-btn"
         title={t("common.add")}
+        aria-label={t("common.add")}
         onClick={onAdd}
       >
-        {/* 手绘加号(原侧栏 ＋ SVG 平移) */}
+        {/* 手绘加号(原侧栏 ＋ SVG 平移) — t_f7d1beeb 9/7 修订 D: 纯「+」图标, 视觉去文字。
+         *  i18n common.add 键保留作 title/aria-label(无障碍兜底 + tooltip); 设置按钮的 label
+         *  按用户反馈保留不动。视觉差异 = add 按钮 = 16px icon, settings 按钮 = icon+label。 */}
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
           <path
             d="M8 3.2v9.6M3.2 8h9.6"
@@ -39,7 +42,6 @@ export function BottomBar({ onAdd, onOpenSettings }: Props) {
             strokeLinecap="round"
           />
         </svg>
-        <span className="bottombar-label">{t("common.add")}</span>
       </button>
       <button
         type="button"

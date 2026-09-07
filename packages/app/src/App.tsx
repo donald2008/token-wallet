@@ -377,8 +377,11 @@ function AppShell() {
             // P1(t_9639078b): 过滤三枚 icon 钮浮在卡片列表右上角 —— 与卡片列表同容器(绝对定位),
             // 随内容滚动运动(不吸顶), 因此滚动内容不会与钮组重叠(修 v0.1.2 平台 chips 被卡片盖住)。
             // 过滤后命中为空(如仅剩异常) → 居中「无匹配实例」(钮组仍在, 可点回其他视角)。
+            // t_f7d1beeb 9/7 修订 E: 用户反馈「主页上层的筛选按钮先隐藏, 感觉比较占地方」——
+            // 先隐藏(不删代码), filter state 管线(DEFAULT_FILTER/matchesFilter/filteredProviders)
+            // 全部保留, 后续要恢复时把下方 false 改 true 即可。e2e filter-icons 不再断言可见。
             <main className="card-list" data-testid="card-list">
-              <FilterIcons value={filter} onChange={setFilter} />
+              {false && <FilterIcons value={filter} onChange={setFilter} />}
               {filteredProviders.length === 0 ? (
                 <NoMatchState />
               ) : (
