@@ -17,8 +17,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm dev:web",
-    port: 1420,
-    reuseExistingServer: !process.env.CI,
+    command: "pnpm dev:web --port 1501 --strictPort",
+    port: 1501,
+    reuseExistingServer: true,
   },
 });

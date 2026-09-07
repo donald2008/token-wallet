@@ -546,7 +546,7 @@ export const test = base.extend<{ hostPage: Page }>({
         },
       };
     })()`);
-    await page.goto("http://localhost:1420");
+    await page.goto(`http://localhost:${process.env.PW_PORT ?? "1501"}`);
     // 等 React 挂载+effect 落定(matchMedia 监听等挂好后才放行测试体,
     // 防 emulateMedia 等操作抢在 effect 挂载前 → 事件丢失型 flake)
     await page.waitForSelector(

@@ -438,16 +438,22 @@ body {
 }
 /* 透明 hover 热区: 40×40 锚右上角, hover 该区显出按钮。
  * 父 .card 已有 position:relative。background 透明不可见, 仅作 hover 锚。
- * pointer-events: auto 接 hover, 不挡按钮浮出后的 click (z-index:1 < 2)。 */
+ *
+ * t_433892c6 review fix B-1 续 2: zone 默认 pointer-events:none — 否则 button
+ * 默认 pointer-events:none 跳过 hit-test 时, zone 占住 z=3 接 mouse 事件,
+ * 但 zone 不再是 :hover 状态(鼠标在 button 位置), :hover ~ .card-del-btn 不触发,
+ * button 永远 visibility:hidden → Playwright .card-del-btn.hover() timeout。
+ * 改 zone 默认 none: 鼠标穿透到 z=4 button → button :hover 触发自身 visibility:visible。
+ * zone :hover 仍保留接 hover 触发 (~ 选择器)。 */
 .card-del-zone {
   position: absolute;
   top: 0;
   right: 0;
   width: 40px;
   height: 40px;
-  pointer-events: auto;
   background: transparent;
-  z-index: 3; /* 高于按钮 z-index:2, 浮出后仍接 hover, 兼容 :has() 让位降级 */
+  z-index: 3;
+  pointer-events: none;
 }
 .card-del-zone:hover ~ .card-del-btn {
   opacity: 1;
