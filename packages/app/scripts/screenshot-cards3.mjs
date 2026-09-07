@@ -5,9 +5,11 @@
 // 修订 #1116: 三窗 QuotaMeter(layout=micro) 常驻直显, 不再挂 BarRowTooltip
 import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
+import path from "node:path";
 
 const URL = process.env.URL || "http://127.0.0.1:8893/";
-const OUT = "/root/work/token-wallet/verification/quota-cards3";
+// scripts/ 在 packages/app/scripts，上溯三级到仓根 verification/quota-cards3 (tracked)
+const OUT = path.join(import.meta.dirname, "../../../verification/quota-cards3");
 
 async function main() {
   mkdirSync(OUT, { recursive: true });
