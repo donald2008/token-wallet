@@ -92,13 +92,31 @@ export function tightestMetric(metrics: Metric[]): Metric | undefined {
 }
 
 /**
- * bars 模板: 多窗口嵌套, 每窗口一行 QuotaMeter 四元素实例(t_23800bd4 起由旧 ProgressBar
- * 切换为 QuotaMeter, layout=row 行式排版 —— 标题=窗口名本地化 / 重置=reset_at 派生 /
- * 进度条=pct / 用量=used/limit 按真实 Metric.unit 格式化); 窗口按时间窗升序排列
- * (5h→周→月, P1 真机验收契约); 最紧窗口(剩余比例最小)仍标红, 但只标不排序 ——
- * 红色标记风险, 顺序归时间窗, 一眼定位最先耗尽的风险窗。
- * .bar-row 瘦壳仅保留行距 + data-tightest 标记位; DOM 契约 .progress/
- * .progress-fill[data-health]/role=progressbar 由 QuotaMeter 保证。
+ * bars 模板: 多窗口按 P5 短窗并排排版(t_433892c6 9/7 用户拍板 — 上主页,非方案页实验)。
+ * 排版契约:
+ *   ┌─ <ProviderCard> ──────────┐
+ *   │   ...head + status + del  │  ← 头部/status/删除钮沿用 ProviderCard 已修形态,不动
+ *   │ ┌─5h─┐ ┌─周─┐             │  ← 短窗并排一行(非 monthly 全部并排,grid 2 列)
+ *   │ │ 80%│ │ 20%│             │
+ *   │ └────┘ └─────┘            │
+ *   │ ┌─月──────────────────────┐│  ← monthly 独占下一行全宽(.qcard3-windows-row--wide)
+ *   │ │ 30%                     ││
+ *   │ └────────────────────────┘│
+ *   └───────────────────────────┘
+ *
+ * 降级规则(用户 9/7 修订 — 1/2/3 窗都成立):
+ *   - 3 窗 + monthly 存在 → short(5h+周)同行两列 + monthly 全宽
+ *   - 2 窗(无 monthly)    → 全部 short 同行两列(规则统一:非 monthly 全并排)
+ *   - 1 窗                → 整行全宽(短行 --wide 修饰符);短行内单格占 grid 第 1 列,第 2 列空
+ *   - 0 窗                → 不走本模板(register 时 plan_type=window 不可能零窗)
+ *
+ * DOM 契约(零破):
+ *   - .bar-row 仍是窗的语义壳,data-testid="bar-row" / data-metric / data-tightest 全保留
+ *   - .progress / .progress-fill[data-health] / role=progressbar 由 QuotaMeter 自带
+ *   - 新增 .qcard3-windows-row + .qcard3-windows-row--wide 容器(复用方案页 P5 同款 CSS)
+ *   - 不挂 <BarRowTooltip>: micro 常驻 = 信息主体,hover 复读是冗余
+ *
+ * 不动: 头部 / 状态徽章 / 删除钮 / AbnormalBody / QuotaMeter 本体 / BarRowTooltip 本体。
  */
 
 /** 窗口名本地化(2026-09-03 文案本地化⑤, 自旧 ProgressBar 收容): 未知 key 回退原样 */
@@ -107,43 +125,73 @@ function windowTitle(key: string): string {
   return t(metricKey).startsWith("metric.") ? t("metric.fallback", { key }) : t(metricKey);
 }
 
+/** 窗口行: QuotaMeter(layout=micro) 常驻直显, .bar-row 瘦壳承担语义锚点
+ * (data-tightest / data-metric / data-testid 全在壳上, micro 内四元素由 QuotaMeter 渲染) */
+function WindowRow({ metric, tightest }: { metric: Metric; tightest: Metric | undefined }) {
+  const h = metricHealth(metric);
+  const tight = metric === tightest && h !== "ok";
+  const state = h === "unknown" ? "ok" : (h as "ok" | "warn" | "bad");
+  const reset = resetText(metric.reset_at);
+  return (
+    <div
+      className="bar-row"
+      data-testid="bar-row"
+      data-metric={metric.key}
+      data-tightest={tight || undefined}
+      key={metric.key}
+    >
+      <QuotaMeter
+        layout="micro"
+        pct={metric.limit !== undefined && metric.limit > 0 ? metric.used / metric.limit : 0}
+        state={state}
+        title={windowTitle(metric.key)}
+        resetText={reset || undefined}
+        used={metric.used}
+        limit={metric.limit}
+        unit={metric.unit}
+      />
+    </div>
+  );
+}
+
 export function BarsTemplate({ p }: { p: ProviderSnapshot }) {
   const metrics = sortByWindowSpan(p.metrics);
   const tightest = tightestMetric(metrics);
+  // 短窗 = 除 monthly 外的全部; 月窗 = 唯一 monthly(若存在)。非已知 key 一律归 short,
+  // 符合规则「非 monthly 全并排, monthly 全宽」——未识别 key 不丢不崩,排在短行。
+  const short = metrics.filter((m) => m.key !== "monthly");
+  const wide = metrics.find((m) => m.key === "monthly");
+  // 单窗 → 整行全宽(short 一格占 grid 第 1 列, --wide 让模板仅 1 列);
+  // 多窗但无 monthly → 整行仍是 short 两列(自然就是规则形态,不需额外修饰)。
+  const onlyOneOverall = short.length === 1 && !wide;
+  // 0 窗保护(注册 plan_type=window 不可能零窗,但 type 收口)
+  if (metrics.length === 0) return <div className="bars-template" data-testid="bars-template" />;
   return (
     <div className="bars-template" data-testid="bars-template">
-      {/* t_27eeadad: 主页 P1 形态接入(9/7 用户拍板, t_a398348b 悬浮 tooltip 使命完成)
-       *   - 三窗 QuotaMeter(layout="micro") 紧凑竖排常驻直显,与方案页 P1 同构
-       *     (复用 QuotaMeter 已有的 micro 排版 modifier,不动 QuotaMeter 本体)
-       *   - 不再挂 <BarRowTooltip>: micro 常驻 = 信息主体,悬浮复读同一信息是冗余
-       *   - 沿用 .bar-row 瘦壳作为语义锚点(data-tightest 仍由最紧窗标志,主页 e2e 契约)
-       *   - DOM 契约 .progress/.progress-fill[data-health]/role=progressbar 由 QuotaMeter 保证 */}
-      {metrics.map((m) => {
-        const h = metricHealth(m);
-        const tight = m === tightest && h !== "ok";
-        const state = h === "unknown" ? "ok" : (h as "ok" | "warn" | "bad");
-        const reset = resetText(m.reset_at);
-        return (
-          <div
-            className="bar-row"
-            data-testid="bar-row"
-            data-metric={m.key}
-            data-tightest={tight || undefined}
-            key={m.key}
-          >
-            <QuotaMeter
-              layout="micro"
-              pct={m.limit !== undefined && m.limit > 0 ? m.used / m.limit : 0}
-              state={state}
-              title={windowTitle(m.key)}
-              resetText={reset || undefined}
-              used={m.used}
-              limit={m.limit}
-              unit={m.unit}
-            />
-          </div>
-        );
-      })}
+      {/* 短窗行: 非 monthly 全并排(1 窗时 --wide 让整行单列, 多窗时 grid 2 列)。
+       *   - 不挂 BarRowTooltip: 信息常驻 = micro 直接展开, hover 复读冗余
+       *   - data-testid="windows-row" 与方案页 P5 一致, 主页 e2e 凭此锚定位 */}
+      {short.length > 0 && (
+        <div
+          className={
+            "qcard3-windows-row" + (onlyOneOverall ? " qcard3-windows-row--wide" : "")
+          }
+          data-testid="windows-row"
+        >
+          {short.map((m) => (
+            <WindowRow key={m.key} metric={m} tightest={tightest} />
+          ))}
+        </div>
+      )}
+      {/* 月窗行: monthly 独占全宽(若存在);3 窗时第二行,2 窗时不出,1 窗时不出 */}
+      {wide && (
+        <div
+          className="qcard3-windows-row qcard3-windows-row--wide"
+          data-testid="windows-row-wide"
+        >
+          <WindowRow metric={wide} tightest={tightest} />
+        </div>
+      )}
     </div>
   );
 }

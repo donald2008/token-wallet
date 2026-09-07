@@ -212,7 +212,42 @@ const ipcMocks: Record<string, IpcHandler> = {
         }),
       };
     } else if (String(args?.url ?? "").includes("opencode.ai/zen/go/v1/usage")) {
-      if (auth.includes("low")) {
+      // t_433892c6 主页 P5 排版: localStorage token-wallet.mock.opencode-windows 可注入
+      // 替代默认 3 窗 golden(测试 P5 1/2 窗降级 — 默认走 3 窗, 不破坏任何旧 e2e)
+      // 形态: JSON 字符串 = { rolling: { percent, resetsAt, status? }, weekly?, monthly? }
+      // 缺位 key 表示该窗不存在。
+      let override: Partial<{
+        rolling: { percent: number; resetsAt: string; status?: string };
+        weekly: { percent: number; resetsAt: string; status?: string };
+        monthly: { percent: number; resetsAt: string; status?: string };
+      }> | null = null;
+      try {
+        const raw = localStorage.getItem("token-wallet.mock.opencode-windows");
+        if (raw) override = JSON.parse(raw);
+      } catch {
+        /* ignore */
+      }
+      if (override) {
+        const w = (k: keyof typeof override) => {
+          const def = override![k];
+          if (!def) return undefined;
+          return {
+            status: def.status ?? "ok",
+            percent: def.percent,
+            resetsAt: def.resetsAt ?? "2026-09-08T00:00:00.000Z",
+          };
+        };
+        result = {
+          status: 200,
+          body: JSON.stringify({
+            usage: {
+              rolling: w("rolling"),
+              weekly: w("weekly"),
+              monthly: w("monthly"),
+            },
+          }),
+        };
+      } else if (auth.includes("low")) {
         // 即将耗尽变体(t_05271be0): weekly 95%(remaining 5%, 0<r≤10%)→ 徽章「即将耗尽」仍红(bad)
         result = {
           status: 200,

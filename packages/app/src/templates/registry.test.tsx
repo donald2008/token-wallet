@@ -153,3 +153,104 @@ describe("BarsTemplate: 窗口行 = QuotaMeter 四元素实例(t_23800bd4)", () 
     expect(container.querySelector(".quota-usage")!.textContent).toBe("38%");
   });
 });
+
+describe("BarsTemplate: P5 短窗并排排版(t_433892c6 9/7 用户拍板, 主页接入)", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("3 窗(rolling_5h + weekly + monthly): 短窗同行两列 + 月窗全宽", () => {
+    const metrics = [wm("rolling_5h", 960, 1200), wm("weekly", 1200, 6000), wm("monthly", 300, 1000)];
+    act(() => root.render(<BarsTemplate p={snap(metrics)} />));
+    // 两个 windows-row 容器: 第一行短窗, 第二行月窗
+    const rows = container.querySelectorAll(".qcard3-windows-row");
+    expect(rows).toHaveLength(2);
+    // 第一行: 短窗两列 grid, 内含 5h + 周两个 .bar-row
+    const shortRow = rows[0] as HTMLElement;
+    expect(shortRow.classList.contains("qcard3-windows-row--wide")).toBe(false);
+    const shortBars = shortRow.querySelectorAll(".bar-row");
+    expect(shortBars).toHaveLength(2);
+    expect(shortBars[0].getAttribute("data-metric")).toBe("rolling_5h");
+    expect(shortBars[1].getAttribute("data-metric")).toBe("weekly");
+    // 第二行: 月窗全宽, --wide 修饰符, 内含 1 个 .bar-row
+    const wideRow = rows[1] as HTMLElement;
+    expect(wideRow.classList.contains("qcard3-windows-row--wide")).toBe(true);
+    expect(wideRow.querySelectorAll(".bar-row")).toHaveLength(1);
+    expect(wideRow.querySelector(".bar-row")!.getAttribute("data-metric")).toBe("monthly");
+    // testid 锚点(主页 e2e 凭此定位)
+    expect(container.querySelector('[data-testid="windows-row"]')).toBe(shortRow);
+    expect(container.querySelector('[data-testid="windows-row-wide"]')).toBe(wideRow);
+  });
+
+  it("3 窗时 DOM 契约零破: progress / progress-fill[data-health] / role=progressbar 仍齐全", () => {
+    const metrics = [wm("rolling_5h", 10, 100), wm("weekly", 20, 100), wm("monthly", 30, 100)];
+    act(() => root.render(<BarsTemplate p={snap(metrics)} />));
+    expect(container.querySelectorAll(".progress").length).toBeGreaterThanOrEqual(3);
+    expect(container.querySelectorAll(".progress-fill").length).toBeGreaterThanOrEqual(3);
+    expect(container.querySelectorAll("[role='progressbar']").length).toBeGreaterThanOrEqual(3);
+    // 每个 .progress-fill 必须带 data-health 属性(QuotaMeter 契约)
+    const fills = container.querySelectorAll(".progress-fill");
+    for (const f of fills) {
+      expect(f.getAttribute("data-health")).toBeTruthy();
+    }
+    // micro 排版契约: quota-usage 只显百分比 + 短格式
+    const usageTexts = Array.from(container.querySelectorAll(".quota-usage")).map((u) => u.textContent);
+    expect(usageTexts).toEqual(["10%", "20%", "30%"]);
+  });
+
+  it("降级 2 窗(无 monthly): 全部短窗并排一行, 不出现 --wide 行", () => {
+    const metrics = [wm("rolling_5h", 80, 100), wm("weekly", 30, 100)];
+    act(() => root.render(<BarsTemplate p={snap(metrics)} />));
+    const rows = container.querySelectorAll(".qcard3-windows-row");
+    expect(rows).toHaveLength(1); // 仅一个短行, 无月行
+    const row = rows[0] as HTMLElement;
+    expect(row.classList.contains("qcard3-windows-row--wide")).toBe(false);
+    expect(row.querySelectorAll(".bar-row")).toHaveLength(2);
+    // 月窗行 testid 必须不存在(2 窗无 monthly)
+    expect(container.querySelector('[data-testid="windows-row-wide"]')).toBeNull();
+  });
+
+  it("降级 1 窗: 整行全宽(--wide), 单 .bar-row 占 grid 第 1 列", () => {
+    const metrics = [wm("rolling_5h", 80, 100)];
+    act(() => root.render(<BarsTemplate p={snap(metrics)} />));
+    const rows = container.querySelectorAll(".qcard3-windows-row");
+    expect(rows).toHaveLength(1);
+    const row = rows[0] as HTMLElement;
+    expect(row.classList.contains("qcard3-windows-row--wide")).toBe(true);
+    expect(row.querySelectorAll(".bar-row")).toHaveLength(1);
+    expect(row.querySelector(".bar-row")!.getAttribute("data-metric")).toBe("rolling_5h");
+  });
+
+  it("降级 1 窗 + 仅有 monthly(异常配比, 但 0 业务可达): 月窗全宽行存在", () => {
+    // 真业务里 monthly 不应单独存在(月窗必伴随更短窗), 但代码路径需自洽:
+    // short=0, wide=monthly → 仅一个月窗全宽行, data-testid=windows-row-wide
+    const metrics = [wm("monthly", 30, 100)];
+    act(() => root.render(<BarsTemplate p={snap(metrics)} />));
+    const rows = container.querySelectorAll(".qcard3-windows-row");
+    expect(rows).toHaveLength(1);
+    const row = rows[0] as HTMLElement;
+    expect(row.classList.contains("qcard3-windows-row--wide")).toBe(true);
+    expect(row.querySelectorAll(".bar-row")).toHaveLength(1);
+    expect(row.querySelector(".bar-row")!.getAttribute("data-metric")).toBe("monthly");
+  });
+
+  it("data-tightest 仍正确: 3 窗时 monthly 最紧(80%)标红", () => {
+    const metrics = [wm("rolling_5h", 20, 100), wm("weekly", 30, 100), wm("monthly", 80, 100)];
+    act(() => root.render(<BarsTemplate p={snap(metrics)} />));
+    const tightestRow = container.querySelector(".bar-row[data-tightest]");
+    expect(tightestRow).toBeTruthy();
+    expect(tightestRow!.getAttribute("data-metric")).toBe("monthly");
+    // 短窗行 + 月窗行两个容器, monthly 在第二行
+    expect(tightestRow!.closest(".qcard3-windows-row--wide")).toBeTruthy();
+  });
+});
