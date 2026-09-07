@@ -74,6 +74,70 @@ export const STS_LOCK_PATTERNS = ["另一个 arkcli 进程正在刷新", "STS �
 export const STS_LOCK_MAX_RETRIES = 2;
 export const STS_LOCK_RETRY_DELAY_MS = 2_000;
 
+/* ---- 残留锁自愈(B层, t_91ae22ff, 2026-09-07 用户拍板) ----
+ * arkcli 的 SSO 刷新锁 = ~/.arkcli/cache/auth/refresh-<hash>.lock(0 字节**创建式**锁,
+ * 非 flock)。app 采集超时被强杀(runCommand SIGTERM→5s SIGKILL)或进程异常退出 →
+ * 锁文件残留, 永不自动释放 → 后续每次采集撞这把残留锁 → 重试耗尽 → 永久 stale 灰卡。
+ * 自愈: 撞锁且重试耗尽后, 检查 refresh-*.lock 的 mtime: 超过 STS_LOCK_STALE_MS(5min)
+ * = 残留锁 → 删除 → 立即再跑一次采集(单次不循环); 仍撞锁 → 走原 stale 逻辑(不无限抢)。
+ * 锁文件 mtime 年轻(< 阈值)= 活跃刷新, **绝不删**(避免与真实并发刷新打架)。
+ * mtime 阈值是唯一判据(锁文件 0 字节无内容可查); 删除失败(Windows 句柄占用等)
+ * → 静默跳过, 等下轮轮询再试, 不报错。sts_refresh_locked 告警文案保留不变。
+ */
+export const STS_LOCK_STALE_MS = 5 * 60_000;
+
+/** 锁文件操作助手(测试注入; 缺省走 node:fs 动态 import——browser-safe: 顶层零静态 node:* import) */
+export interface ArkLockFs {
+  /** 列出 auth 目录下 refresh-*.lock 的完整路径; 目录不存在/读取失败返回空数组(不抛) */
+  listLocks(dir: string): Promise<string[]>;
+  /** 取锁文件 mtime(毫秒 epoch); 文件不存在/stat 失败返回 undefined */
+  statMtimeMs(path: string): Promise<number | undefined>;
+  /** 删除锁文件; 删除失败(Windows 句柄占用等)返回 false */
+  unlink(path: string): Promise<boolean>;
+}
+
+/** 解析 arkcli auth 锁目录(缺省 ~/.arkcli/cache/auth; 测试注入可指向临时目录) */
+export type ResolveArkLockDir = () => Promise<string>;
+
+const defaultLockFs: ArkLockFs = {
+  async listLocks(dir) {
+    const { readdir } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      return entries
+        .filter((e) => e.isFile() && e.name.startsWith("refresh-") && e.name.endsWith(".lock"))
+        .map((e) => join(dir, e.name));
+    } catch {
+      return [];
+    }
+  },
+  async statMtimeMs(path) {
+    const { stat } = await import("node:fs/promises");
+    try {
+      return (await stat(path)).mtimeMs;
+    } catch {
+      return undefined;
+    }
+  },
+  async unlink(path) {
+    const { unlink } = await import("node:fs/promises");
+    try {
+      await unlink(path);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+};
+
+/** 缺省锁目录: ~/.arkcli/cache/auth(os.homedir() 跨平台, Windows=USERPROFILE) */
+const defaultResolveLockDir: ResolveArkLockDir = async () => {
+  const os = await import("node:os");
+  const { join } = await import("node:path");
+  return join(os.homedir(), ".arkcli", "cache", "auth");
+};
+
 /** 撞锁判别: stdout+stderr 双 stream 命中其一即视为 STS 续期锁竞争(与 auth_expired 判别互斥) */
 function isStsLockBody(body: string): boolean {
   return STS_LOCK_PATTERNS.some((p) => body.includes(p));
@@ -131,6 +195,12 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
     private readonly runner?: ArkRunner,
     /** STS 撞锁重试退避时长(测试注入 0 跳过等待) */
     private readonly stsRetryDelayMs: number = STS_LOCK_RETRY_DELAY_MS,
+    /** 残留锁自愈: 锁文件操作助手(测试注入 fake; 缺省 node:fs 动态 import) */
+    private readonly lockFs?: ArkLockFs,
+    /** 残留锁自愈: auth 锁目录解析(测试注入指向临时目录; 缺省 ~/.arkcli/cache/auth) */
+    private readonly resolveLockDir?: ResolveArkLockDir,
+    /** 残留锁自愈: 锁文件 mtime 陈旧阈值(测试注入; 缺省 5min) */
+    private readonly stsLockStaleMs: number = STS_LOCK_STALE_MS,
   ) {
     super();
   }
@@ -162,6 +232,16 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
       for (let attempt = 0; attempt < STS_LOCK_MAX_RETRIES && res.code !== 0 && isStsLockBody(res.stdout + res.stderr); attempt++) {
         await sleep(this.stsRetryDelayMs);
         res = await runOnce();
+      }
+
+      // 残留锁自愈(B层, t_91ae22ff): 重试耗尽仍撞锁 = 可能是 app 强杀/进程异常退出后
+      // 遗留的陈旧锁文件(创建式锁永不自动释放)。检查 refresh-*.lock mtime > 阈值 →
+      // 删除 → 立即再跑一次采集(单次不循环); 删后仍撞锁 → 走下方原 stale 逻辑(不无限抢)。
+      if (res.code !== 0 && isStsLockBody(res.stdout + res.stderr)) {
+        const healed = await this.healStaleLock(runOnce);
+        if (healed !== null) {
+          res = healed; // 删除残留锁后的单次重跑结果 → 统一走下方判别链
+        }
       }
     } catch (err) {
       if (err instanceof SpawnError && err.code === "ENOENT") {
@@ -280,6 +360,32 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
         status: "error",
         error_message: `arkcli usage 输出解析失败: ${err instanceof Error ? err.message : String(err)}`,
       };
+    }
+  }
+
+  /**
+   * 残留锁自愈(B层, t_91ae22ff): 撞锁重试耗尽后尝试清理陈旧 refresh-*.lock 并重跑一次。
+   * 返回 null = 未触发自愈(无锁文件/全部年轻/删除失败) → 调用方走原 stale 逻辑。
+   */
+  private async healStaleLock(runOnce: () => Promise<CommandRunResult>): Promise<CommandRunResult | null> {
+    try {
+      const lockFs = this.lockFs ?? defaultLockFs;
+      const dir = await (this.resolveLockDir ? this.resolveLockDir() : defaultResolveLockDir());
+      const locks = await lockFs.listLocks(dir);
+      if (locks.length === 0) return null; // 无锁文件 → 未触发自愈
+      const now = Date.now();
+      let removedAny = false;
+      for (const lockPath of locks) {
+        const mtimeMs = await lockFs.statMtimeMs(lockPath);
+        if (mtimeMs === undefined) continue; // stat 失败(文件已被并发删除等) → 跳过该锁
+        if (now - mtimeMs <= this.stsLockStaleMs) continue; // mtime 年轻 = 活跃刷新, 绝不删
+        // 超过阈值 = 残留锁 → 删除; 删除失败(Windows 句柄占用等) → 静默跳过, 等下轮轮询
+        if (await lockFs.unlink(lockPath)) removedAny = true;
+      }
+      if (!removedAny) return null; // 无残留锁被删 → 不重跑, 走原 stale
+      return await runOnce(); // 删除残留锁后立即再跑一次采集
+    } catch {
+      return null; // 任何异常(fs/动态 import 失败等)静默走原 stale 逻辑, 不报错
     }
   }
 

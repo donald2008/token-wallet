@@ -16,6 +16,8 @@ import {
   VolcengineArkCodingPlanAdapter,
   ARK_USAGE_ARGS,
   ARK_USAGE_CMD,
+  STS_LOCK_STALE_MS,
+  type ArkLockFs,
 } from "../src/channels/volcengine-ark.js";
 import { buildSpawnPlan, isShellCommandNotFound, SpawnError, type CommandRunResult } from "../src/adapters.js";
 import { VOLCENGINE_ARK_CODING_PLAN } from "../src/channels/presets.js";
@@ -151,7 +153,15 @@ describe("volcengine-ark/coding-plan golden sample(D-044 三态)", () => {
 
   it("STS 撞锁连续 3 次(长期锁占用): 重试 2 次后仍失败 → stale 灰卡 + sts_refresh_locked 告警(不报采集失败), 不走 auth_expired", async () => {
     const seq = runnerSequence([{ code: 1, stderr: STS_LOCK }]);
-    const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0);
+    // B层自愈(t_91ae22ff): 注入空锁目录, 钉死「无残留锁可删 → 不重跑」语义(长期锁占用→
+    // stale), 测试必须 hermetic——不注入会落真实 ~/.arkcli/cache/auth, 本机既有残留锁
+    // 会被自愈删掉(真实副作用)
+    const adapter = new VolcengineArkCodingPlanAdapter(
+      seq.runner,
+      0,
+      { listLocks: async () => [], statMtimeMs: async () => undefined, unlink: async () => true },
+      async () => "/nonexistent/ark/auth",
+    );
     const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
 
     expect(seq.callCount()).toBe(3); // 首呼 + 2 次重试上限
@@ -378,5 +388,127 @@ describe("isShellCommandNotFound(win32 包壳下 CLI 缺失分类, D-041 round2)
     expect(
       isShellCommandNotFound({ stdout: "", code: 0, stderr: "not recognized" }),
     ).toBe(false);
+  });
+});
+
+describe("残留锁自愈(B层, t_91ae22ff): 陈旧 refresh-*.lock mtime → 删锁重试", () => {
+  /** 可注入的 fake lock fs(记录调用; mtime/删除结果可配置) */
+  function fakeLockFs(state: {
+    locks: Array<{ path: string; mtimeMs: number | undefined }>;
+    unlinkResult?: boolean;
+  }) {
+    const calls = { listLocks: 0, unlink: [] as string[] };
+    const fs: ArkLockFs = {
+      async listLocks() {
+        calls.listLocks += 1;
+        return state.locks.map((l) => l.path);
+      },
+      async statMtimeMs(path) {
+        const l = state.locks.find((x) => x.path === path);
+        return l ? l.mtimeMs : undefined;
+      },
+      async unlink(path) {
+        calls.unlink.push(path);
+        return state.unlinkResult ?? true;
+      },
+    };
+    return { fs, calls };
+  }
+
+  const LOCK_DIR = "/fake/ark/auth"; // 注入的锁目录(替代 ~/.arkcli/cache/auth)
+  const STALE = Date.now() - 10 * 60_000; // 10 分钟前 = 超 5min 阈值 → 残留锁
+  const FRESH = Date.now() - 1_000; // 1 秒前 = 活跃刷新
+
+  /** 撞锁三连(首呼+2 重试全撞)的 runner 序列 */
+  function lockStuckSeq() {
+    return runnerSequence([
+      { code: 1, stderr: STS_LOCK },
+      { code: 1, stderr: STS_LOCK },
+      { code: 1, stderr: STS_LOCK },
+    ]);
+  }
+
+  it("①陈旧锁(mtime 超阈值) → 删锁 + 单次重跑成功 → ok 出数(告别永久 stale)", async () => {
+    const seq = runnerSequence([
+      { code: 1, stderr: STS_LOCK },
+      { code: 1, stderr: STS_LOCK },
+      { code: 1, stderr: STS_LOCK }, // 重试耗尽仍撞锁
+      { code: 0, stdout: HEALTHY_REAL }, // 删锁后重跑成功
+    ]);
+    const fake = fakeLockFs({ locks: [{ path: `${LOCK_DIR}/refresh-deadbeef.lock`, mtimeMs: STALE }] });
+    const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0, fake.fs, async () => LOCK_DIR, 5 * 60_000);
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(fake.calls.unlink).toEqual([`${LOCK_DIR}/refresh-deadbeef.lock`]); // 残留锁被删
+    expect(seq.callCount()).toBe(4); // 首呼+2重试+删锁后单次重跑
+    expect(snap.status).toBe("ok");
+    expect(snap.metrics).toHaveLength(3);
+  });
+
+  it("②活跃锁(mtime 新 < 阈值) → 绝不删, 走原 stale + sts_refresh_locked", async () => {
+    const seq = lockStuckSeq();
+    const fake = fakeLockFs({ locks: [{ path: `${LOCK_DIR}/refresh-abc.lock`, mtimeMs: FRESH }] });
+    const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0, fake.fs, async () => LOCK_DIR, 5 * 60_000);
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(fake.calls.unlink).toEqual([]); // 活跃刷新锁绝不删(避免与真实并发刷新打架)
+    expect(seq.callCount()).toBe(3); // 未删锁 → 不额外重跑
+    expect(snap.status).toBe("stale");
+    expect(snap.alerts.find((a) => a.code === "sts_refresh_locked")).toBeDefined();
+  });
+
+  it("③删锁后重跑仍撞锁 → 走原 stale, 不无限抢(单次重跑为上限)", async () => {
+    const seq = runnerSequence([
+      { code: 1, stderr: STS_LOCK },
+      { code: 1, stderr: STS_LOCK },
+      { code: 1, stderr: STS_LOCK },
+      { code: 1, stderr: STS_LOCK }, // 删锁后重跑仍撞锁
+    ]);
+    const fake = fakeLockFs({ locks: [{ path: `${LOCK_DIR}/refresh-deadbeef.lock`, mtimeMs: STALE }] });
+    const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0, fake.fs, async () => LOCK_DIR, 5 * 60_000);
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(fake.calls.unlink).toHaveLength(1);
+    expect(seq.callCount()).toBe(4); // 只多一次重跑, 不进入第二次删锁循环
+    expect(snap.status).toBe("stale");
+    expect(snap.alerts.find((a) => a.code === "sts_refresh_locked")).toBeDefined();
+    expect(snap.alerts.some((a) => a.code === "auth_expired")).toBeFalsy(); // 判别序不变
+  });
+
+  it("④a 正常路径(无撞锁) → 完全不触碰锁文件", async () => {
+    const seq = runnerSequence([{ code: 0, stdout: HEALTHY_REAL }]);
+    const fake = fakeLockFs({ locks: [] });
+    const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0, fake.fs, async () => LOCK_DIR, 5 * 60_000);
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(snap.status).toBe("ok");
+    expect(fake.calls.listLocks).toBe(0); // 健康路径不进自愈逻辑, 零 fs 触碰
+  });
+
+  it("④b 撞锁但无锁文件 → 无锁可删, 走原 stale(不误判不崩)", async () => {
+    const seq = lockStuckSeq();
+    const fake = fakeLockFs({ locks: [] });
+    const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0, fake.fs, async () => LOCK_DIR, 5 * 60_000);
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(fake.calls.listLocks).toBe(1);
+    expect(fake.calls.unlink).toEqual([]);
+    expect(seq.callCount()).toBe(3);
+    expect(snap.status).toBe("stale");
+  });
+
+  it("⑤删锁失败(Windows 句柄占用等) → 静默跳过不重跑, 走原 stale, 不报错", async () => {
+    const seq = lockStuckSeq();
+    const fake = fakeLockFs({ locks: [{ path: `${LOCK_DIR}/refresh-deadbeef.lock`, mtimeMs: STALE }], unlinkResult: false });
+    const adapter = new VolcengineArkCodingPlanAdapter(seq.runner, 0, fake.fs, async () => LOCK_DIR, 5 * 60_000);
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(fake.calls.unlink).toEqual([`${LOCK_DIR}/refresh-deadbeef.lock`]); // 尝试过删除
+    expect(seq.callCount()).toBe(3); // 删除失败 → 不重跑, 等下轮轮询
+    expect(snap.status).toBe("stale");
+  });
+
+  it("STS_LOCK_STALE_MS 导出常量缺省 5min(可测注入)", () => {
+    expect(STS_LOCK_STALE_MS).toBe(5 * 60_000);
   });
 });
