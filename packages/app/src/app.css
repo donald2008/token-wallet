@@ -2021,10 +2021,10 @@ body {
  * 装得下, 无文字重叠 / 无裁切(月独占一行全宽更宽裕)。
  * --wide 修饰符覆盖默认两列, 让月窗独占一行横铺(grid-column 1/-1)。
  *
- * P5 双列窄列文字收紧(局部 override, 不动 micro 本体契约):
- * light 主题 360px 下 5h 列宽 ~144px, micro 自身 nowrap quota-usage 文字
- * (中文「960 / 1200 次 (80%)」font-10 粗体) 撑满 + quota-reset 「×小时」会撞字。
- * 仅在 P5 双列容器内允许 quota-usage 在窄列下拆字换行, 单窗全宽行不受影响。 */
+ * micro 用量文案 = 单百分比 token(NN%, t_f7d1beeb 9/7): 短文本 nowrap + tabular-nums
+ * 在 ~144px 双列与 ~360px 主页窗口行都装得下, 无撞字; 同列右端 quota-reset 也不撞。
+ * 早期「拆字换行」CSS(white-space: normal; overflow-wrap: anywhere)已删,
+ * 恢复 micro 原 nowrap 契约(QuotaMeter.tsx L147 分支)。 */
 .qcard3-windows-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -2035,11 +2035,6 @@ body {
 }
 .qcard3-windows-row--wide {
   grid-template-columns: minmax(0, 1fr);
-}
-.qcard3-windows-row:not(.qcard3-windows-row--wide) .quota-meter--layout-micro .quota-usage {
-  white-space: normal;
-  overflow-wrap: anywhere;
-  line-height: 1.25;
 }
 /* qcard3 内 .bar-row 的 tooltip 浮于卡之上不溢出 panel(t_23800bd4 主页契约):
  * 沿用既有 .bar-row + .bar-tooltip 契约(见 app.css 上方 .bar-row / .bar-tooltip);

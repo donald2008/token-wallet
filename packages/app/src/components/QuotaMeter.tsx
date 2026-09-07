@@ -145,7 +145,14 @@ export function QuotaMeter({
         <div className="progress-fill" data-health={state} style={{ width: `${target}%` }} />
       </div>
       {used !== undefined && limit !== undefined && (
-        <div className="quota-usage">{usageText(used, limit, unit)}</div>
+        // micro 排版全局只显百分比(用户 9/7 拍板, t_f7d1beeb):
+        // 长文案(960/1200 次 (80%) / 80% / 100%)在 ~144px 双列(P5)与 ~360px 主页窗口行
+        // 都触撞字; 短文本 "NN%" 单 token + nowrap 自然装下, Reset 行仍在右侧
+        layout === "micro" ? (
+          <div className="quota-usage">{target}%</div>
+        ) : (
+          <div className="quota-usage">{usageText(used, limit, unit)}</div>
+        )
       )}
     </div>
   );

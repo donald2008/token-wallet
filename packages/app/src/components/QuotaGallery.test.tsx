@@ -28,7 +28,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuotaGallery } from "./QuotaGallery";
-import { usageText } from "./QuotaMeter";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -68,13 +67,10 @@ function barsOfCard(key: string): HTMLElement[] {
   return Array.from(cardOf(key).querySelectorAll<HTMLElement>("[data-testid='qcard3-bar-row']"));
 }
 
-/** 三窗真实数据契约(同套 kimi-code 数据, 与 getProviderCardMockProviders() 对齐) */
+/** 三窗真实数据契约(同套 kimi-code 数据, 与 getProviderCardMockProviders() 对齐)
+ *  micro 排版只显百分比(t_f7d1beeb 9/7): 960/1200=80%, 1200/6000=20%, 1800/6000=30% */
 const EXPECTED_TITLES = ["5 小时窗", "周窗", "月窗"];
-const EXPECTED_USAGES = [
-  usageText(960, 1200, "requests"),
-  usageText(1200, 6000, "requests"),
-  usageText(1800, 6000, "requests"),
-];
+const EXPECTED_USAGES = ["80%", "20%", "30%"];
 
 describe("QuotaGallery Provider 卡片排版方案页 v2 (t_73c110ea 9/7 重建)", () => {
   it("3 排版段 (P1/P2/P4) + 异常段渲染: 4 个 qvar-canvas-cards3-* 段, 共 5 张 qcard3 卡 (3 ok + 2 异常)", () => {
@@ -140,11 +136,12 @@ describe("QuotaGallery Provider 卡片排版方案页 v2 (t_73c110ea 9/7 重建)
       expect(usagesPerCard[i]).toEqual(firstUsages);
     }
     expect(firstUsages).toEqual(EXPECTED_USAGES);
-    // 计数制语义: 含本地化单位词(不硬编码「次」由数据决定; zh=次, en=requests)
-    expect(firstUsages[0]).toMatch(/次|requests/);
-    expect(firstUsages[0]).toContain("(80%)");
-    expect(firstUsages[1]).toContain("(20%)");
-    expect(firstUsages[2]).toContain("(30%)");
+    // micro 短格式 = "NN%": 无单位标签、无括号、无分母(t_f7d1beeb 9/7)
+    expect(firstUsages[0]).toBe("80%");
+    expect(firstUsages[1]).toBe("20%");
+    expect(firstUsages[2]).toBe("30%");
+    expect(firstUsages[0]).not.toContain("次");
+    expect(firstUsages[0]).not.toContain("requests");
   });
 
   it("健康分布(同三窗真实数据): ok 8 + warn 4 + bad 0 (4 张 ok 卡各 1 warn + 2 ok, P5 同 kimi 三窗)", () => {

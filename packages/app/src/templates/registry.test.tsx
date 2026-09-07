@@ -148,7 +148,8 @@ describe("BarsTemplate: 窗口行 = QuotaMeter 四元素实例(t_23800bd4)", () 
   it("percent 单位窗口 → 用量行百分比格式", () => {
     const m: Metric = { key: "weekly", kind: "window", unit: "percent", used: 37.941548, limit: 100, reset_at: NOW + 3600 };
     act(() => root.render(<BarsTemplate p={snap([m])} />));
-    // fmt1 修浮点尾差: 37.941548 → 37.9%
-    expect(container.querySelector(".quota-usage")!.textContent).toBe("37.9% / 100%");
+    // micro 排版短格式取整百分比(t_f7d1beeb 9/7): Math.round(0.379*100)=38;
+    // 与 usageText 在 percent 单位的 fmt1(37.9)不同, micro 走整数取整契约
+    expect(container.querySelector(".quota-usage")!.textContent).toBe("38%");
   });
 });

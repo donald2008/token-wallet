@@ -144,6 +144,7 @@ describe("QuotaMeter 四元素实例(扩展 slot, 纯增量)", () => {
     expect(wrap.classList.contains("quota-meter--instance")).toBe(true);
     expect(wrap.querySelector(".quota-title")!.textContent).toBe("阿里云百炼 月窗");
     expect(wrap.querySelector(".quota-reset")!.textContent).toBe("6.4 小时后重置");
+    // 默认 layout=stack: 用量行仍走 usageText 完整文案「91% / 100%」
     expect(wrap.querySelector(".quota-usage")!.textContent).toBe("91% / 100%");
     // 条契约不破
     expect(wrap.querySelector(".progress")).toBeTruthy();
@@ -189,6 +190,7 @@ describe("QuotaMeter 排版变体(layout prop, t_35ff3c1f 容器层组合)", () 
     // 四元素 slot 全部还在(排版只重排, 不删数据)
     expect(wrap.querySelector(".quota-title")!.textContent).toBe("OpenCode 5 小时窗");
     expect(wrap.querySelector(".quota-reset")!.textContent).toBe("即将重置");
+    // row 排版: 用量行保留 usageText 完整文案「40% / 100%」(非 micro, 不走短格式)
     expect(wrap.querySelector(".quota-usage")!.textContent).toBe("40% / 100%");
     expect(wrap.querySelector(".progress")).toBeTruthy();
   });
@@ -229,6 +231,71 @@ describe("QuotaMeter 排版变体(layout prop, t_35ff3c1f 容器层组合)", () 
     expect(wrap.textContent).toBe("");
     expect(wrap.classList.contains("quota-meter--instance")).toBe(false);
     expect(wrap.classList.contains("quota-meter--layout-hero")).toBe(false);
+  });
+
+  // ---- micro 排版短格式(用户 9/7 拍板, t_f7d1beeb): quota-usage 只显百分比 NN%,
+  // 不走 usageText 长文案(其他 layout 仍走原样); 缺 used/limit 不渲染 quota-usage 不变
+  it("micro + percent 单位 → 用量行仅显示 NN%(短格式, 不带单位标签/不用 usageText)", () => {
+    render(
+      <QuotaMeter pct={0.49} layout="micro" title="Kimi" resetText="3.4 天后重置" used={49} limit={100} unit="percent" />,
+    );
+    const wrap = container.querySelector("[data-testid='quota-meter']")!;
+    expect(wrap.getAttribute("data-layout")).toBe("micro");
+    // 短文本 = "49%", 绝不带 " / 100%" 或 "(49%)"
+    expect(wrap.querySelector(".quota-usage")!.textContent).toBe("49%");
+    // 重置时间 + 条契约不破
+    expect(wrap.querySelector(".quota-reset")!.textContent).toBe("3.4 天后重置");
+    expect(wrap.querySelector(".progress")).toBeTruthy();
+  });
+
+  it("micro + requests 单位 → 用量行仍仅显示 NN%(短格式对所有 unit 一致)", () => {
+    render(
+      <QuotaMeter pct={0.49} layout="micro" title="OpenCode" resetText="5 小时后重置" used={960} limit={1200} unit="requests" />,
+    );
+    const wrap = container.querySelector("[data-testid='quota-meter']")!;
+    // 即便 unit=requests(requests 完整文案应为 "960 / 1200 次 (80%)"), micro 只显 "49%"
+    expect(wrap.querySelector(".quota-usage")!.textContent).toBe("49%");
+  });
+
+  it("micro 浮点尾差: 0.799 → '80%'(整数%, 与 pct 取整逻辑一致)", () => {
+    render(
+      <QuotaMeter pct={0.799} layout="micro" title="x" used={799} limit={1000} unit="requests" />,
+    );
+    expect(container.querySelector(".quota-usage")!.textContent).toBe("80%");
+  });
+
+  it("micro 缺 used/limit → 不渲染 quota-usage(行为不变)", () => {
+    render(<QuotaMeter pct={0.49} layout="micro" title="Kimi" resetText="3.4 天后重置" />);
+    const wrap = container.querySelector("[data-testid='quota-meter']")!;
+    expect(wrap.querySelector(".quota-usage")).toBeNull();
+    // title + reset + bar 仍在
+    expect(wrap.querySelector(".quota-title")!.textContent).toBe("Kimi");
+    expect(wrap.querySelector(".quota-reset")!.textContent).toBe("3.4 天后重置");
+  });
+
+  it("非 micro layout(row/duo/hero/ticker) + 任一 unit → 用量行仍走 usageText 完整文案(micro 短格式仅限 micro)", () => {
+    const cases: Array<{ layout: typeof LAYOUTS[number]; expected: string; used: number; limit: number; unit: "percent" | "requests" }> = [
+      { layout: "row",     used: 40, limit: 100, unit: "percent",  expected: "40% / 100%" },
+      { layout: "duo",     used: 80, limit: 100, unit: "percent",  expected: "80% / 100%" },
+      { layout: "hero",    used: 49, limit: 100, unit: "percent",  expected: "49% / 100%" },
+      { layout: "ticker",  used: 960, limit: 1200, unit: "requests", expected: "960 / 1200 次 (80%)" },
+    ];
+    for (const c of cases) {
+      freshRender(
+        <QuotaMeter
+          pct={c.used / c.limit}
+          layout={c.layout}
+          title="x"
+          resetText="r"
+          used={c.used}
+          limit={c.limit}
+          unit={c.unit}
+        />,
+      );
+      const wrap = container.querySelector("[data-testid='quota-meter']")!;
+      expect(wrap.getAttribute("data-layout")).toBe(c.layout);
+      expect(wrap.querySelector(".quota-usage")!.textContent).toBe(c.expected);
+    }
   });
 
   it("DOM slots 顺序不变(排版差异全在 CSS 容器层 grid-area 重排)", () => {
