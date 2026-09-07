@@ -1,4 +1,5 @@
-// t_73c110ea 截图脚本 — 3 排版 × 3 主题 × 360×600 视口
+// t_73c110ea + t_5b092750 截图脚本 — 4 排版 × 3 主题 × 360×600 视口
+// t_5b092750 9/7 加 P5(短窗并排): 5h+周两列 grid, 月独占一行全宽
 // 不依赖 e2e fixtures，直接走 vite dev URL + 同序列 UI 步骤
 // 主题切换: localStorage token-wallet.theme.v1 + token-wallet.glass.v1(theme.ts 实际键名)
 // 修订 #1116: 三窗 QuotaMeter(layout=micro) 常驻直显, 不再挂 BarRowTooltip
@@ -50,7 +51,7 @@ async function main() {
     const htmlTheme = await page.evaluate(() => document.documentElement.dataset.theme);
     console.log(`[${theme.name}] html data-theme = ${htmlTheme}`);
     // 5. 各排版段截图
-    const schemes = ["p1", "p2", "p4", "abn"];
+    const schemes = ["p1", "p2", "p4", "p5", "abn"];
     for (const key of schemes) {
       const section = page.getByTestId(`qvar-cards3-${key}`);
       await section.scrollIntoViewIfNeeded();

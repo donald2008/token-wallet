@@ -6,7 +6,7 @@ import {
 import type { Metric } from "../types";
 
 /**
- * QuotaGallery — Provider 卡片排版方案对比页(t_73c110ea 9/7 重建)
+ * QuotaGallery — Provider 卡片排版方案对比页(t_73c110ea 9/7 重建, t_5b092750 9/7 加 P5)
  *
  * 用户拍板(9/7) + 修订 #1116(覆盖卡体原文):
  *  - 上一轮 4 方案(S1-S4→d304801/279858d→4×`ProviderCardVariants`)作废——
@@ -14,16 +14,17 @@ import type { Metric } from "../types";
  *  - 卡体「QuotaMeter(layout=row) 常驻直显」作废 → 卡内窗口展示 = 悬浮窗内那个 QuotaMeter
  *    组件 = layout="micro" 紧凑竖排形态(title+bar+(usage|reset) 三层 grid, 4px 条, font-10)
  *  - 本轮清空重建:
- *    * 3 方案差异建立在**真排版维度**(卡头 vs 三窗的空间关系/信息层级/密度)
+ *    * 4 方案差异建立在**真排版维度**(卡头 vs 三窗的空间关系/信息层级/密度/短窗并排)
  *    * **三窗 QuotaMeter(layout=micro) 常驻直显** = 卡片信息主体(无 hover 依赖)
  *    * 不再单独挂 <BarRowTooltip>: micro 常驻直接展开, 信息全靠悬浮才见 = 不合格
+ *  - t_5b092750 9/7 加 P5(短窗并排): 5h+周同窗两列 grid, 月独占一行全宽 — token-monitor 布局
  *  - 不接 IPC; 用同一套真实数据三窗(rolling_5h + weekly + monthly, kimi-code, unit=requests)
  *
  * 本页结构(自上而下):
  *   1. settings-head: 标题 + 返回钮
  *   2. settings-body:
  *      - subtitle 提示(数据契约 + 三窗 micro 常驻硬约束)
- *      - 3 个排版段(qvar-cards3-p1/p2/p4), 每段一张 ok 卡, **同一套数据**
+ *      - 4 个排版段(qvar-cards3-p1/p2/p4/p5), 每段一张 ok 卡, **同一套数据**
  *      - 异常段(qvar-cards3-abn): auth_expired + error 共用 AbnormalBody 骨架
  *      - 图例段: 健康三色
  *
@@ -32,7 +33,7 @@ import type { Metric } from "../types";
  */
 export function QuotaGallery({ onBack }: { onBack: () => void }) {
   const { ok, auth, error } = getProviderCardMockProviders();
-  // 3 方案段都用同一份 ok 数据(同 ProviderSnapshot, 三窗齐全); abnormal 标记 = false
+  // 4 方案段都用同一份 ok 数据(同 ProviderSnapshot, 三窗齐全); abnormal 标记 = false
   const cards = ok.metrics as Metric[];
 
   return (
@@ -47,7 +48,7 @@ export function QuotaGallery({ onBack }: { onBack: () => void }) {
       <div className="settings-body">
         <p className="hint">{t("quota.subtitle")}</p>
 
-        {/* 3 方案段: 同一套三窗真实数据, 卡头×三窗空间关系各异 */}
+        {/* 4 方案段: 同一套三窗真实数据, 卡头×三窗空间关系各异 */}
         {PROVIDER_CARD_LAYOUTS.map((v) => (
           <section
             className="qvar"

@@ -2014,6 +2014,33 @@ body {
   flex-direction: column;
   gap: var(--space-4);
 }
+/* ============ P5 · 短窗并排(t_5b092750 用户 9/7 拍板) ============
+ * 数据契约: rolling_5h + weekly 同窗两列 grid, monthly 独占下一行全宽。
+ * gap 走 8px 网格(--space-8 = 8px); 列内复用 layout="micro" QuotaMeter。
+ * 360px 硬门槛: 与 P3 三列 grid 不同, 两列各 ~144px, 列内 micro title+bar+(usage|reset) grid
+ * 装得下, 无文字重叠 / 无裁切(月独占一行全宽更宽裕)。
+ * --wide 修饰符覆盖默认两列, 让月窗独占一行横铺(grid-column 1/-1)。
+ *
+ * P5 双列窄列文字收紧(局部 override, 不动 micro 本体契约):
+ * light 主题 360px 下 5h 列宽 ~144px, micro 自身 nowrap quota-usage 文字
+ * (中文「960 / 1200 次 (80%)」font-10 粗体) 撑满 + quota-reset 「×小时」会撞字。
+ * 仅在 P5 双列容器内允许 quota-usage 在窄列下拆字换行, 单窗全宽行不受影响。 */
+.qcard3-windows-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-8);
+}
+.qcard3-windows-row + .qcard3-windows-row {
+  margin-top: var(--space-4); /* 行间 4px 节奏(同 .qcard3-windows gap) */
+}
+.qcard3-windows-row--wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+.qcard3-windows-row:not(.qcard3-windows-row--wide) .quota-meter--layout-micro .quota-usage {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
 /* qcard3 内 .bar-row 的 tooltip 浮于卡之上不溢出 panel(t_23800bd4 主页契约):
  * 沿用既有 .bar-row + .bar-tooltip 契约(见 app.css 上方 .bar-row / .bar-tooltip);
  * 仅在 qcard3 首行改为向下弹出(避免顶部裁剪, 与 bars 模板首行同规)。
