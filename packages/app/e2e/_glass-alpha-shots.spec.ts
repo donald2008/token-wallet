@@ -2,9 +2,10 @@ import { expect as pwExpect, type Page } from "@playwright/test";
 import { test } from "./fixtures";
 
 /**
- * t_c20d4d11 9/7 round-2(B3): 玻璃透明度滑槽三主题 × 三档 截图(360×720 panel view).
+ * t_c20d4d11 9/7 round-3(B3-2): 玻璃透明度滑槽三主题 × 三档 截图(360×720 panel view).
+ * round-3 起弹窗 portal 到 body 顶层(modal backdrop-filter 生效), 15% 档可读性已修复.
  *
- * 输出: verification/glass-alpha-round2/{dark,light}-glass-{default,50pct,15pct}.png 共 6 张.
+ * 输出: verification/glass-alpha-round3/{dark,light}-glass-{default,50pct,15pct}.png 共 6 张.
  * 跑法(单跑): pnpm exec playwright test e2e/_glass-alpha-shots.spec.ts
  */
 const SHOTS: Array<["dark" | "light", number, string]> = [
@@ -49,7 +50,7 @@ for (const [theme, alpha, label] of SHOTS) {
   test(`glass alpha shot: ${theme}-glass @ ${label}`, async ({ page }) => {
     await setupShot(page, theme, alpha);
     await page.screenshot({
-      path: `verification/glass-alpha-round2/${theme}-glass-${label}.png`,
+      path: `verification/glass-alpha-round3/${theme}-glass-${label}.png`,
       fullPage: false,
     });
   });
