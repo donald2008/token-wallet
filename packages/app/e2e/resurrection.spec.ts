@@ -67,6 +67,8 @@ async function deleteProviderCard(page: import("@playwright/test").Page, provide
   const card = page.locator(`[data-testid="provider-card"][data-provider="${providerId}"]`);
   await pwExpect(card).toHaveCount(1);
   await card.hover();
+  // 修订 H: hover 右上角热区(.card-del-zone)才能让删钮浮出
+  await card.locator(".card-del-zone").hover();
   await card.getByTestId(`card-del-${providerId}`).click();
   await card.getByTestId(`card-confirm-del-${providerId}`).click();
   await pwExpect(card).toHaveCount(0, { timeout: 10_000 });

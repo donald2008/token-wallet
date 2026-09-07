@@ -88,7 +88,8 @@ test("P1 头: handle+name+StatusDot+状态徽章 三件套一行, 删除钮仍�
   await pwExpect(head.locator(".status-dot")).toHaveCount(1); // P1 新增
   await pwExpect(head.locator(".card-status-text").first()).not.toBeEmpty(); // 状态徽章
   // 删除钮: 需 hover 卡片才能 visibility:opacity 1(D-038 opacity 0 默认态)
-  await card.hover();
+  // 修订 H: 改 hover 右上角热区 .card-del-zone 才让按钮浮出
+  await card.locator(".card-del-zone").hover();
   await pwExpect(card.locator('[data-testid="card-del-inst-oc-1"]')).toBeVisible();
 });
 

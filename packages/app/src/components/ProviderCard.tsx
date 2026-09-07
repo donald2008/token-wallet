@@ -362,6 +362,13 @@ export function ProviderCard({
         <StatusDot health={health} size={8} />
         <span className={`card-status-text text-${health}`} data-testid="card-status-badge">{statusBadge(p)}</span>
         {onDelete && !confirming && (
+          // t_433892c6 9/7 修订 H: 右上角 40×40 透明 hover 热区, hover 该区才让删除钮浮出;
+          // 默认 pointer-events:none 不挡卡内其他 hover(读数/拖拽), 与旧「整卡 hover 即显」误触断绝。
+          // 父 .card 已有 position:relative(用于 .card-confirm), 兄弟 ~ 选择器匹配 .card-del-btn。
+          // 故意不带 data-testid(避免污染 e2e 的 [data-testid^="card-del-"] 选择器, 该选择器只指按钮本体)。
+          <div className="card-del-zone" aria-hidden="true" />
+        )}
+        {onDelete && !confirming && (
           <button
             type="button"
             className="btn btn-icon btn-danger card-del-btn"

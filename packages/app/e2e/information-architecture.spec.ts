@@ -172,11 +172,11 @@ test("卡内删除: hover 淡入 → 取消保留 → 确认删除(清钥匙串 
   const cardA = cards.filter({ hasText: "DeepSeek-按量 #1" });
   const delA = cardA.getByTestId("card-del-inst-a");
 
-  // 未 hover 卡片 → 删除钮淡出(opacity 0, 不占常态视觉)
+  // 未 hover 卡片/热区 → 删除钮淡出(opacity 0, 不占常态视觉)
   await page.mouse.move(2, 2);
   await pwExpect(delA).toHaveCSS("opacity", "0");
-  // hover 卡片 → 淡入
-  await cardA.hover();
+  // hover 右上角热区(.card-del-zone) → 删除钮淡入(修订 H: 不再依赖整卡 hover)
+  await cardA.locator(".card-del-zone").hover();
   await pwExpect(delA).toHaveCSS("opacity", "1");
 
   // 点删除 → 确认气泡(含取消); 取消 → 卡片保留, 库未动
@@ -190,7 +190,7 @@ test("卡内删除: hover 淡入 → 取消保留 → 确认删除(清钥匙串 
   pwExpect(await mockSqliteProviderIds(page)).toContain("inst-a");
 
   // 再删一次 → 确认 → 卡片消失(仅剩 B)
-  await cardA.hover();
+  await cardA.locator(".card-del-zone").hover();
   await cardA.getByTestId("card-del-inst-a").click();
   await cardA.getByTestId("card-confirm-del-inst-a").click();
   await pwExpect(cards).toHaveCount(1, { timeout: 10_000 });
