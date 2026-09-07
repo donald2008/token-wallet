@@ -393,8 +393,13 @@ body {
   position: absolute;
   /* 修订 H fix final: 把按钮 padding 加大到 16px, 配合 ::before 伪元素做"热区扩展",
    * hover 按钮或热区都显示按钮; 默认 visibility:hidden 脱离 hit-test tree, 浮出后
-   * z-index:2 + visibility:visible 不被任何元素拦截。e2e `card.del-btn.hover()`
-   * 命中按钮本身(默认 hit-test), 然后 click 立即命中。 */
+   * z-index > 热区(>3) 不被任何元素拦截。e2e card.del-btn.hover() 命中按钮本身,
+   * 然后 click 立即命中。
+   *
+   * t_433892c6 review fix B-1: 按钮 z-index 4 > 热区 z-index 3, 让按钮天然浮在透明热区之上,
+   * 不依赖 .card:has(.card-del-btn:hover) .card-del-zone pointer-events:none 让位契约
+   * (hover 按钮时按钮 visibility:hidden 还没脱 hit-test, has() 检测不到 hover, 让位失效,
+   * 透明热区仍 intercept pointer → click 拦截 timeout)。直接抬升 z-index 是 CSS 单行修复。 */
   top: 0;
   right: 0;
   padding: var(--space-16);
@@ -402,9 +407,14 @@ body {
   background: transparent;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.15s ease, visibility 0s linear 0.15s;
-  z-index: 2;
+  transition: opacity 0.15s ease, visibility 0s linear 0s;
+  z-index: 4;
   cursor: pointer;
+  /* t_433892c6 review fix B-1 续: 按钮 z-index 高于热区后, 默认还得 pointer-events:none
+   * 才能让 .card-del-zone 接到 hover 触发 .card-del-btn 浮出; 否则 button 一直在 z=4
+   * 占着 hit-test, zone 永远 hover 不到 → 按钮永远 visibility:hidden。
+   * hover/focus-within/focus-visible 触发态时切回 auto 接收 click。 */
+  pointer-events: none;
 }
 /* 按钮内的 svg 容器(原 padding=4 的 24×24 盒), 用 negative inset 居中到 40×40 热区中心 */
 .card-del-btn > svg,
@@ -416,6 +426,7 @@ body {
 .card-del-btn:focus-visible {
   opacity: 1;
   visibility: visible;
+  pointer-events: auto;
   transition: opacity 0.15s ease, visibility 0s linear 0s;
 }
 .card-del-btn:hover {
