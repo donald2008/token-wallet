@@ -400,21 +400,18 @@ body {
    * 不依赖 .card:has(.card-del-btn:hover) .card-del-zone pointer-events:none 让位契约
    * (hover 按钮时按钮 visibility:hidden 还没脱 hit-test, has() 检测不到 hover, 让位失效,
    * 透明热区仍 intercept pointer → click 拦截 timeout)。直接抬升 z-index 是 CSS 单行修复。 */
-  top: 0;
+  top: 32px;
   right: 0;
   padding: var(--space-16);
   border-color: transparent;
   background: transparent;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.15s ease, visibility 0s linear 0s;
+  /* default pointer-events:none, 触发态切回 auto 接 click */
+  pointer-events: none;
+  transition: opacity 0.15s ease;
   z-index: 4;
   cursor: pointer;
-  /* t_433892c6 review fix B-1 续: 按钮 z-index 高于热区后, 默认还得 pointer-events:none
-   * 才能让 .card-del-zone 接到 hover 触发 .card-del-btn 浮出; 否则 button 一直在 z=4
-   * 占着 hit-test, zone 永远 hover 不到 → 按钮永远 visibility:hidden。
-   * hover/focus-within/focus-visible 触发态时切回 auto 接收 click。 */
-  pointer-events: none;
 }
 /* 按钮内的 svg 容器(原 padding=4 的 24×24 盒), 用 negative inset 居中到 40×40 热区中心 */
 .card-del-btn > svg,
@@ -445,15 +442,35 @@ body {
  * button 永远 visibility:hidden → Playwright .card-del-btn.hover() timeout。
  * 改 zone 默认 none: 鼠标穿透到 z=4 button → button :hover 触发自身 visibility:visible。
  * zone :hover 仍保留接 hover 触发 (~ 选择器)。 */
+/* t_433892c6 review fix B-1 final (round 3): zone 几何避开 card-head flex 区域。
+ *
+ * 历史死锁分析:
+ * - zone 40×40 top:0 right:0 与 card-head(handle+name+status badge)inline flex 在右上角重叠,
+ *   hover zone 命中 status badge span → zone 不在 :hover → ~ 不触发 → 死锁(reviewer 1167 +
+ *   round 2 comment #1172 实证)。playwright `card-del-zone.hover()` 命中 status badge
+ *   element = "intercepts pointer events"。
+ * - button 默认 visibility:hidden(z=4)脱 hit-test, 鼠标穿透到 status badge(z=auto, inline)。
+ * - :has() 让位契约结构死锁(reviewer 1169 确认)。
+ *
+ * 修复: zone 移到 card-head 之下(top:32px, 越过 card-head 高度), width/height 扩到 48×48
+ * 包含 button 40×40 + 8px 外圈, pointer-events:auto 接 hover, z-index:3 高于 status
+ * badge 默认 auto + 高于 button 默认 visibility:hidden。e2e `card-del-zone.hover()` 鼠标
+ * 移到 zone 中心 (top:56px right:24px) = 跳过 status badge + 不与 button 40×40 重叠
+ * (button top:0 right:0 中心 (top:20 right:20) 在 zone 之外)。
+ *
+ * 真实用户路径: 鼠标从卡内移到右上半区(card-head 下沿), 自然先经过 zone 48×48 外圈
+ * → zone :hover ~ .card-del-btn 切 visibility:visible → 鼠标进 button 40×40 中心
+ * (top:20 right:20) 命中 button → click OK。
+ */
 .card-del-zone {
   position: absolute;
-  top: 0;
+  top: 32px;
   right: 0;
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   background: transparent;
   z-index: 3;
-  pointer-events: none;
+  pointer-events: auto;
 }
 .card-del-zone:hover ~ .card-del-btn {
   opacity: 1;

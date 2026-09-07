@@ -331,9 +331,10 @@ describe("卡内删除 CSS 契约(D-038)", () => {
     expect(css).toMatch(/\.card-del-btn:hover[\s\S]*?pointer-events:\s*auto/);
     // 按钮自身 hover 也触发显示(契约 self-hover)
     expect(css).toMatch(/\.card-del-btn:hover[\s\S]*?opacity:\s*1/);
-    // 热区选择器存在(透明 40×40 锚定卡右上角)
-    expect(ruleBlock(".card-del-zone")).toContain("width: 40px");
-    // 让位契约仍保留作为 :has() 浏览器降级兜底(Chrome 105+/Safari 15.4+/FF 121+)
+    // 热区选择器存在(48×48 锚定卡头部下方, 避开 card-head inline flex 重叠)
+    expect(ruleBlock(".card-del-zone")).toContain("width: 48px");
+    // 热区 pointer-events:auto 接 hover
+    expect(ruleBlock(".card-del-zone")).toContain("pointer-events: auto");
     expect(css).toContain(".card:has(.card-del-btn:hover) .card-del-zone");
     expect(css).toContain(".card:has(.card-del-btn:focus-visible) .card-del-zone");
   });
