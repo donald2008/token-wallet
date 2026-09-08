@@ -173,6 +173,10 @@ export class RuntimeEngine {
         id: inst.id,
         kind: "http",
         intervalMs: parsePollIntervalMs(inst.poll_interval),
+        // t_034a6e81 火山自撞锁修: 与 command 通道契约统一, 透传 channel 让 scheduler 串行。
+        // 9/7 当前未观测到 http 通道出现 SSO/进程互斥锁活锁(无需互斥锁的协议 = 串行只是无害开销);
+        // 若未来实测到同 channel 多 http 实例撞锁, 此处契约已就位, 无需再改。
+        channel: inst.channel,
         fetch: async (ctx) => {
           const adapterCtx: AdapterContext = {
             signal: ctx.signal,
@@ -219,6 +223,9 @@ export class RuntimeEngine {
       id: inst.id,
       kind: "command",
       intervalMs: parsePollIntervalMs(inst.poll_interval),
+      // t_034a6e81 火山自撞锁修: command 通道同 channel 多实例串行 —— 杜绝 arkcli/bl 内部 SSO 互撞锁
+      // (用户复报「还是 SSO 刷新中」根因: N 个 arkcli 同时刷 SSO, 内部进程锁互斥; 串行后零撞)
+      channel: inst.channel,
       fetch: async (ctx) => {
         // t_5b52b633 兜底: command 桥/适配器意外抛错 → 显式 error 快照(不静默蒸发)
         let snap: Awaited<ReturnType<typeof commandRun>>;
@@ -338,6 +345,15 @@ export class RuntimeEngine {
   /** 手动刷新 = 触发所有实例立即同步(§3.1) */
   refreshAll(): Promise<void> {
     return this.scheduler.refreshAll();
+  }
+
+  /**
+   * t_034a6e81 Bug1 修: 单实例手动刷新 —— 授权完成点"已授权"按钮 = 重新采集该 provider。
+   * 透出 scheduler.refresh(id), 用于 ProviderCard 的 OneClickAuth done 态按钮 onClick。
+   * 同 channel 多实例在此处由 scheduler 内部串行(防自撞锁), 与 refreshAll 共享同一保护机制。
+   */
+  refresh(id: string): Promise<void> {
+    return this.scheduler.refresh(id);
   }
 
   /**

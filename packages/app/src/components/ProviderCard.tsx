@@ -80,7 +80,7 @@ export function extractCliFromHint(hint: string): string {
   return cmd.trim().split(/\s+/)[0] ?? "";
 }
 
-function OneClickAuth({ hint }: { hint: string }) {
+function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerId: string; onRefresh?: (id: string) => void }) {
   const [stage, setStage] = useState<"idle" | "starting" | "waiting" | "done" | "error">("idle");
   const [finishMode, setFinishMode] = useState<"code" | "callback" | undefined>(undefined);
   const [sessionId, setSessionId] = useState("");
@@ -157,7 +157,12 @@ function OneClickAuth({ hint }: { hint: string }) {
           type="button"
           className="btn btn-sm oneclick-auth-btn"
           data-testid="oneclick-auth-btn"
-          onClick={onStart}
+          // t_034a6e81 Bug1 修: done 态点击 = 触发该卡刷线(重新采集), 不再走 onStart(避免又开授权页)。
+          // onRefresh 未传(mock 预览卡) → done 态按钮禁用, 提示预览卡不可刷新(照 onDelete 不渲染的"不给可点但无效的按钮"精神)
+          onClick={stage === "done" ? () => onRefresh?.(providerId) : onStart}
+          disabled={stage === "done" && !onRefresh}
+          title={stage === "done" && !onRefresh ? t("card.authDonePreviewTitle") : undefined}
+          aria-label={stage === "done" && !onRefresh ? t("card.authDonePreviewAria") : undefined}
         >
           {stage === "done" ? t("card.authDone") : t("card.authStart")}
         </button>
@@ -274,7 +279,7 @@ function agoText(fetchedAt: number): string {
  * - stale / unsupported: 灰
  * - error: 红
  */
-function AbnormalBody({ p }: { p: ProviderSnapshot }) {
+function AbnormalBody({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: string) => void }) {
   const health = providerHealth(p);
   return (
     <div className="abnormal-body" data-testid="abnormal-body">
@@ -292,7 +297,7 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
           {/* t_66b67453 契约4: 一键复制授权命令(反引号内完整原文), 免手抄易错 */}
           <HintCopyButton hint={p.setup_hint} />
           {/* t_fb8c44d8: command 通道一键授权 — 自动开浏览器 + 粘贴 code 回喂, 消灭开终端 */}
-          <OneClickAuth hint={p.setup_hint} />
+          <OneClickAuth hint={p.setup_hint} providerId={p.provider_id} onRefresh={onRefresh} />
         </div>
       )}
       <div className="card-error-note">
@@ -318,6 +323,7 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
 export function ProviderCard({
   p,
   onDelete,
+  onRefresh,
   dragHandle,
   dragging = false,
   dragDy = 0,
@@ -325,6 +331,8 @@ export function ProviderCard({
   p: ProviderSnapshot;
   /** 传入即渲染卡内删除钮(仅真实实例); 参数 = provider_id(= 实例 id) */
   onDelete?: (id: string) => void;
+  /** t_034a6e81 Bug1 修: 已授权态点击 = 该卡刷线; 未传(mock 预览卡)时 done 态按钮禁用(不给可点但无效的按钮) */
+  onRefresh?: (id: string) => void;
   /** D-039 拖动手柄绑定(pointer 事件, 由 App useCardDragSort 提供); 传入即色块可拖 */
   dragHandle?: DragHandleProps;
   /** D-039 该卡正在被拖动(浮起视觉) */
@@ -416,7 +424,7 @@ export function ProviderCard({
           </span>
         )}
       </div>
-      {p.status === "ok" ? <Template p={p} /> : <AbnormalBody p={p} />}
+      {p.status === "ok" ? <Template p={p} /> : <AbnormalBody p={p} onRefresh={onRefresh} />}
     </section>
   );
 }

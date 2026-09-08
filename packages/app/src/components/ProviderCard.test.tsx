@@ -1,11 +1,32 @@
 // @vitest-environment jsdom
 // L1 组件级断言(t_553dcb5a): 徽章文字 = statusBadge(原因), 颜色 = providerHealth(不变)。
 // 同一快照渲染后 data-health 与 text-* class 必须与健康度一致 —— 只改文字, 不改颜色。
+//
+// t_034a6e81 Bug1 修: OneClickAuth done 态点击 = onRefresh(不再走 onStart) 的真流程断言
+// —— vi.mock 替换 ipc 的 commandAuthStart/Finish, 走完 callback 模式(浏览器授权自动收 code)
+// 让 stage 推进 idle→starting→waiting→done, 再 fireEvent click 已授权按钮断言 onRefresh 被调。
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// t_034a6e81 Bug1: 模块级 vi.mock 替换 ipc, 让 OneClickAuth 走完 callback 流程到 done 态。
+// 本文件其它 describe 段(徽章/删除/setup_hint 复制)不依赖 ipc, 替换无害。
+// 复用一组 vi.fn + beforeEach 重置, 跨用例统计 commandAuthStart 次数
+// (反证 done 态点击不再调 onStart → 不再起 commandAuthStart)。
+// 签名用宽松类型透传(ProviderCard 调用面是 string / sessionId+code),
+// ts 端用 .mock.calls 读 call 列表, 不参与编译期类型推断。
+// 关键: vi.mock 工厂里要写"真函数"形态, 内部委托到 vi.fn(否则 vitest 类型校验不过)。
+const commandAuthStartImpl = vi.fn();
+const commandAuthFinishImpl = vi.fn();
+const commandAuthCancelImpl = vi.fn(async (_sessionId: string) => ({ ok: true }));
+vi.mock("../ipc", () => ({
+  commandAuthStart: (cli: string) => commandAuthStartImpl(cli),
+  commandAuthFinish: (sessionId: string, code: string) => commandAuthFinishImpl(sessionId, code),
+  commandAuthCancel: (sessionId: string) => commandAuthCancelImpl(sessionId),
+}));
+
 import { providerHealth, statusBadge } from "../health";
 import type { HealthLevel, Metric, ProviderSnapshot, ProviderStatus } from "../types";
 import { ProviderCard } from "./ProviderCard";
@@ -48,9 +69,13 @@ afterEach(() => {
   container.remove();
 });
 
-function renderCard(p: ProviderSnapshot, onDelete?: (id: string) => void): HTMLElement {
+function renderCard(
+  p: ProviderSnapshot,
+  onDelete?: (id: string) => void,
+  onRefresh?: (id: string) => void,
+): HTMLElement {
   act(() => {
-    root.render(<ProviderCard p={p} onDelete={onDelete} />);
+    root.render(<ProviderCard p={p} onDelete={onDelete} onRefresh={onRefresh} />);
   });
   return container.querySelector<HTMLElement>('[data-testid="provider-card"]')!;
 }
@@ -299,7 +324,105 @@ describe("主页 P1 形态头部(9/7 用户拍板)", () => {
   });
 });
 
-// ---- CSS 契约: hover 淡入 + 气泡浮层(不挤压 360px 卡头) ----
+// ---- t_034a6e81 Bug1 修: OneClickAuth done 态点击 = onRefresh(不再走 onStart) ----
+// 真流程断言: vi.mock ipc 走完 callback 模式(stage 推进 idle→starting→waiting→done),
+// 然后 fireEvent click 已授权按钮, 断言 onRefresh 被调(commandAuthStart 调用次数未增)。
+describe("OneClickAuth done 态 = 刷线 + 预览卡禁用(t_034a6e81 Bug1 修)", () => {
+  const hint = "请运行 `bl auth login --console` 重新授权";
+
+  beforeEach(() => {
+    commandAuthStartImpl.mockReset();
+    commandAuthFinishImpl.mockReset();
+  });
+
+  /** 走完 callback 模式让 stage=done: 返 ok+callback, 后台 finish 也返 ok */
+  function mockCallbackSuccess(): void {
+    commandAuthStartImpl.mockResolvedValue({
+      ok: true,
+      sessionId: "s1",
+      url: "https://oauth.local/device",
+      finishMode: "callback",
+    });
+    commandAuthFinishImpl.mockResolvedValue({ ok: true, message: "" });
+  }
+
+  /** 一次性 flush 多次 microtask 直到 setStage("done") 真正落到 DOM */
+  async function flushUntilDone(): Promise<void> {
+    // callback 模式链路: click idle → setStage("starting") → commandAuthStart.then
+    //   → setStage("waiting") + 同步发起 commandAuthFinish → 后者.then → setStage("done")
+    // 至少 4 轮 microtask 推进
+    for (let i = 0; i < 6; i++) {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    }
+  }
+
+  it("idle → 一键授权 → 走完 callback 链路 → done 态按钮 = 「已授权」", async () => {
+    mockCallbackSuccess();
+    const card = renderCard({ ...snap("auth_expired"), setup_hint: hint }, () => {}, () => {});
+    const btn = card.querySelector<HTMLButtonElement>('[data-testid="oneclick-auth-btn"]')!;
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toBe("一键授权");
+
+    // 点 idle 按钮触发 onStart
+    click(btn);
+    await flushUntilDone();
+
+    // 链路走完 → stage=done → 按钮文案 = 「已授权」
+    const doneBtn = card.querySelector<HTMLButtonElement>('[data-testid="oneclick-auth-btn"]')!;
+    expect(doneBtn).toBeTruthy();
+    expect(doneBtn.textContent).toBe("已授权 ✓");
+    // commandAuthStart 被调 1 次(idle 那次), commandAuthFinish 也被调 1 次(callback 自动收)
+    expect(commandAuthStartImpl).toHaveBeenCalledTimes(1);
+    expect(commandAuthFinishImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("done 态点击已授权按钮 → onRefresh(provider_id) 被调 1 次, commandAuthStart 不增", async () => {
+    mockCallbackSuccess();
+    const refreshed: string[] = [];
+    const card = renderCard(
+      { ...snap("auth_expired"), setup_hint: hint },
+      () => {},
+      (id) => refreshed.push(id),
+    );
+
+    // 走完 callback 链路进入 done
+    click(card.querySelector('[data-testid="oneclick-auth-btn"]'));
+    await flushUntilDone();
+
+    // 此时按钮已是 done 态, 点击应触发 onRefresh(不再走 onStart)
+    const doneBtn = card.querySelector<HTMLButtonElement>('[data-testid="oneclick-auth-btn"]')!;
+    expect(doneBtn.textContent).toBe("已授权 ✓");
+    const beforeStartCalls = commandAuthStartImpl.mock.calls.length;
+    expect(beforeStartCalls).toBe(1); // 链路已调一次
+
+    click(doneBtn);
+
+    // 核心断言: onRefresh 被调一次且参数 = provider_id(由 snap("auth_expired") 给 "kimi-code")
+    expect(refreshed).toEqual(["kimi-code"]);
+    // 反证: done 态点击**不**再调 commandAuthStart(原 Bug 现象: 已授权态点击又开授权页)
+    expect(commandAuthStartImpl).toHaveBeenCalledTimes(beforeStartCalls);
+  });
+
+  it("预览卡未传 onRefresh → 走完 callback 链路后 done 态按钮 disabled + 提示文案", async () => {
+    mockCallbackSuccess();
+    const card = renderCard({ ...snap("auth_expired"), setup_hint: hint }, () => {});
+
+    // 走完 callback 链路进入 done(不传 onRefresh)
+    click(card.querySelector('[data-testid="oneclick-auth-btn"]'));
+    await flushUntilDone();
+
+    const doneBtn = card.querySelector<HTMLButtonElement>('[data-testid="oneclick-auth-btn"]')!;
+    expect(doneBtn.textContent).toBe("已授权 ✓");
+    // 预览卡 done 态按钮禁用(不给用户可点但无效的按钮)
+    expect(doneBtn.disabled).toBe(true);
+    // 提示文案: title + aria-label
+    expect(doneBtn.getAttribute("title")).toBe("预览卡不可刷新(仅真实实例可点)");
+    expect(doneBtn.getAttribute("aria-label")).toBe("已授权 - 预览卡不可刷新");
+  });
+});
 describe("卡内删除 CSS 契约(D-038)", () => {
   const css = readFileSync(resolve(process.cwd(), "src/app.css"), "utf8");
 

@@ -290,6 +290,16 @@ function AppShell() {
   // 真实实例集合: 仅真实实例卡渲染删除钮(dev 场景 mock 预览卡不给无效按钮)
   const realInstanceIds = useMemo(() => new Set(instances.map((i) => i.id)), [instances]);
 
+  // t_034a6e81 Bug1 修: 真实实例卡在 auth_expired 状态下, "已授权"按钮点击 = 该卡刷线(重新采集),
+  // 不再误开授权页(原 onStart 走 commandAuthStart 又开浏览器)。
+  // mock 预览卡不给 onRefresh → ProviderCard 内部 OneClickAuth done 态按钮 disabled。
+  const onRefreshProvider = useCallback(
+    (id: string) => {
+      engine?.refresh(id);
+    },
+    [engine],
+  );
+
   // ESC 关闭模态(设置 / 添加向导)
   useEffect(() => {
     if (!settingsOpen && !addOpen) return;
@@ -396,6 +406,7 @@ function AppShell() {
                       key={p.provider_id}
                       p={p}
                       onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
+                      onRefresh={realInstanceIds.has(p.provider_id) ? onRefreshProvider : undefined}
                       dragHandle={makeHandleProps(p.provider_id)}
                       dragging={drag?.id === p.provider_id}
                       dragDy={drag ? drag.dy : 0}
