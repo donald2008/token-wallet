@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test --project=browser-only",
     "test": "vitest run",
-    "dist:win": "electron-builder --win nsis"
+    "dist:win": "node electron/scripts/dist-win.mjs"
   },
   "dependencies": {
     "@token-wallet/core": "workspace:*",
