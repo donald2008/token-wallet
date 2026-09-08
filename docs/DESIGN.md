@@ -1,7 +1,7 @@
 # token-wallet 设计文档
 
-版本: v0.1 (2026-08-27 定稿)
-状态: 待 P0 开工
+版本: v0.2.8 (2026-09-08 同步)
+状态: v0.2.8 UI 全线重构已合 master, P2 多通道适配器落地 (七通道全真数据), v0.2.x 自动更新链路就绪 (D-046)
 
 ## 1. 定位
 
@@ -442,13 +442,14 @@ Windows 人肉只留"桌面外壳本身"(安装/托盘/WebView2)。
 - CI: P0~P2 worker 内测; P4 上 gitee Actions/自建 runner 全自动
 - 测试矩阵详见根目录 `TESTING.md`
 
-## 11. 阶段划分(2026-09-01 对齐现状)
+## 11. 阶段划分(2026-09-08 对齐 v0.2.8 现状)
 
 | 阶段 | 内容 | 现状 |
 |------|------|------|
 | P0 | monorepo 骨架 + core(schema/缓存/调度/generic-http) + app(托盘+面板+bars/ticker+排序) + mock 适配器 + 首开向导 + 设置页 | ✅ 完成(壳经 E1 换 Electron, D-033) |
 | E1~E3 | 换壳 Electron(D-033) + 主进程服务接真(D-034 node:sqlite / D-042 command 桥) + Windows NSIS 打包(D-035) | ✅ 完成(2026-08-29~30, Windows 真机可装可用) |
 | P1 | 真实数据跑通(deepseek 起步) + 消耗速率/预计天数 + gauge/ring-stack/battery 模板 + 真机 UI 打磨迭代(v0.1.2→v0.1.4: 过滤 chips/logo 网格/滚动条重设计) | ✅ 完成 |
-| P2 | 多通道适配器落地: kimi-code / 方舟(arkcli) / 百炼(bl) / opencode-go / zai(D-041~D-045 全实测); **美团 LongCat 与 opencode zen 余额 → backlog** | ✅ 完成(2026-08-31 六通道真数据) |
+| P2 | 多通道适配器落地: kimi-code / 方舟(arkcli) / 百炼(bl) / opencode-go / zai(D-041~D-045 全实测); **美团 LongCat 与 opencode zen 余额 → backlog** | ✅ 完成(2026-08-31 六通道真数据; **v0.2.8 = 七通道全真数据 + 全 app 内一键授权**) |
+| P2.5 | 玻璃主题 + 透明度滑槽(D-053) + P5 主页短窗并排(D-049) + micro/duo/hero/ticker 排版变体(t_af01e265/t_35ff3c1f) + 手动拖拽排序收敛(D-039 + t_d086543b) + 卡 head 删钮 hover 激活(D-051) + OneClickAuth 完成态点击=刷线(D-048) + 火山 SSO 失效一键恢复(D-052) + 360×720 面板高度(t_27eeadad) + 中英双语(D-047) + 自动更新(D-046) | ✅ 完成(2026-09-08, v0.2.8 全线合 master) |
 | P3 | mcp-server 数据面 + LocalAgentAdapter + 云×本地对比行 + 通知(配置项) | ⏳ mcp-server 包骨架已建, local-agent 未接 |
-| P4 | 发布(README/截图 2026-09-01 就绪) + i18n(zh 先行) + updater(v0.2.0 目标) + 代码签名 + CI → GitHub 镜像 | ⏳ 门面就绪中 |
+| P4 | 代码签名(消除 SmartScreen) + CI 自动化 + GitHub 镜像同步 + macOS / Linux 安装包(代码层已兼容, 需真机验收) | ⏳ v0.2.8 仍无签名(预期); macOS / Linux 真机验收待发布 |
