@@ -51,20 +51,19 @@ export const ARK_PRODUCT = "coding-plan";
 /** 会话失效/未登录判别串(usage plan stderr body 与 auth status body 共用) */
 const AUTH_EXPIRED_PATTERNS = [
   "not configured",
-  // t_ee76442e: 删 "auth login" 串。原因: arkcli 撞锁 body 自带引导文案 `please run arkcli
-  // auth login volc-sso`, 命中该串会让纯并发锁竞争被误判为会话失效。判别精确化交给下方
-  // 三个新增的真 token 失效串(refresh_token is invalid / token 交换失败 / invalid_request)。
-  // 真「未登录从未配置」场景仍由 "not configured" + "not logged in" + "logged_in=false" 共同
-  // 覆盖(healthCheck 段独立用 JSON 字段判别)。
+  // 9/8 用户拍板(t_f261dadb): 「please run arkcli auth login」是 arkcli 自身引导用户重
+  // 新授权的文案, 命中即会话失效, 必走 auth_expired 走一键授权。上一轮担心该串会把纯
+  // 锁竞争误判为会话失效 —— 经用户实测推翻: 任何出现这条引导文案的 body 都是 SSO 凭据
+  // 过期/不一致/被吊销, 不是并发锁竞争。「请稍候自动重试」永远等不到, 只能 auth login。
+  "please run `arkcli auth login",
+  // 9/8 用户拍板: `requires Volcengine Ark SSO STS` 是 arkcli 内部的 SSO 状态码, 命中即
+  // SSO 会话不可用, 一律 auth_expired 走授权流。
+  "requires Volcengine Ark SSO STS",
   "login expired",
   "SSO token expired",
   "refresh token",
   "not logged in",
-  // t_ee76442e: SSO refresh_token 被吊销的真 token 失效串(volc-sso RFC 6749 invalid_request
-  // 错误文案)。必须区别于「STS 续期失败」的纯锁竞争语义: 真 token 失效只能重走 auth login,
-  // 退避重试无意义; arkcli 1.0.22 真机 body 同体出现「STS 续期失败」「另一个 arkcli 进程
-  // 正在刷新」+「token 交换失败: invalid_request - refresh_token is invalid」时, 真因是
-  // refresh_token 失效, 不是锁竞争。
+  // 真 token 失效串(volc-sso RFC 6749 invalid_request, auth status 段可见):
   "refresh_token is invalid",
   "token 交换失败",
   "invalid_request",
@@ -74,27 +73,44 @@ const AUTH_EXPIRED_PATTERNS = [
 const SETUP_HINT = "运行 `arkcli auth login volc-sso --no-browser` 重新授权(SSO 会话由 CLI 管理)";
 const INSTALL_HINT = "未检测到 arkcli: 请安装 `npm i -g @volcengine/ark-cli` 后重启应用";
 
-/* ---- STS 续期撞锁重试(t_9e4610a8, 2026-09-01 真机实锤) ----
+/* ---- STS 续期撞锁重试(t_9e4610a8, 2026-09-01 真机实锤, t_f261dadb 反转语义) ----
  * arkcli 对 sts.json(短命 AK/SK+session_token)的续期有**进程级单飞锁**——调度器采集
  * 与用户手动 arkcli(或同时刻两个实例)并发刷新时, 后到者 exit!=0 + 锁竞争 body:
  *   "... STS 续期失败: 另一个 arkcli 进程正在刷新 SSO 凭证，请稍后重试"
- * 此类瞬时竞争不应上报「采集失败」(scheduler 兜底), 改为短暂退避后重试(串行, 最多 2 次)。
- * 3 次仍失败 = 长期锁占用(异常) → status=stale 灰卡 + sts_refresh_locked 告警(卡片主案,
- * round1 审查修正: schema stale 一等公民 + UI 灰卡/告警文案可见, 不打红卡「采集失败」)。
+ *
+ * t_f261dadb 9/8 用户拍板(实测推翻 t_ee76442e 上一轮方向): 这段「锁竞争文案」= token
+ * 失效的**真实信号**, 不是并发。原话「问题不在锁上, 而是 refresh_token 或者不一致才
+ * 报这个错, 我的建议是遇到这种状况就调用 auth login 重新授权就行了」。
+ *
+ * 落实:
+ * 1. **判别反转**: 含 STS_LOCK_PATTERNS 的 body 必然同时含 `please run arkcli auth login`
+ *    / `requires Volcengine Ark SSO STS` 等会话失效串(arkcli 引导文案自带), 走 auth_expired
+ *    一键授权, 不再判 stale。删除 stale 分支, 卡片主路径只剩 auth_expired 引导用户重授权。
+ * 2. **重试保留(防御真并发)**: 串行退避重试保留, 用以吸收「用户手动 arkcli auth login 跑
+ *    完了, 我方下一拍拿新 token 成功」这类瞬时场景; 不再作为「锁竞争可重试绕过」的论据。
+ * 3. **B 层残留锁自愈(healStaleLock)** 保留: 进程被 SIGKILL 留 0 字节创建式锁 → 永远不会
+ *    自释放, 需 B 层按 mtime 清扫。这是独立于判别链的工程防御。
+ * 4. **channel 串行(scheduler 侧)** 保留: 避免 N 个 arkcli 实例同时启动互抢 SSO 锁。
+ *
+ * 5. **sts_refresh_locked 告警文案删除**: 旧 stale 卡告警「另一进程占用, 请稍候自动重试」
+ *    是误导 —— 实际重试永远不会自愈, 反而拖到用户看不到授权按钮。所有锁竞争 body 走
+ *    auth_expired 的 setup_hint, 用户可见体验统一为「请重新授权 + 一键授权按钮」。
  */
 export const STS_LOCK_PATTERNS = ["另一个 arkcli 进程正在刷新", "STS 续期失败"] as const;
 export const STS_LOCK_MAX_RETRIES = 2;
 export const STS_LOCK_RETRY_DELAY_MS = 2_000;
 
-/* ---- 残留锁自愈(B层, t_91ae22ff, 2026-09-07 用户拍板) ----
+/* ---- 残留锁自愈(B层, t_91ae22ff, 2026-09-07 用户拍板; t_f261dadb 9/8 保留) ----
  * arkcli 的 SSO 刷新锁 = ~/.arkcli/cache/auth/refresh-<hash>.lock(0 字节**创建式**锁,
  * 非 flock)。app 采集超时被强杀(runCommand SIGTERM→5s SIGKILL)或进程异常退出 →
- * 锁文件残留, 永不自动释放 → 后续每次采集撞这把残留锁 → 重试耗尽 → 永久 stale 灰卡。
+ * 锁文件残留, 永不自动释放 → 后续每次采集撞这把残留锁 → 走 auth_expired 分支(9/8
+ * 反转后)→ 用户一键授权, 但若残留锁没清, 即使授权成功下一拍仍撞锁, 反复 auth_expired。
  * 自愈: 撞锁且重试耗尽后, 检查 refresh-*.lock 的 mtime: 超过 STS_LOCK_STALE_MS(5min)
- * = 残留锁 → 删除 → 立即再跑一次采集(单次不循环); 仍撞锁 → 走原 stale 逻辑(不无限抢)。
+ * = 残留锁 → 删除 → 立即再跑一次采集(单次不循环); 仍撞锁 → 走 auth_expired(不无限抢)。
  * 锁文件 mtime 年轻(< 阈值)= 活跃刷新, **绝不删**(避免与真实并发刷新打架)。
  * mtime 阈值是唯一判据(锁文件 0 字节无内容可查); 删除失败(Windows 句柄占用等)
- * → 静默跳过, 等下轮轮询再试, 不报错。sts_refresh_locked 告警文案保留不变。
+ * → 静默跳过, 等下轮轮询再试, 不报错。sts_refresh_locked 告警文案已删除(9/8 t_f261dadb
+ * 反转后, 撞锁 → auth_expired 走 setup_hint, 统一用户可见体验)。
  */
 export const STS_LOCK_STALE_MS = 5 * 60_000;
 
@@ -150,21 +166,13 @@ const defaultResolveLockDir: ResolveArkLockDir = async () => {
   return join(os.homedir(), ".arkcli", "cache", "auth");
 };
 
-/** 撞锁判别: stdout+stderr 双 stream 命中其一即视为 STS 续期锁竞争(与 auth_expired 判别互斥)
- *
- * t_ee76442e 修正: 收紧为「纯锁竞争」= STS_LOCK_PATTERNS 命中 **且** 不同时含 auth_expired
- * 真 token 失效串。原因: arkcli 1.0.22 真机 body 同体出现「STS 续期失败」「另一个 arkcli 进
- * 程正在刷新」+「token 交换失败: invalid_request - refresh_token is invalid」时, 真因是
- * SSO refresh_token 失效(volc-sso RFC 6749 invalid_request), 不是锁竞争。若不过滤 →
- * 退避重试 3 次浪费 + 永远 stale + 「请稍候自动重试」误导文案 + 一键授权按钮永远不出。
- * 纯并发锁竞争(手动 arkcli 同时刷新 sts.json)→ body 仅含 STS_LOCK_PATTERNS, 不含 token
- * 失效串 → 走原 stale 逻辑(回归不破)。
+/** 撞锁判别(9/8 t_f261dadb 反转后): 撞锁 body 必含 arkcli 引导文案 → 必命中 auth_expired,
+ * 本函数仅作为「是否走串行退避重试」的开关。重试是为「用户手动 arkcli auth login 跑完,
+ * 我方下一拍拿新 token 成功」这类瞬时场景作防御, 不再决定最终状态分类(分类由 isAuthExpiredBody
+ * 统一判)。保留导出是给 B 层 healStaleLock 与将来的埋点复用, 不参与 status 决定。
  */
 function isStsLockBody(body: string): boolean {
-  if (!STS_LOCK_PATTERNS.some((p) => body.includes(p))) return false;
-  // 锁竞争字样 + 真 token 失效字样同体 → 真因是 SSO refresh_token 被吊销, 非瞬时锁竞争
-  if (isAuthExpiredBody(body)) return false;
-  return true;
+  return STS_LOCK_PATTERNS.some((p) => body.includes(p));
 }
 
 /** 串行等待(重试退避; 测试注入 0 跳过) */
@@ -246,21 +254,31 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
 
     let res: CommandRunResult;
     try {
-      // STS 续期撞锁重试: exit!=0 且 body 命中锁竞争 → 串行退避重跑(最多 2 次)。
-      // 与手动 arkcli 并发刷新 sts.json 是瞬时竞争, 重试后自愈; 不放大并发(串行 sleep)。
+      // STS 续期撞锁重试(t_f261dadb 9/8 语义反转后): 串行退避保留, 用以吸收「用户手动
+      // arkcli auth login 跑完, 我方下一拍拿新 token 成功」这类瞬时场景; **不再**把
+      // 重试耗尽判 stale(锁竞争 body = token 失效真实信号, 必走 auth_expired)。
+      // 早退: body 同时含 auth_expired 串 → 不再退避, 直接交下方判别链(节省 N×2s 浪费)。
       const runOnce = () =>
         this.runner
           ? this.runner(ctx as unknown as FetchContext)
           : this.runCommandResult(ARK_USAGE_CMD, ARK_USAGE_ARGS, ctx as unknown as FetchContext);
       res = await runOnce();
-      for (let attempt = 0; attempt < STS_LOCK_MAX_RETRIES && res.code !== 0 && isStsLockBody(res.stdout + res.stderr); attempt++) {
+      for (
+        let attempt = 0;
+        attempt < STS_LOCK_MAX_RETRIES &&
+        res.code !== 0 &&
+        isStsLockBody(res.stdout + res.stderr) &&
+        !isAuthExpiredBody(res.stdout + res.stderr);
+        attempt++
+      ) {
         await sleep(this.stsRetryDelayMs);
         res = await runOnce();
       }
 
-      // 残留锁自愈(B层, t_91ae22ff): 重试耗尽仍撞锁 = 可能是 app 强杀/进程异常退出后
-      // 遗留的陈旧锁文件(创建式锁永不自动释放)。检查 refresh-*.lock mtime > 阈值 →
-      // 删除 → 立即再跑一次采集(单次不循环); 删后仍撞锁 → 走下方原 stale 逻辑(不无限抢)。
+      // 残留锁自愈(B层, t_91ae22ff, t_f261dadb 保留): 重试耗尽仍撞锁 = 可能是 app 强杀/
+      // 进程异常退出后遗留的陈旧锁文件(创建式锁永不自动释放)。检查 refresh-*.lock
+      // mtime > 阈值 → 删除 → 立即再跑一次采集(单次不循环); 删后仍撞锁 → 走下方
+      // auth_expired(不无限抢)。自愈仍能救「用户重授权后, 旧残留锁阻断下一拍」场景。
       if (res.code !== 0 && isStsLockBody(res.stdout + res.stderr)) {
         const healed = await this.healStaleLock(runOnce);
         if (healed !== null) {
@@ -283,29 +301,21 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
       };
     }
 
-    // 撞锁判别(t_ee76442e 收紧): isStsLockBody 已排除「真 token 失效同体」, 纯并发锁竞争
-    // 才会落到此分支。arkcli 锁竞争 body 不再内嵌 "auth login" 误导提示(纯 STS_LOCK 字样),
-    // 顺序保持先 sts → 后 auth_expired, 纯 token 失效同体直接 auth_expired, 不重试不退避。
-    if (res.code !== 0 && isStsLockBody(res.stdout + res.stderr)) {
-      return {
-        ...base,
-        status: "stale",
-        alerts: [
-          {
-            level: "warn",
-            code: "sts_refresh_locked",
-            message: "火山方舟 SSO 凭证刷新中(另一进程占用), 请稍候自动重试",
-          },
-        ],
-      };
-    }
-    // 未登录 error body 落 **stderr**(exit=1, stdout 空; 同 bl round3 教训)——
-    // 判别必须覆盖 stdout+stderr 双 stream
-    if (isAuthExpiredBody(res.stdout + res.stderr)) {
+    // 撞锁判别(t_f261dadb 9/8 反转): 含 STS_LOCK_PATTERNS 的 body 必同时含 arkcli 引导
+    // 文案(`please run arkcli auth login` / `requires Volcengine Ark SSO STS`), 走
+    // auth_expired 一键授权。sts_refresh_locked stale 分支已删除(误导用户「请稍候自动重
+    // 试」, 实则永远等不到)。B 层 healStaleLock 仍保留防御真残留锁(详见下方独立方法)。
+    if (res.code !== 0 && isAuthExpiredBody(res.stdout + res.stderr)) {
       return {
         ...base,
         status: "auth_expired",
-        alerts: [{ level: "warn", message: "火山方舟 SSO 会话已失效, 请重新授权", code: "auth_expired" }],
+        alerts: [
+          {
+            level: "warn",
+            message: "火山方舟 SSO 会话已失效, 请重新授权",
+            code: "auth_expired",
+          },
+        ],
         setup_hint: SETUP_HINT,
       };
     }
@@ -387,8 +397,9 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
   }
 
   /**
-   * 残留锁自愈(B层, t_91ae22ff): 撞锁重试耗尽后尝试清理陈旧 refresh-*.lock 并重跑一次。
-   * 返回 null = 未触发自愈(无锁文件/全部年轻/删除失败) → 调用方走原 stale 逻辑。
+   * 残留锁自愈(B层, t_91ae22ff; t_f261dadb 9/8 保留): 撞锁重试耗尽后尝试清理陈旧
+   * refresh-*.lock 并重跑一次。返回 null = 未触发自愈(无锁文件/全部年轻/删除失败) →
+   * 调用方走 auth_expired 判别链(t_f261dadb 反转后不再判 stale)。
    */
   private async healStaleLock(runOnce: () => Promise<CommandRunResult>): Promise<CommandRunResult | null> {
     try {
@@ -405,10 +416,10 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
         // 超过阈值 = 残留锁 → 删除; 删除失败(Windows 句柄占用等) → 静默跳过, 等下轮轮询
         if (await lockFs.unlink(lockPath)) removedAny = true;
       }
-      if (!removedAny) return null; // 无残留锁被删 → 不重跑, 走原 stale
+      if (!removedAny) return null; // 无残留锁被删 → 不重跑, 走 auth_expired
       return await runOnce(); // 删除残留锁后立即再跑一次采集
     } catch {
-      return null; // 任何异常(fs/动态 import 失败等)静默走原 stale 逻辑, 不报错
+      return null; // 任何异常(fs/动态 import 失败等)静默走 auth_expired 判别链, 不报错
     }
   }
 
