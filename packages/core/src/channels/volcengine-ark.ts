@@ -51,11 +51,23 @@ export const ARK_PRODUCT = "coding-plan";
 /** 会话失效/未登录判别串(usage plan stderr body 与 auth status body 共用) */
 const AUTH_EXPIRED_PATTERNS = [
   "not configured",
-  "auth login",
+  // t_ee76442e: 删 "auth login" 串。原因: arkcli 撞锁 body 自带引导文案 `please run arkcli
+  // auth login volc-sso`, 命中该串会让纯并发锁竞争被误判为会话失效。判别精确化交给下方
+  // 三个新增的真 token 失效串(refresh_token is invalid / token 交换失败 / invalid_request)。
+  // 真「未登录从未配置」场景仍由 "not configured" + "not logged in" + "logged_in=false" 共同
+  // 覆盖(healthCheck 段独立用 JSON 字段判别)。
   "login expired",
   "SSO token expired",
   "refresh token",
   "not logged in",
+  // t_ee76442e: SSO refresh_token 被吊销的真 token 失效串(volc-sso RFC 6749 invalid_request
+  // 错误文案)。必须区别于「STS 续期失败」的纯锁竞争语义: 真 token 失效只能重走 auth login,
+  // 退避重试无意义; arkcli 1.0.22 真机 body 同体出现「STS 续期失败」「另一个 arkcli 进程
+  // 正在刷新」+「token 交换失败: invalid_request - refresh_token is invalid」时, 真因是
+  // refresh_token 失效, 不是锁竞争。
+  "refresh_token is invalid",
+  "token 交换失败",
+  "invalid_request",
 ] as const;
 
 /** 统一 setup_hint(卡片修复指引; 任务契约: SSO refresh_token 过期是常态, 比 bl 频繁) */
@@ -138,9 +150,21 @@ const defaultResolveLockDir: ResolveArkLockDir = async () => {
   return join(os.homedir(), ".arkcli", "cache", "auth");
 };
 
-/** 撞锁判别: stdout+stderr 双 stream 命中其一即视为 STS 续期锁竞争(与 auth_expired 判别互斥) */
+/** 撞锁判别: stdout+stderr 双 stream 命中其一即视为 STS 续期锁竞争(与 auth_expired 判别互斥)
+ *
+ * t_ee76442e 修正: 收紧为「纯锁竞争」= STS_LOCK_PATTERNS 命中 **且** 不同时含 auth_expired
+ * 真 token 失效串。原因: arkcli 1.0.22 真机 body 同体出现「STS 续期失败」「另一个 arkcli 进
+ * 程正在刷新」+「token 交换失败: invalid_request - refresh_token is invalid」时, 真因是
+ * SSO refresh_token 失效(volc-sso RFC 6749 invalid_request), 不是锁竞争。若不过滤 →
+ * 退避重试 3 次浪费 + 永远 stale + 「请稍候自动重试」误导文案 + 一键授权按钮永远不出。
+ * 纯并发锁竞争(手动 arkcli 同时刷新 sts.json)→ body 仅含 STS_LOCK_PATTERNS, 不含 token
+ * 失效串 → 走原 stale 逻辑(回归不破)。
+ */
 function isStsLockBody(body: string): boolean {
-  return STS_LOCK_PATTERNS.some((p) => body.includes(p));
+  if (!STS_LOCK_PATTERNS.some((p) => body.includes(p))) return false;
+  // 锁竞争字样 + 真 token 失效字样同体 → 真因是 SSO refresh_token 被吊销, 非瞬时锁竞争
+  if (isAuthExpiredBody(body)) return false;
+  return true;
 }
 
 /** 串行等待(重试退避; 测试注入 0 跳过) */
@@ -259,10 +283,9 @@ export class VolcengineArkCodingPlanAdapter extends ScriptedAdapter {
       };
     }
 
-    // 锁竞争优先判定(先于 auth_expired): arkcli 锁竞争 body 内嵌 "auth login" 误导提示
-    // (ListSubscribeTrade requires ... please run arkcli auth login volc-sso), 若先跑
-    // isAuthExpiredBody 会把撞锁误判为会话失效 → 重试耗尽后仍撞锁 = 长期锁占用 →
-    // stale 灰卡 + sts_refresh_locked 告警(card 主案: 不报「采集失败」, UI 灰卡文案经 alerts 可见)
+    // 撞锁判别(t_ee76442e 收紧): isStsLockBody 已排除「真 token 失效同体」, 纯并发锁竞争
+    // 才会落到此分支。arkcli 锁竞争 body 不再内嵌 "auth login" 误导提示(纯 STS_LOCK 字样),
+    // 顺序保持先 sts → 后 auth_expired, 纯 token 失效同体直接 auth_expired, 不重试不退避。
     if (res.code !== 0 && isStsLockBody(res.stdout + res.stderr)) {
       return {
         ...base,

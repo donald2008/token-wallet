@@ -466,3 +466,60 @@ describe("卡内删除 CSS 契约(D-038)", () => {
     expect(ruleBlock(".card")).toContain("position: relative");
   });
 });
+
+// ---- t_ee76442e: 火山 SETUP_HINT 一键授权链路契约(零命令行) ----
+// 任务背景: 用户 9/7 拍板「火山生命周期全进 app, 零命令行」。判别修正后火山卡 auth_expired
+// 必出现「请重新授权」+ 一键授权按钮; 点按钮 = extractCliFromHint(SETUP_HINT) → "arkcli" →
+// commandAuthStart("arkcli") → 主进程 spawn arkcli auth login volc-sso --no-browser 拉起
+// 设备码流程。本段钉死两条契约: (1) SETUP_HINT 含 --no-browser 参数不影响 extractCliFromHint
+// 取首词 "arkcli"; (2) 点 idle 按钮 commandAuthStart 实参 = "arkcli"(参数不被命令行 flag 干扰)。
+describe("t_ee76442e: 火山 SETUP_HINT 一键授权链路(--no-browser 不干扰首词解析)", () => {
+  // 与 packages/core/src/channels/volcengine-ark.ts:62 SETUP_HINT 同字面量,
+  // 钉死契约: core 侧改 SETUP_HINT 时必须同步在本测试反映。
+  const ARK_SETUP_HINT =
+    "运行 `arkcli auth login volc-sso --no-browser` 重新授权(SSO 会话由 CLI 管理)";
+
+  beforeEach(() => {
+    commandAuthStartImpl.mockReset();
+    commandAuthFinishImpl.mockReset();
+  });
+
+  it("extractCliFromHint(SETUP_HINT) = 'arkcli'(反引号内首词, --no-browser 不干扰)", async () => {
+    const { extractCliFromHint } = await import("./ProviderCard");
+    expect(extractCliFromHint(ARK_SETUP_HINT)).toBe("arkcli");
+  });
+
+  it("extractCommandFromHint(SETUP_HINT) = 'arkcli auth login volc-sso --no-browser'(反引号全文)", async () => {
+    const { extractCommandFromHint } = await import("./ProviderCard");
+    expect(extractCommandFromHint(ARK_SETUP_HINT)).toBe(
+      "arkcli auth login volc-sso --no-browser",
+    );
+  });
+
+  it("idle 一键授权 → commandAuthStart 实参 = 'arkcli'(走 arkcli 设备码流程, 不被 --no-browser 干扰)", async () => {
+    // 模拟火山 auth login 设备码模式: 返 finishMode=code(用户复制粘贴 code 回喂)
+    commandAuthStartImpl.mockResolvedValue({
+      ok: true,
+      sessionId: "s-ark",
+      url: "https://oauth.volcengine.com/device?code=ABCD",
+      finishMode: "code",
+    });
+    commandAuthFinishImpl.mockResolvedValue({ ok: true, message: "" });
+    const card = renderCard({ ...snap("auth_expired"), setup_hint: ARK_SETUP_HINT }, () => {}, () => {});
+    const btn = card.querySelector<HTMLButtonElement>('[data-testid="oneclick-auth-btn"]')!;
+    expect(btn).toBeTruthy();
+
+    click(btn);
+    // 等 idle → starting → waiting 微任务推进(设备码模式无 finish 自动收, 只验 start 实参)
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // commandAuthStart 实参 = "arkcli", 不含 --no-browser(主进程 spawn 时再拼 args)
+    expect(commandAuthStartImpl).toHaveBeenCalledTimes(1);
+    expect(commandAuthStartImpl).toHaveBeenCalledWith("arkcli");
+    // 设备码模式: finishMode=code 已传入, 等待用户粘贴 code 回喂 → stage=waiting
+    expect(card.querySelector('[data-testid="oneclick-auth-panel"]')).toBeTruthy();
+  });
+});

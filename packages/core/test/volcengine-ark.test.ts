@@ -32,6 +32,10 @@ const HEALTHY_REAL = readFileSync(join(FIXTURES, "ark-usage-healthy-real.json"),
 const STS_LOCK = readFileSync(join(FIXTURES, "ark-usage-sts-lock.json"), "utf8");
 // 未登录形态: 真实 arkcli(干净 HOME)error body 写 **stderr**、stdout 空(exit=1)
 const AUTH_EXPIRED_STDERR = readFileSync(join(FIXTURES, "ark-usage-auth-expired.json"), "utf8");
+// 真机中毒现场(t_ee76442e, 2026-09-07 njbx02 实测): body 同时含「STS 续期失败」「另一个 arkcli
+// 进程正在刷新」+「token 交换失败: invalid_request - refresh_token is invalid」, 真相是 SSO
+// refresh_token 被吊销(火山账号凭据过期), 不是锁竞争。判别修正后必须走 auth_expired。
+const TOKEN_REVOKED_REAL = readFileSync(join(FIXTURES, "ark-usage-token-revoked-real.json"), "utf8");
 const NEVER_CONFIGURED = readFileSync(join(FIXTURES, "ark-auth-status-never-configured.json"), "utf8");
 
 const INSTANCE: InstanceConfig = {
@@ -510,5 +514,95 @@ describe("残留锁自愈(B层, t_91ae22ff): 陈旧 refresh-*.lock mtime → 删
 
   it("STS_LOCK_STALE_MS 导出常量缺省 5min(可测注入)", () => {
     expect(STS_LOCK_STALE_MS).toBe(5 * 60_000);
+  });
+});
+
+// t_ee76442e 判别修正(用户 9/7 拍板, 零命令行): 真 token 失效被「STS 续期失败」字样误导命中
+// 锁竞争 → 永远 stale 灰卡 + 「请稍候自动重试」, 授权引导按钮永远出不来。正解 = 锁竞争分支
+// 加排除(若 body 同时含 auth_expired 真 token 失效串 → 走 auth_expired), 纯并发锁竞争仍走
+// stale。落地: AUTH_EXPIRED_PATTERNS 扩 refresh_token is invalid / token 交换失败 /
+// invalid_request; sts 锁判别收紧为 `isStsLockBody && !isAuthExpiredBody`。
+describe("t_ee76442e: 真 token 失效判别修正(SSO refresh_token 被吊销 ≠ 锁竞争)", () => {
+  // 🔴 RED 测试 1: 真机中毒 fixture → 期望 auth_expired(当前 stale, 红灯)
+  it("真机中毒(STS 续期失败 + refresh_token is invalid 同体) → auth_expired + setup_hint, 不再 stale", async () => {
+    // 真机 body 同时含: STS 续期失败 / 另一个 arkcli 进程正在刷新 / token 交换失败:
+    // invalid_request - refresh_token is invalid → 真相是 SSO refresh_token 失效, 不
+    // 是锁竞争。判别修正后必须走 auth_expired, 卡片出现「请重新授权」+ 一键授权按钮
+    const seq = runnerSequence([{ code: 1, stderr: TOKEN_REVOKED_REAL }]);
+    // 自愈禁用(空锁目录), 钉死不走残留锁重跑
+    const adapter = new VolcengineArkCodingPlanAdapter(
+      seq.runner,
+      0,
+      { listLocks: async () => [], statMtimeMs: async () => undefined, unlink: async () => true },
+      async () => "/nonexistent/ark/auth",
+    );
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    // 1) 不重试: 真 token 失效非瞬时竞争, 串行退避无意义
+    expect(seq.callCount()).toBe(1);
+    // 2) 状态: auth_expired(用户能看到「请重新授权」+ 一键授权按钮), 不是 stale
+    expect(snap.status).toBe("auth_expired");
+    // 3) alerts: 走 auth_expired 卡片文案, 不走「请稍候自动重试」(sts_refresh_locked)
+    expect(snap.alerts.find((a) => a.code === "sts_refresh_locked")).toBeUndefined();
+    expect(snap.alerts.find((a) => a.code === "auth_expired")).toBeDefined();
+    // 4) setup_hint: 引导用户重新授权(SSO refresh_token 被吊销只能重走 auth login)
+    expect(snap.setup_hint).toContain("arkcli auth login volc-sso");
+    expect(snap.error_message).toBeUndefined(); // auth_expired 走 alerts 文案而非 error_message
+  });
+
+  // 🔴 RED 测试 2: AUTH_EXPIRED_PATTERNS 新串命中(纯 token 失效 body, 不含 STS 锁竞争字样)
+  it("纯 SSO refresh_token is invalid body(无锁竞争字样) → auth_expired 命中 + setup_hint", async () => {
+    // 极简 token 失效形态: 只含 invalid_request + refresh_token is invalid + token 交换失败,
+    // 不含 STS_LOCK_PATTERNS 任何串 → 验证新加的 3 个判别串被真识别
+    const tokenInvalidOnly = JSON.stringify({
+      ok: false,
+      error: {
+        type: "error",
+        message: "token 交换失败: invalid_request - refresh_token is invalid, please run `arkcli auth login`",
+      },
+    });
+    const adapter = new VolcengineArkCodingPlanAdapter(
+      runnerReturning({ stdout: tokenInvalidOnly, code: 1 }),
+    );
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(snap.status).toBe("auth_expired");
+    expect(snap.setup_hint).toContain("arkcli auth login volc-sso");
+  });
+
+  // ✅ 回归测试: 纯并发锁竞争(无 token 失效串) → 仍 stale + sts_refresh_locked(不误伤)
+  it("纯并发锁竞争(无 token 失效串) → 仍 stale + sts_refresh_locked(回归不破)", async () => {
+    const seq = runnerSequence([{ code: 1, stderr: STS_LOCK }]);
+    const adapter = new VolcengineArkCodingPlanAdapter(
+      seq.runner,
+      0,
+      { listLocks: async () => [], statMtimeMs: async () => undefined, unlink: async () => true },
+      async () => "/nonexistent/ark/auth",
+    );
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(snap.status).toBe("stale");
+    expect(snap.alerts.find((a) => a.code === "sts_refresh_locked")).toBeDefined();
+    expect(snap.alerts.find((a) => a.code === "auth_expired")).toBeUndefined();
+  });
+
+  // ✅ 回归测试: 原 STS 撞锁连续 3 次(老测试已被新语义包含, 但保留显式回归以钉死语义)
+  it("STS 撞锁连续 3 次 + body 不含 token 失效串 → stale + sts_refresh_locked(钉死纯锁竞争回归)", async () => {
+    // STS_LOCK fixture 当前是「ListSubscribeTrade requires ... 请稍后重试」, 不含 refresh_token
+    // is invalid 等 token 失效串 → 必须走原 stale 逻辑
+    const seq = runnerSequence([{ code: 1, stderr: STS_LOCK }]);
+    const adapter = new VolcengineArkCodingPlanAdapter(
+      seq.runner,
+      0,
+      { listLocks: async () => [], statMtimeMs: async () => undefined, unlink: async () => true },
+      async () => "/nonexistent/ark/auth",
+    );
+    const snap = await adapter.fetchSnapshot(VOLCENGINE_ARK_CODING_PLAN, INSTANCE, makeCtx());
+
+    expect(seq.callCount()).toBe(3); // 重试 2 次上限
+    expect(snap.status).toBe("stale");
+    expect(snap.alerts.find((a) => a.code === "sts_refresh_locked")).toBeDefined();
+    expect(snap.alerts.find((a) => a.code === "auth_expired")).toBeFalsy();
+    expect(snap.error_message).toBeUndefined();
   });
 });
