@@ -2,8 +2,9 @@
  * MCP daemon IPC 桥注册(D-048, t_4bd214de):
  * 把 mcp-env/mcp-daemon/mcp-autostart 三个纯逻辑模块挂到 ipcMain.handle。
  *
- * 7 通道: mcp_probe / mcp_start / mcp_stop / mcp_get_config / mcp_gen_key /
+ * 9 通道: mcp_probe / mcp_start / mcp_stop / mcp_restart / mcp_get_config / mcp_gen_key /
  *         mcp_set_autostart / mcp_get_autostart / mcp_get_guide
+ *  (round-2 增 mcp_restart 编排 stop+start, 让 key regen 后 daemon 真实重启用上新 key)
  *
  * 默认 shim:
  * - SpawnShim: 默认实现 spawn/killTree/wait(走 node:child_process + signal)
@@ -21,6 +22,7 @@ import {
   type SpawnShim,
   defaultPathShim,
   defaultSpawnShim,
+  getLastStartedPid,
   isInstalled as isInstalledFn,
   probe as probeFn,
   start as startFn,
@@ -112,19 +114,20 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
   });
 
   // ---- 通道: mcp_stop ----
-  // 真实 OS pid 由 mcp_start 返回, renderer 持有; 若 renderer 无 pid, stop 走
-  // "无 pid 仍 probe → 不活即 ok", 否则提示 pid_required。
+  // t_4bd214de round-2 BLOCKING-1: 无 pid 时先用 mcp-daemon module 级 lastStartedPid 缓存,
+  // 缓存也没有 → fallback probe 反推(daemon 在跑但无 pid → 返 pid_required 让 UI 显式提示, 不静默吞)。
   ipcMain.handle(
     "mcp_stop",
     async (_event, payload: { pid?: number } | undefined): Promise<{ stopped: boolean; reason?: string }> => {
       const cfg = loadMcpEnv(configDir());
-      const pid = Number(payload?.pid ?? 0);
+      const pid = Number(payload?.pid ?? 0) || getLastStartedPid() || 0;
       if (!pid) {
         const r = await probeFn(
           { host: cfg.TOKEN_WALLET_HOST, port: cfg.TOKEN_WALLET_PORT },
           http,
         );
         if (!r.alive) return { stopped: true };
+        // 缓存无 pid + probe 显示 daemon 在跑 → 真实链路 stop 不可达, 显式提示
         return { stopped: false, reason: "pid_required" };
       }
       return stopFn(
@@ -134,6 +137,53 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
         { host: cfg.TOKEN_WALLET_HOST, port: cfg.TOKEN_WALLET_PORT },
         deps.platform,
       );
+    },
+  );
+
+  // ---- 通道: mcp_restart(t_4bd214de round-2 BLOCKING-1)----
+  // 编排 stop + start + 等就绿(用缓存 pid 停), 让 key regen 后新 key 真实生效。
+  // 返回 {restarted:bool, started:bool, pid?, reason?}: stopped=false 时仍尝试 start,
+  // 失败原因汇总;UI 拿到后只显示一条错误。
+  ipcMain.handle(
+    "mcp_restart",
+    async (): Promise<{ restarted: boolean; started: boolean; pid?: number; reason?: string }> => {
+      const cfg = loadMcpEnv(configDir());
+      const pid = getLastStartedPid();
+      let stoppedOk = true;
+      let stopReason: string | undefined;
+      if (pid) {
+        const r = await stopFn(
+          pid,
+          spawn,
+          http,
+          { host: cfg.TOKEN_WALLET_HOST, port: cfg.TOKEN_WALLET_PORT },
+          deps.platform,
+        );
+        stoppedOk = r.stopped;
+        stopReason = r.reason;
+      }
+      // 即使 stop 失败仍试 start(daemon 可能已死)
+      const sr = await startFn(
+        {
+          host: cfg.TOKEN_WALLET_HOST,
+          port: cfg.TOKEN_WALLET_PORT,
+          key: cfg.TOKEN_WALLET_MCP_KEY,
+          dbPath: cfg.TOKEN_WALLET_DB_PATH,
+          ttlDays: cfg.USAGE_TTL_DAYS,
+        },
+        spawn,
+        http,
+        paths,
+        deps.appRoot,
+        deps.isPackaged,
+        deps.platform,
+      );
+      return {
+        restarted: stoppedOk,
+        started: sr.started,
+        pid: sr.pid,
+        reason: sr.reason ?? stopReason,
+      };
     },
   );
 

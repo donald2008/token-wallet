@@ -16,6 +16,11 @@
  *   面板出错误卡是预期行为, 不许静默空返回
  * - E2 http 通道接真: host-http.ts(undici fetch + AbortController 超时,
  *   返回 {status, body 脱敏}, 非 2xx 不抛由引擎分类 — 对齐旧 Rust 实现)
+ *
+ * D-048 MCP daemon 托管(t_4bd214de): registerMcpIpc 在文件下方 registerIpc() 内调用,
+ * 注入 9 通道(probe / start / stop / restart / get_config / gen_key / set_autostart /
+ * get_autostart / get_guide) — 注: round-1 自述 7 通道, round-2 增 mcp_restart 编排
+ * 通道用于 key regen 后真实停启 daemon(BLOCKING-1 修复)。
  */
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from "electron";
 import { autoUpdater } from "electron-updater";
@@ -421,8 +426,9 @@ function registerIpc(): void {
     appUpdater.install();
   });
 
-  // ---- D-048: MCP daemon 托管 7 通道(t_4bd214de) ----
-  // 主进程持有 daemon 真实生命周期: probe / start / stop / config / key / autostart / guide
+  // ---- D-048: MCP daemon 托管 9 通道(t_4bd214de) ----
+  // 主进程持有 daemon 真实生命周期: probe / start / stop / restart / config / key /
+  // autostart / guide — round-2 增 restart 通道编排 key regen 后真实停启。
   // 全部 shim 在 mcp-daemon.ts 注入便于测试, 真运行时用 defaultSpawnShim/defaultPathShim
   // + 简易 fetch 实现 defaultHttpShim(POST /mcp initialize, 卡体钉死不裸 TCP)
   registerMcpIpc({

@@ -20,6 +20,7 @@ import {
   mcpGetAutostart,
   mcpGetConfig,
   mcpProbe,
+  mcpRestart,
   mcpSetAutostart,
   mcpStart,
   mcpStop,
@@ -43,7 +44,7 @@ export function McpServicePanel({ onGuideOpen }: Props) {
   // 重生成 key 时的二次确认(避免误点导致已配 agent 失联)
   const [confirmGenKey, setConfirmGenKey] = useState(false);
   // 重生成 key 后短时提示
-  const [genKeyHint, setGenKeyHint] = useState(false);
+  const [genKeyHint, setGenKeyHint] = useState<false | "manual" | "auto" | "failed">(false);
 
   const probe = useCallback(async () => {
     // ⚠️ 不要无条件 setError(null): 操作流的错误(start/stop/genKey 失败)会被下次 probe 抹掉
@@ -80,11 +81,14 @@ export function McpServicePanel({ onGuideOpen }: Props) {
     setBusy("stop");
     setError(null);
     try {
-      // 后端无 pid 持有时 mcpStop 会返 stopped:false reason=pid_required;
-      // UI 走"先 stop(无 pid 试探), 失败再 mcpStart() 后立即 mcpStop() 强制覆盖" 不必要 —
-      // 真 daemon 由 mcpStart 返回 pid, 此处先读 config 没 pid 字段, 简化: 调 mcpStop 不传 pid
-      // 后端会做 probe 反推, 若 daemon 在跑返 pid_required, UI 提示"重启请先 start 后再 stop"
-      await mcpStop();
+      // t_4bd214de round-2 BLOCKING-1: 不传 pid — 主进程 mcp-daemon module 级
+      // lastStartedPid 缓存兜底(详见 mcp-daemon.ts), 无缓存 + probe 仍活 → 返 pid_required
+      // 错误显式提示用户(详情见下面 catch 分支)。
+      const r = await mcpStop();
+      if (!r.stopped) {
+        // stop 失败必须可见, 不许静默吞(BLOCKING-1 修复兜底)
+        setError(t("set.mcpErrorGeneric", { msg: r.reason ?? "stop_failed" }));
+      }
       await probe();
     } finally {
       setBusy(null);
@@ -123,9 +127,21 @@ export function McpServicePanel({ onGuideOpen }: Props) {
       // 立即重读 config 拿新 key(后端已 atomic 写)
       const fresh = await mcpGetConfig();
       setConfig(fresh);
-      setGenKeyHint(true);
+      // t_4bd214de round-2 BLOCKING-1: key regen 后 daemon 持旧 key, 新 key 不生效 —
+      // 必须真实编排 restart: 主进程 mcp_restart 通道用缓存 lastStartedPid 停 + 起,
+      // 完成后 daemon 才读 mcp.env 拿新 key。daemon 未跑 → 只写盘, 提示用户手动 start。
+      const wasAlive = r.daemonWasRunning;
+      let restartOk = false;
+      if (wasAlive) {
+        const rr = await mcpRestart();
+        restartOk = rr.started;
+        if (!rr.started) {
+          setError(t("set.mcpErrorGeneric", { msg: rr.reason ?? "restart_failed" }));
+        }
+      }
+      // 选 hint 文案: 三态 — 未跑 / 自动重启成功 / 自动重启失败
+      setGenKeyHint(!wasAlive ? "manual" : restartOk ? "auto" : "failed");
       setTimeout(() => setGenKeyHint(false), 4000);
-      void r; // daemonWasRunning 字段留作未来 toast 用
     } finally {
       setBusy(null);
       setConfirmGenKey(false);
@@ -261,7 +277,13 @@ export function McpServicePanel({ onGuideOpen }: Props) {
 
       {genKeyHint && (
         <p className="mcp-hint" data-testid="mcp-regen-hint">
-          {t("set.mcpKeyRegenRestartHint")}
+          {t(
+            genKeyHint === "auto"
+              ? "set.mcpKeyRegenAutoRestartHint"
+              : genKeyHint === "failed"
+                ? "set.mcpKeyRegenRestartFailedHint"
+                : "set.mcpKeyRegenRestartHint",
+          )}
         </p>
       )}
 

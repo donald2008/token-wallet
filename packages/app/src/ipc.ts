@@ -480,13 +480,26 @@ export async function mcpStart(): Promise<McpStartResult> {
   return viaHost ?? { started: false, reason: "not_installed" };
 }
 
-/** 停止 daemon: 有 pid 走真停, 无 pid 走 probe 反推 */
+/** 停止 daemon: 有 pid 走真停, 无 pid 走主进程 module 级缓存 lastStartedPid(自动回退, t_4bd214de round-2 BLOCKING-1) */
 export async function mcpStop(pid?: number): Promise<{ stopped: boolean; reason?: string }> {
   const viaHost = await hostInvoke<{ stopped: boolean; reason?: string }>(
     "mcp_stop",
     pid ? { pid } : undefined,
   );
   return viaHost ?? { stopped: false, reason: "unavailable" };
+}
+
+/** 重启 daemon(stop + start 编排, 用于 key regen 后真实生效): t_4bd214de round-2 BLOCKING-1 */
+export interface McpRestartResult {
+  restarted: boolean;
+  started: boolean;
+  pid?: number;
+  reason?: string;
+}
+
+export async function mcpRestart(): Promise<McpRestartResult> {
+  const viaHost = await hostInvoke<McpRestartResult>("mcp_restart");
+  return viaHost ?? { restarted: false, started: false, reason: "unavailable" };
 }
 
 /** 读 mcp.env 全部键位 + installed 状态(明文 key 经 IPC 内部, UI 用 maskKey 处理) */
