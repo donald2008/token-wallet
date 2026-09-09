@@ -722,17 +722,36 @@ describe("t_5d8c3c81: 采集失败只读缓存(失败保留旧 metrics + 不落�
     engine.stop();
   });
 
-  it("errorSnapshot 静态方法带 logo 字段(descriptor.logo 透传)", async () => {
-    // 静态方法通过实例化测试覆盖(errorSnapshot 是 private static, 走 fetch 抛错路径触发)
-    const probe = countingStorage();
-    const engine = makeEngine(probe.storage);
-    // 触发 fetch 抛错 → 走 errorSnapshot 兜底(descriptor.plan_type + descriptor.logo)
-    // 通过 unsubscribe + 直接注入失败快照模拟(errorSnapshot 字段契约)
-    const errSnap = failSnapOf("inst-t5d8c3c81", "error", "适配器抛错", 1_789_000_000);
-    await drive(engine).onResult("inst-t5d8c3c81", errSnap);
-    // 验证: 失败快照进 latest 后, BrandLogo 拿到 logo 字段(不空占位)
-    expect(engine.snapshots[0]?.logo).toBe("kimi");
-    engine.stop();
+  it("errorSnapshot 静态方法透传 descriptor.logo(品牌固有属性不随采集成败消失)", async () => {
+    // 私有静态方法通过 RuntimeEngine 反射调用(errorSnapshot 是 private static,
+    // 走真实抛错路径需 mock httpGetJson 在 fetchSnapshot catch 内触发, 间接且易脆;
+    // 直接反射调用一次性锁定契约, 等价覆盖同一字段: provider_id/display_name/plan_type/logo/metrics 空/alerts 必含)
+    const errSnap = (RuntimeEngine as unknown as {
+      errorSnapshot(
+        inst: InstanceConfig,
+        planType: ProviderSnapshot["plan_type"],
+        err: unknown,
+        logo?: string,
+      ): ProviderSnapshot;
+    }).errorSnapshot(
+      {
+        id: "inst-t5d8c3c81",
+        channel: "deepseek/balance",
+        name: "实例 inst-t5d8c3c81",
+        params: {},
+      },
+      "window",
+      new Error("适配器抛错"),
+      "kimi",
+    );
+    // logo 字段由 descriptor 透传(本卡根因修复)
+    expect(errSnap.logo).toBe("kimi");
+    // 兜底快照契约: status=error + metrics 空 + error_message 来自 err.message + alerts 含 adapter_threw code
+    expect(errSnap.status).toBe("error");
+    expect(errSnap.metrics).toEqual([]);
+    expect(errSnap.error_message).toBe("适配器抛错");
+    expect(errSnap.alerts[0]?.code).toBe("adapter_threw");
+    expect(errSnap.alerts[0]?.message).toBe("适配器抛错");
   });
 
   it("失败 → ok → 失败 → ok 反复: latest 总用最新快照(骨架覆盖), 库内每次都落库", async () => {

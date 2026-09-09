@@ -300,6 +300,9 @@ function AbnormalBody({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: 
   if (hasStaleData) {
     // 有旧数据的异常卡: 渲染正常模板 + 数据时效标注 + 错误原因。
     // 状态徽章已由 card-head 渲染(无重复)。
+    // t_5d8c3c81 round-2: auth_expired 额外补 setup_hint/OneClickAuth — command 通道过期信号
+    // 常见(bl/arkcli), 若该 provider 之前采到过 ok, 过期后看到旧进度条+黄徽章无任何重授权入口
+    // 只能刷新=再次 auth_expired 死循环。补 setup_hint 行与 no-data 分支同构, 一键授权落地点保留。
     const Template = getTemplateFor(p).component;
     return (
       <div className="abnormal-body abnormal-body--stale-data" data-testid="abnormal-body">
@@ -307,6 +310,16 @@ function AbnormalBody({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: 
         <div className="abnormal-body-stale-note" data-testid="stale-fetched-note">
           {t("card.staleFetchedAgo", { ago: agoText(p.fetched_at) })}
         </div>
+        {p.status === "auth_expired" && p.setup_hint ? (
+          <div className="setup-hint" data-testid="setup-hint">
+            <span className="lamp" data-lamp="auth_expired" title={t("card.lampAuthTitle")} aria-label={t("card.lampAuthAria")}>
+              ●
+            </span>
+            <span className="setup-hint-text">⚑ {p.setup_hint}</span>
+            <HintCopyButton hint={p.setup_hint} />
+            <OneClickAuth hint={p.setup_hint} providerId={p.provider_id} onRefresh={onRefresh} />
+          </div>
+        ) : null}
         {p.error_message ? (
           <div className="abnormal-body-error-reason text-error" data-testid="abnormal-error-reason">
             {p.error_message}
@@ -316,16 +329,20 @@ function AbnormalBody({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: 
     );
   }
   // 无旧数据(首次就失败 / 整卡 metrics 空): 整卡文字形态(§2.1 无假数据原则)
-  // t_5d8c3c81: 长文案(详细原因, e.g. "登录态过期, 请重新授权") + head 短徽章("待授权")并存 —— 两个不同文字,
-  // 不是字面重复(e2e smoke/badge-semantics 契约 + 用户期望看完整原因)。
-  // className 改名 abnormal-status-detail 而非 card-status-text —— 避免被 head 徽章的选择器误选
-  // (e.g. .card-status-text.first() 命中 head 而非卡内长文案)。
+  // t_5d8c3c81 round-2: error 状态不再渲染 abnormal-status-detail 行 —
+  // statusText.error 字面 == statusBadge.error("采集失败"), 渲染=字面重复(头徽章已呈)。
+  // 错误原因已由下方 card-error-note 行(`... · error_message`)承载, 此行零信息增量。
+  // stale / unsupported 同 statusText ≠ statusBadge(已陈旧/未接入), 仍保留 abnormal-status-detail 提供详细原因。
+  // auth_expired 状态保留(statusText="登录态过期, 请重新授权" ≠ statusBadge="待授权", 二者语义互补)。
   const health = providerHealth(p);
+  const showStatusDetail = p.status !== "error";
   return (
     <div className="abnormal-body abnormal-body--no-data" data-testid="abnormal-body">
-        <div className={`abnormal-status-detail text-${health}`} data-testid="abnormal-status-detail">
-          {STATUS_DETAIL[p.status] ? t(STATUS_DETAIL[p.status] as Parameters<typeof t>[0]) : p.status}
-        </div>
+        {showStatusDetail ? (
+          <div className={`abnormal-status-detail text-${health}`} data-testid="abnormal-status-detail">
+            {STATUS_DETAIL[p.status] ? t(STATUS_DETAIL[p.status] as Parameters<typeof t>[0]) : p.status}
+          </div>
+        ) : null}
         {p.status === "auth_expired" && p.setup_hint ? (
           <div className="setup-hint" data-testid="setup-hint">
             {/* lamp 单独在 setup_hint 行(引导感更强), task body 明示 auth_expired 的 lamp + setup_hint 授权引导保留 */}

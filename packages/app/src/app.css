@@ -610,12 +610,12 @@ body {
   gap: var(--space-4);
 }
 .abnormal-body-stale-note {
-  font-size: 11px;
+  font-size: var(--font-11);
   color: var(--fg-dim);
-  margin-top: 2px;
+  margin-top: var(--space-4);
 }
 .abnormal-body-error-reason {
-  font-size: 12px;
+  font-size: var(--font-12);
   line-height: 1.4;
 }
 
