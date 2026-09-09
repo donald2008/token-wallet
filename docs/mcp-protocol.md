@@ -24,7 +24,7 @@ token-wallet MCP Server 是**唯一数据访问面**：
 
 > 范围覆盖声明：D-034 曾记录「mcp-server 走 node:sqlite」——该句是当时代码栈（全 TS）下的同构假设。daemon 选型定 Python fastmcp 后，daemon 侧 SQLite 用 Python `sqlite3` 实现，**表结构与协议语义以本文档为权威**；D-034 对 app 主进程侧的结论不变。
 
-三件归属：
+三件归属（**内部开发分工记录**，非产品契约）：
 
 | 组件 | 负责 | 实现方 |
 |---|---|---|
@@ -55,7 +55,7 @@ token-wallet MCP Server 是**唯一数据访问面**：
     },
     "status": { "enum": ["completed", "partial", "unknown"] },
     "agent_id": { "type": "string", "minLength": 1,
-      "description": "njbx02 | home-computer | desktop-e5jupfs | ..." },
+      "description": "agent 标识，如 hermes-njbx02 | claude-code-ws1 | any-custom-id" },
     "harness": { "enum": ["hermes", "claude-code", "opencode", "codex", "other"] },
     "session_id": { "type": ["string", "null"] },
     "ts": { "type": "string", "format": "date-time",
@@ -301,7 +301,7 @@ token-wallet MCP Server 是**唯一数据访问面**：
 
 **语义**：
 
-- 时区：`day` 分组与 `since` 缺省一律 **daemon 本地时区**（njbx02 = CST, Asia/Shanghai）；响应带 `timezone` 字段，**App 不自行换算**；
+- 时区：`day` 分组与 `since` 缺省一律 **daemon 本地时区**（时区由 daemon 运行环境决定，响应带 `timezone` 字段，**App 不自行换算**）；
 - `generated_at` 供 App 判断新鲜度；
 - **混币种按币种分行**（同一 agent 同窗口 USD 一行、CNY 一行），不做汇率换算；`total.cost_total` 在混币种时为 null；
 - **`unknown` 不计 tokens**，只进 `calls` 与 `by_status`；`partial` 正常计 tokens（报的就是已收部分）。
@@ -474,11 +474,10 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 
 ## 5. 鉴权与部署
 
-- **Bearer 一把 key**：env `TOKEN_WALLET_MCP_KEY`；Consul KV `ai-hermes/security/providers/token-wallet-mcp-key` 注入 env（照 kanban-mcp-server 的 `API_SERVER_KEY` 模式）；
-- **不豁免 loopback**：本机请求同样必须带 key，全组件统一鉴权面；
-- 端口 **9131**，端点路径 `/mcp`（fastmcp streamable-http 默认）；
-- 常驻：**systemd user service**（照 kanban-mcp-server-ops 模式：`Restart=on-failure` + 防误杀超时）；
-- 服务注册：**Consul**（ai-microservice-registry 模式，服务名 `token-wallet-mcp`）；
+- **Bearer 一把 key**：env `TOKEN_WALLET_MCP_KEY`（**必填, 无缺省**）；用户自行生成（如 `openssl rand -hex 32`）并注入环境（.env / systemd unit / 启动参数均可）；**不豁免 loopback**，本机请求同样必须带 key，全组件统一鉴权面；
+- 端口 **9131**（可配 `TOKEN_WALLET_PORT`），端点路径 `/mcp`（fastmcp streamable-http 默认）；默认 host `127.0.0.1`（本机 agent/app 同机），`TOKEN_WALLET_HOST` 可改，远程访问需用户自行保证传输安全；
+- 常驻：**systemd user service**（通用 unit，`Restart=on-failure`；部署物在仓库 `deploy/`，用户按本机路径调整）；
+- 数据目录：`TOKEN_WALLET_DB_PATH`（缺省 `~/.local/share/token-wallet/token-wallet.db`），TTL `USAGE_TTL_DAYS`（缺省 90）；
 - 实现：**Python fastmcp** + 官方 MCP streamable-http transport；daemon 侧 schema 用 **pydantic 照本文档 §1–§2 实现**；hook 侧 TS **zod** 由 hook 卡实现；
 - **跨实现一致性靠 fixture**：§8 的 5 组正/反例是共享测试向量，pydantic 与 zod 两套实现对每组 fixture 的 accept/reject 结论必须一致（各自测试内嵌）。
 
@@ -487,7 +486,7 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 ## 6. 本地模式例外（边界）
 
 - **无 daemon 时**：app 本地引擎自采自读自己的库——单机单进程自产自销，**不违反唯一数据面**（数据面 = 本地引擎自身）；
-- **装 daemon 后**：app 切远程模式（指向 :9131），**停止本地采集**（token-monitor 退避模式：发现远程数据面存在即让位）；
+- **装 daemon 后**：app 指向 `http://127.0.0.1:9131/mcp` 作为数据面（同机部署），停止本地采集（发现 daemon 存在即让位）；
 - hook 永远只对 MCP 上报，不感知本地模式的存在。
 
 ---

@@ -34,17 +34,14 @@ providers ──> core(采集/归一化/缓存) ──> StorageBackend ──> M
 | `quota_status` | 全部 provider 最新快照(等价 UI 一瞥) |
 | `quota_history` | 按 provider/时间段/聚合粒度查历史(需 SqliteStore) |
 
-## 部署形态(我们自己环境)
+## 部署形态(独立产品)
 
-- njbx02 常驻: **Python fastmcp**, 端口 **9131**, streamable-http, 端点 `/mcp`
-- Bearer 一把 key `TOKEN_WALLET_MCP_KEY`(Consul `ai-hermes/security/providers/token-wallet-mcp-key`
-  注入 env, 照 kanban-mcp-server 的 API_SERVER_KEY 模式; 不豁免 loopback)
-- systemd user service 常驻(照 kanban-mcp-server-ops 模式)
-- **Consul 服务注册: 顺延未实现**(spec §5 注册项 + 本 README 旧文案声明有注册 —
-  实际 daemon 不含注册逻辑; 服务名 `token-wallet-mcp` 的注册随部署卡在 njbx02
-  落地, 照 ai-microservice-registry 模式由部署方执行。三层二审 P2 落档)
+- 常驻数据面 daemon: **Python fastmcp**, 端口 **9131**(可配 `TOKEN_WALLET_PORT`), streamable-http, 端点 `/mcp`
+- Bearer 一把 key `TOKEN_WALLET_MCP_KEY`(**必填, 无缺省**): 用户自行生成并注入环境
+  (如 `openssl rand -hex 32` → 写入 `~/.config/token-wallet/mcp.env`; 不豁免 loopback)
+- 默认本机 `127.0.0.1:9131`(agent 与 app 同机); `TOKEN_WALLET_HOST` 可改, 远程访问需自行保证传输安全
+- systemd user service 常驻(通用 unit, 路径见 deploy/, 用户按本机改)
 - TTL: env `USAGE_TTL_DAYS`, 缺省 90(usage_events 明细; usage_records 聚合长期保留)
-- 桌面 app 以远程模式指向 :9131, 切远程后停止本地采集(本地模式边界见 spec §6)
 
 ## 部署(daemon 实现, Python)
 
@@ -54,9 +51,9 @@ cd packages/mcp-server
 python3 -m venv .venv && .venv/bin/pip install -e .
 
 # 2. key 注入(不要写进 unit 文件)
-#    Consul KV: ai-hermes/security/providers/token-wallet-mcp-key
-#    渲染到 ~/.config/token-wallet/mcp.env :
-#      TOKEN_WALLET_MCP_KEY=<consul 值>
+#    用户自生成: openssl rand -hex 32
+#    写入 ~/.config/token-wallet/mcp.env :
+#      TOKEN_WALLET_MCP_KEY=<你自己的 key>
 mkdir -p ~/.config/token-wallet
 
 # 3. systemd user unit
