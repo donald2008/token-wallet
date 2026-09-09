@@ -58,3 +58,22 @@ verdict: changes_requested  # 3 BLOCKING + 1 WARNING（round-2 自身引入）
 ## WARNING
 
 4. [docs/RELEASE.md:37 step2] 上传端点写「PUT .../releases/download/stable/」，与 token-wallet skill 已验证流程（DELETE 旧附件 → POST /api/v5/.../releases/<id>/attach_files -F file, 匿名 curl 双校验）不一致，PUT 下载 URL 非可执行上传 API。要求对齐 skill 实证流程。
+
+---
+
+# Round-3 人工终审意见（追加）
+
+reviewer: njbx02 (default 老大人工终审, run 859, contract lens)
+verdict: changes_requested  # 1 BLOCKING + 1 错字（round-3 自身引入，同一行同一句）
+
+## 复验范围
+
+- git 状态: origin/master = 26a2e9a (ls-remote 一致), diff ef71e4f..26a2e9a = 2 files +4/-4 全 docs, 零 packages/ 越界 ✓
+- Round-1 修复回归核验（契约保持）: README.md / README.en.md / USER_GUIDE.md 对 10.200.1.88 全 0 命中 ✓; 「已知遗留」段已删 ✓; 渠道拓扑 gitee stable 主渠道 + 8889 标注内部开发通道 ✓; D-054 决策在位 ✓
+- Round-2 三项 BLOCKING 核验到位: DECISIONS.md:57 D-053 标题恢复「拖即变**停**即存」（全仓 0 残留「置即存」，theme.ts/README/USER_GUIDE 语义一致）✓; ai-hemes → ai-hermes ×2（全仓 0 残留，Consul keys/config secrets_mapping 实证一致）✓; 「更更新源」→「更新源」✓
+- 原始验收（contract lens）: README/README.en v0.2.8 现状（gitee stable 更新源 / OneClickAuth 一键授权 / P5 布局 / 手动排序收敛）✓; docs/ 过时文档盘点有据（provider-card-layouts-v2.md 删除历史 + DESIGN/USER_GUIDE/frontend-AGENTS 对废弃机制显式标注）✓; 操作步骤可跟做（USER_GUIDE §4 双通道自助恢复路径齐全）✓; commit+push+ls-remote ✓
+
+## Round-3 新引入问题（BLOCKING）
+
+1. [docs/RELEASE.md:37 step2] **「随后用 PUT .../releases/<release_id> 把 attachment URL 写入 release assets 列表」为编造步骤，与实证流程矛盾**。round-2 WARNING 只要求端点对齐 skill 实证流程（删旧 DELETE → 传新 POST attach_files → 匿名 curl 双校验）；round-3 把主端点改对（POST attach_files ✓）后，却又在同一句追加了一段 skill 从未执行、五次真版（v0.2.4~v0.2.8）从未需要的 PUT 绑定步骤。实证反证就在本文档 step3：POST 之后**直接匿名 curl 就能拉到新版本**——附件在 POST attach_files 即已绑定 release，无需任何 PUT；Gitee PUT/PATCH /releases/<id> 更新的是 release 元数据（tag/title/body），不接受 attachment URL 写入 assets 列表。要求：删除「随后用 PUT ... 写入 release assets 列表（…绑定由 release asset API 完成…）」整句，step2 到「每次返回 201 + attachment URL」为止，与 skill 五次实跑流程一字对齐（这正是本卡发版手册「防误导」的存在意义）。
+2. 同句错字「Ditee 三件套绑定」→ 随整句删除即消；若保留任何表述须写 Gitee。
