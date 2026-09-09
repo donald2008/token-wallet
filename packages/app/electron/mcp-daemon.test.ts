@@ -1,7 +1,9 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_PROBE_TIMEOUT_MS,
+  _resetLastStartedPid,
+  getLastStartedPid,
   type HttpShim,
   isInstalled,
   probe,
@@ -204,5 +206,87 @@ describe("mcp-daemon: isInstalled", () => {
 describe("mcp-daemon: 常量", () => {
   it("默认探测超时 = 1500ms", () => {
     expect(DEFAULT_PROBE_TIMEOUT_MS).toBe(1500);
+  });
+});
+
+describe("mcp-daemon: lastStartedPid 缓存(t_4bd214de round-2 BLOCKING-1)", () => {
+  // 全局缓存状态, 每个用例前重置(不依赖 afterEach, 因为别的 describe 可能先跑过)
+  beforeEach(() => _resetLastStartedPid());
+  afterEach(() => _resetLastStartedPid());
+
+  it("start 前 getLastStartedPid → undefined", () => {
+    expect(getLastStartedPid()).toBeUndefined();
+  });
+
+  it("start 成功后 getLastStartedPid → spawn 返回的 pid", async () => {
+    const spawn = memSpawn();
+    const http = httpShim(true);
+    const paths = pathShim(true);
+    const cfg = {
+      host: "127.0.0.1",
+      port: 9131,
+      key: "x".repeat(32),
+      dbPath: "/x.db",
+      ttlDays: 90,
+    };
+    const r = await start(cfg, spawn, http, paths, "/app", true, "linux");
+    expect(r.started).toBe(true);
+    expect(getLastStartedPid()).toBe(99999);
+  });
+
+  it("start 失败(not_installed) → 不缓存", async () => {
+    const spawn = memSpawn();
+    const http = httpShim(true);
+    const paths = pathShim(false); // 没装
+    const cfg = {
+      host: "127.0.0.1",
+      port: 9131,
+      key: "x".repeat(32),
+      dbPath: "/x.db",
+      ttlDays: 90,
+    };
+    const r = await start(cfg, spawn, http, paths, "/app", true, "linux");
+    expect(r.started).toBe(false);
+    expect(getLastStartedPid()).toBeUndefined();
+  });
+
+  it("start 失败(polling 超时) → 不缓存(进程可能未起来)", { timeout: 15_000 }, async () => {
+    const spawn = memSpawn();
+    const http = httpShim(false); // 永远不活
+    const paths = pathShim(true);
+    const cfg = {
+      host: "127.0.0.1",
+      port: 9131,
+      key: "x".repeat(32),
+      dbPath: "/x.db",
+      ttlDays: 90,
+    };
+    const r = await start(cfg, spawn, http, paths, "/app", true, "linux");
+    expect(r.started).toBe(false);
+    expect(r.reason).toBe("timeout");
+    expect(getLastStartedPid()).toBeUndefined();
+  });
+
+  it("stop 真停后缓存清空", async () => {
+    const spawn = memSpawn();
+    // start 期间 alive=true, stop 后 alive=false → stopped=true, 缓存清空
+    let alive = true;
+    const http: HttpShim = {
+      postInitialize: async () => (alive ? { status: 200 } : { status: 500 }),
+    };
+    const paths = pathShim(true);
+    const cfg = {
+      host: "127.0.0.1",
+      port: 9131,
+      key: "x".repeat(32),
+      dbPath: "/x.db",
+      ttlDays: 90,
+    };
+    await start(cfg, spawn, http, paths, "/app", true, "linux");
+    expect(getLastStartedPid()).toBe(99999);
+    alive = false; // stop 后 probe 显示 daemon 真停
+    const stopR = await stop(99999, spawn, http, { host: cfg.host, port: cfg.port }, "linux");
+    expect(stopR.stopped).toBe(true);
+    expect(getLastStartedPid()).toBeUndefined();
   });
 });

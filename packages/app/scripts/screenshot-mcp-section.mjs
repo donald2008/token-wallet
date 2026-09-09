@@ -37,10 +37,19 @@ const PLAN = [
   { themeId: "dark", scenario: "not-installed", what: "panel" },
   { themeId: "dark", scenario: "stopped", what: "panel" },
   { themeId: "dark", scenario: "running", what: "panel" },
-  // 三主题 × stopped: 截 settings-modal(backdrop-filter 差异)
-  { themeId: "dark", scenario: "stopped", what: "modal" },
-  { themeId: "light", scenario: "stopped", what: "modal" },
-  { themeId: "glass", scenario: "stopped", what: "modal" },
+  // 三主题 × stopped: 截 AgentGuideModal(引导弹窗, 需先点 mcp-open-guide)—
+  // t_4bd214de round-2 P1-2 修复: 原 selector=.settings-modal 错(截了设置面板), 改
+  // .mcp-guide-modal(modal overlay 内的真弹层); 触发流程 = 点 mcp-open-guide
+  // 等 mcp-guide-overlay 出现后再 locator modal 内层
+  { themeId: "dark", scenario: "stopped", what: "guide", alive: false },
+  { themeId: "light", scenario: "stopped", what: "guide", alive: false },
+  { themeId: "glass", scenario: "stopped", what: "guide", alive: false },
+  // 三主题 × running: 引导弹窗内真有 agents 列表(daemon 跑)→ 截 mcp-guide-modal
+  // 含 hermes+claude-code 两个 agent 渲染
+  { themeId: "dark", scenario: "running", what: "guide", alive: true },
+  // dark × stopped: key 二次确认弹窗(t_4bd214de round-2 P1-2: 验收要求有 key 态截图)
+  // 触发 = 点 mcp-key-regen → 等 mcp-regen-confirm-panel → 截 .mcp-confirm
+  { themeId: "dark", scenario: "stopped", what: "key-regen-confirm" },
 ];
 
 const SCENARIO_STATE = Object.fromEntries(SCENARIOS.map((s) => [s.id, s.state]));
@@ -96,8 +105,25 @@ async function capture(ctx, item) {
     const filename = `mcp-${item.themeId}-${item.scenario}-${item.what}.png`;
     const fullPath = path.join(OUT_DIR, filename);
     let target;
-    if (item.what === "modal") {
-      target = await page.$(".settings-modal");
+    if (item.what === "guide") {
+      // t_4bd214de round-2 P1-2: 引导弹窗需先点 mcp-open-guide, 截 .mcp-guide-modal
+      // (overlay 是 fixed inset 8px 背板, modal 是其内层真弹层)
+      await page.click('[data-testid="mcp-open-guide"]');
+      await page.waitForSelector('[data-testid="mcp-guide-overlay"]', {
+        timeout: 5_000,
+      });
+      await page.waitForSelector(".mcp-guide-modal", { timeout: 5_000 });
+      await page.waitForTimeout(300);
+      target = await page.$(".mcp-guide-modal");
+    } else if (item.what === "key-regen-confirm") {
+      // t_4bd214de round-2 P1-2: key 二次确认弹窗 = 点 mcp-key-regen 后
+      // mcp-regen-confirm-panel 出现, 截 .mcp-confirm(panel 内层)
+      await page.click('[data-testid="mcp-key-regen"]');
+      await page.waitForSelector('[data-testid="mcp-regen-confirm-panel"]', {
+        timeout: 5_000,
+      });
+      await page.waitForTimeout(300);
+      target = await page.$('[data-testid="mcp-regen-confirm-panel"]');
     } else {
       target = await page.$('[data-testid="mcp-panel"]');
     }

@@ -25,6 +25,7 @@ const ipcMocks = vi.hoisted(() => ({
   mcpGetAutostart: vi.fn(),
   mcpSetAutostart: vi.fn(),
   mcpGetGuide: vi.fn(),
+  mcpRestart: vi.fn(),
   maskMcpKey: (key: string): string => {
     if (key.length <= 12) return "•".repeat(key.length);
     return `${key.slice(0, 4)}-••••-••••-••••-${key.slice(-4)}`;
@@ -70,6 +71,7 @@ beforeEach(() => {
   });
   ipcMocks.mcpSetAutostart.mockResolvedValue({ mcpAutostart: true, osAutostart: true });
   ipcMocks.mcpGetGuide.mockResolvedValue({ agents: [] });
+  ipcMocks.mcpRestart.mockResolvedValue({ restarted: true, started: true, pid: 12345 });
   // mock clipboard(组件复制用)
   Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
 });
@@ -205,6 +207,33 @@ describe("McpServicePanel: 启动流程", () => {
     const err = container.querySelector('[data-testid="mcp-error"]') as HTMLElement | null;
     expect(err?.textContent ?? "").toContain("timeout");
   });
+
+  it("点击 stop → 调 mcpStop(不传 pid 走缓存, round-2 BLOCKING-1)", async () => {
+    ipcMocks.mcpProbe.mockResolvedValue({ alive: true, installed: true });
+    ipcMocks.mcpStop.mockResolvedValue({ stopped: true });
+    await render();
+    const stopBtn = container.querySelector('[data-testid="mcp-stop"]') as HTMLButtonElement;
+    expect(stopBtn.disabled).toBe(false);
+    await act(async () => {
+      fireClick(stopBtn);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    expect(ipcMocks.mcpStop).toHaveBeenCalledTimes(1);
+    expect(ipcMocks.mcpStop).toHaveBeenCalledWith(); // 不传 pid(走主进程缓存)
+  });
+
+  it("stop 返 stopped:false → 展示错误条(round-2 BLOCKING-1 不许静默吞)", async () => {
+    ipcMocks.mcpProbe.mockResolvedValue({ alive: true, installed: true });
+    ipcMocks.mcpStop.mockResolvedValue({ stopped: false, reason: "pid_required" });
+    await render();
+    const stopBtn = container.querySelector('[data-testid="mcp-stop"]') as HTMLButtonElement;
+    await act(async () => {
+      fireClick(stopBtn);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    const err = container.querySelector('[data-testid="mcp-error"]') as HTMLElement | null;
+    expect(err?.textContent ?? "").toContain("pid_required");
+  });
 });
 
 describe("McpServicePanel: 32hex key 二次确认 + 重生成", () => {
@@ -257,8 +286,55 @@ describe("McpServicePanel: 32hex key 二次确认 + 重生成", () => {
       for (let i = 0; i < 10; i++) await Promise.resolve();
     });
     expect(ipcMocks.mcpGenKey).toHaveBeenCalledTimes(1);
+    expect(ipcMocks.mcpRestart).toHaveBeenCalledTimes(1); // BLOCKING-1: 真编排 restart
     const hint = container.querySelector('[data-testid="mcp-regen-hint"]') as HTMLElement | null;
+    // daemon 在跑 + restart 成功 → 显示「自动重启」」提示文案, 不含「停止」
+    expect(hint?.textContent ?? "").not.toContain("停止");
+    expect(hint?.textContent ?? "").toContain("自动重启");
+  });
+
+  it("确认 regen → daemon 未跑 → 不调 mcpRestart + 提示手动 stop+start", async () => {
+    ipcMocks.mcpGenKey.mockResolvedValueOnce({
+      key: "fedcba9876543210fedcba9876543210",
+      daemonWasRunning: false, // 未跑
+    });
+    await render();
+    const regen = container.querySelector('[data-testid="mcp-key-regen"]') as HTMLButtonElement;
+    await act(async () => {
+      fireClick(regen);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    const confirm = container.querySelector('[data-testid="mcp-regen-confirm"]') as HTMLButtonElement;
+    await act(async () => {
+      fireClick(confirm);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    expect(ipcMocks.mcpRestart).not.toHaveBeenCalled(); // 未跑不编排
+    const hint = container.querySelector('[data-testid="mcp-regen-hint"]') as HTMLElement | null;
+    // daemon 未跑 → 显示原「手动 stop+start」」提示
     expect(hint?.textContent ?? "").toContain("停止");
+  });
+
+  it("确认 regen → restart 失败 → 提示手动 + error 条", async () => {
+    ipcMocks.mcpRestart.mockResolvedValueOnce({ restarted: false, started: false, reason: "still_alive" });
+    await render();
+    const regen = container.querySelector('[data-testid="mcp-key-regen"]') as HTMLButtonElement;
+    await act(async () => {
+      fireClick(regen);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    const confirm = container.querySelector('[data-testid="mcp-regen-confirm"]') as HTMLButtonElement;
+    await act(async () => {
+      fireClick(confirm);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    expect(ipcMocks.mcpRestart).toHaveBeenCalledTimes(1);
+    const hint = container.querySelector('[data-testid="mcp-regen-hint"]') as HTMLElement | null;
+    // restart 失败 → 显示「restart failed + 手动 stop+start」文案
+    expect(hint?.textContent ?? "").toContain("失败");
+    expect(hint?.textContent ?? "").toContain("停止");
+    const errEl = container.querySelector('[data-testid="mcp-error"]') as HTMLElement | null;
+    expect(errEl?.textContent ?? "").toContain("still_alive");
   });
 });
 

@@ -50,6 +50,24 @@ export const DEFAULT_PROBE_TIMEOUT_MS = 1500;
 export const DEFAULT_START_POLL_TIMEOUT_MS = 10_000;
 export const DEFAULT_START_POLL_INTERVAL_MS = 200;
 
+/**
+** 进程内缓存最近一次 mcp_start 成功后的 pid(用于 stop 无 pid 路径, t_4bd214de round-2 BLOCKING-1):
+** 主进程不持久化跨重启 — OS 重启 / 用户外部起 daemon 后, 该缓存失效 → mcp_stop 无 pid
+** 时会 fallback 到 probe 反推(detect live → pid_required)。若 daemon 真在跑但无 pid 可用,
+** UI 必须显式告知用户, 不许静默吞。
+*/
+let lastStartedPid: number | undefined;
+
+/** 测试/清理钩子: vitest beforeEach 重置避免泄漏 */
+export function _resetLastStartedPid(): void {
+  lastStartedPid = undefined;
+}
+
+/** UI/RPC 层读最近 pid, 用于诊断/编排(无则 undefined) */
+export function getLastStartedPid(): number | undefined {
+  return lastStartedPid;
+}
+
 export function defaultSpawnShim(): SpawnShim {
   // 动态 require 避免 vitest node 环境之外误引(本模块本就该 node-only)
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -153,10 +171,22 @@ export async function start(
   const deadline = Date.now() + DEFAULT_START_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
     const r = await probe({ host: cfg.host, port: cfg.port }, http, DEFAULT_PROBE_TIMEOUT_MS);
-    if (r.alive) return { started: true, pid };
+    if (r.alive) {
+      lastStartedPid = pid; // 缓存最新成功 pid, 用于 stop 无 pid 路径(BLOCKING-1)
+      return { started: true, pid };
+    }
     await spawn.wait(DEFAULT_START_POLL_INTERVAL_MS);
   }
+  // 超时 → 不缓存(进程可能未启动), 但仍返 pid 让 UI 看见实际值
   return { started: false, pid, reason: "timeout" };
+}
+
+/**
+** Stop + 缓存清理: 真停了之后清缓存(避免下次 stop 复用死 pid)。
+** 编排调用方(start 自动重启 / key regen 编排)在调 stop 后立即调此函数清缓存。
+*/
+export function clearLastStartedPid(): void {
+  lastStartedPid = undefined;
 }
 
 export async function stop(
@@ -171,12 +201,18 @@ export async function stop(
   await spawn.killTree(pid, isWin ? "TASKKILL" : "SIGTERM");
   await spawn.wait(1500);
   const r = await probe({ host: cfg.host, port: cfg.port }, http, DEFAULT_PROBE_TIMEOUT_MS);
-  if (!r.alive) return { stopped: true };
+  if (!r.alive) {
+    if (lastStartedPid === pid) lastStartedPid = undefined; // 真停成功, 清缓存(BLOCKING-1)
+    return { stopped: true };
+  }
   // 还没死 → 强杀兜底
   await spawn.killTree(pid, isWin ? "TASKKILL" : "SIGKILL");
   await spawn.wait(500);
   const r2 = await probe({ host: cfg.host, port: cfg.port }, http, DEFAULT_PROBE_TIMEOUT_MS);
-  if (!r2.alive) return { stopped: true };
+  if (!r2.alive) {
+    if (lastStartedPid === pid) lastStartedPid = undefined; // 强杀成功, 清缓存
+    return { stopped: true };
+  }
   return { stopped: false, reason: "still_alive" };
 }
 
