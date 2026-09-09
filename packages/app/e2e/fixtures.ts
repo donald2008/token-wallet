@@ -131,6 +131,130 @@ const ipcMocks: Record<string, IpcHandler> = {
     return null;
   },
   set_launch_at_login: () => null,
+  // ---- D-048 / t_4bd214de: MCP daemon 桥 7 通道 mock ----
+  // 读 localStorage token-wallet.mock.mcp(由 seedMcpState 注入), 缺省 {installed:false}
+  mcp_probe: () => {
+    let s: { installed: boolean; alive?: boolean; reason?: string } = { installed: false };
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.mcp");
+      if (raw) s = JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    if (!s.installed) return { alive: false, reason: "unreachable", installed: false };
+    return {
+      alive: s.alive === true,
+      reason: s.alive ? undefined : s.reason ?? "unreachable",
+      installed: true,
+    };
+  },
+  mcp_start: () => {
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.mcp");
+      const s = raw ? JSON.parse(raw) : { installed: false };
+      if (s.installed) {
+        localStorage.setItem(
+          "token-wallet.mock.mcp",
+          JSON.stringify({ installed: true, alive: true, pid: 54321 }),
+        );
+        return { started: true, pid: 54321 };
+      }
+    } catch {
+      /* ignore */
+    }
+    return { started: false, reason: "not_installed" };
+  },
+  mcp_stop: (_args?: { pid?: number }) => {
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.mcp");
+      const s = raw ? JSON.parse(raw) : { installed: false };
+      if (s.installed) {
+        localStorage.setItem(
+          "token-wallet.mock.mcp",
+          JSON.stringify({ installed: true, alive: false, reason: "stopped" }),
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+    return { stopped: true };
+  },
+  mcp_get_config: () => {
+    let s: { installed?: boolean } = {};
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.mcp");
+      if (raw) s = JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return {
+      TOKEN_WALLET_MCP_KEY: "0123456789abcdef0123456789abcdef",
+      TOKEN_WALLET_PORT: 9131,
+      TOKEN_WALLET_HOST: "127.0.0.1",
+      TOKEN_WALLET_DB_PATH: "/data/token-wallet/token-wallet.db",
+      USAGE_TTL_DAYS: 90,
+      mcpEnvPath: "/home/test/.config/token-wallet/mcp.env",
+      installed: s.installed === true,
+    };
+  },
+  mcp_gen_key: () => ({
+    key: "fedcba9876543210fedcba9876543210",
+    daemonWasRunning: false,
+  }),
+  mcp_get_autostart: () => {
+    let s: { mcpAutostart?: boolean; osAutostart?: boolean } = {};
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.mcp.autostart");
+      if (raw) s = JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return {
+      mcpAutostart: s.mcpAutostart !== false,
+      osAutostart: s.osAutostart === true,
+    };
+  },
+  mcp_set_autostart: (args?: { enabled?: boolean }) => {
+    const enabled = Boolean(args?.enabled);
+    try {
+      localStorage.setItem(
+        "token-wallet.mock.mcp.autostart",
+        JSON.stringify({ mcpAutostart: enabled, osAutostart: enabled }),
+      );
+    } catch {
+      /* ignore */
+    }
+    return { mcpAutostart: enabled, osAutostart: enabled };
+  },
+  mcp_get_guide: () => {
+    let s: { alive?: boolean } = {};
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.mcp");
+      if (raw) s = JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    if (s.alive) {
+      return {
+        agents: [
+          {
+            id: "hermes",
+            name: "Hermes",
+            plugin_url: "https://example.com/hermes",
+            configure: "Configure Hermes agent with endpoint http://127.0.0.1:9131/mcp",
+            verify: "curl http://127.0.0.1:9131/mcp -X POST",
+          },
+          {
+            id: "claude-code",
+            name: "Claude Code",
+            plugin_url: "https://example.com/claude-code",
+            configure: "Configure Claude Code MCP integration",
+          },
+        ],
+      };
+    }
+    return { agents: [], reason: "daemon_not_running" };
+  },
   // ---- D-046: updater 三通道 + 事件桥(localStorage token-wallet.mock.updater 存状态;
   // 测试用 seedUpdaterState() 注入目标态, 覆盖四态渲染断言) ----
   updater_check: () => {
@@ -621,4 +745,21 @@ export async function seedSqliteHistory(
     },
     [providerId, daysAgo, remaining],
   );
+}
+
+/**
+ * D-048 / t_4bd214de: MCP 状态注入器 — e2e 三态覆盖:
+ *   - not_installed (默认): { installed: false }
+ *   - stopped: { installed: true, alive: false }
+ *   - running: { installed: true, alive: true }
+ *
+ * 用 page.reload() 后 mock 重新挂载生效。
+ */
+export async function seedMcpState(
+  page: import("@playwright/test").Page,
+  state: { installed: boolean; alive?: boolean; reason?: string; port?: number },
+): Promise<void> {
+  await page.evaluate((s) => {
+    localStorage.setItem("token-wallet.mock.mcp", JSON.stringify(s));
+  }, state);
 }
