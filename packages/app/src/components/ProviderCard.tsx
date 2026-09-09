@@ -3,7 +3,8 @@ import type { ProviderSnapshot } from "../types";
 import { providerHealth, statusBadge } from "../health";
 import { getTemplateFor } from "../templates/registry";
 import { t } from "../i18n";
-import { BrandLogo } from "./brand-logos";
+import { BrandHandle } from "./ProviderCardLayouts";
+import { StatusDot } from "./StatusDot";
 import type { DragHandleProps } from "../useCardDragSort";
 import { commandAuthCancel, commandAuthFinish, commandAuthStart } from "../ipc";
 
@@ -79,7 +80,7 @@ export function extractCliFromHint(hint: string): string {
   return cmd.trim().split(/\s+/)[0] ?? "";
 }
 
-function OneClickAuth({ hint }: { hint: string }) {
+function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerId: string; onRefresh?: (id: string) => void }) {
   const [stage, setStage] = useState<"idle" | "starting" | "waiting" | "done" | "error">("idle");
   const [finishMode, setFinishMode] = useState<"code" | "callback" | undefined>(undefined);
   const [sessionId, setSessionId] = useState("");
@@ -156,7 +157,12 @@ function OneClickAuth({ hint }: { hint: string }) {
           type="button"
           className="btn btn-sm oneclick-auth-btn"
           data-testid="oneclick-auth-btn"
-          onClick={onStart}
+          // t_034a6e81 Bug1 修: done 态点击 = 触发该卡刷线(重新采集), 不再走 onStart(避免又开授权页)。
+          // onRefresh 未传(mock 预览卡) → done 态按钮禁用, 提示预览卡不可刷新(照 onDelete 不渲染的"不给可点但无效的按钮"精神)
+          onClick={stage === "done" ? () => onRefresh?.(providerId) : onStart}
+          disabled={stage === "done" && !onRefresh}
+          title={stage === "done" && !onRefresh ? t("card.authDonePreviewTitle") : undefined}
+          aria-label={stage === "done" && !onRefresh ? t("card.authDonePreviewAria") : undefined}
         >
           {stage === "done" ? t("card.authDone") : t("card.authStart")}
         </button>
@@ -273,7 +279,7 @@ function agoText(fetchedAt: number): string {
  * - stale / unsupported: 灰
  * - error: 红
  */
-function AbnormalBody({ p }: { p: ProviderSnapshot }) {
+function AbnormalBody({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: string) => void }) {
   const health = providerHealth(p);
   return (
     <div className="abnormal-body" data-testid="abnormal-body">
@@ -291,7 +297,7 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
           {/* t_66b67453 契约4: 一键复制授权命令(反引号内完整原文), 免手抄易错 */}
           <HintCopyButton hint={p.setup_hint} />
           {/* t_fb8c44d8: command 通道一键授权 — 自动开浏览器 + 粘贴 code 回喂, 消灭开终端 */}
-          <OneClickAuth hint={p.setup_hint} />
+          <OneClickAuth hint={p.setup_hint} providerId={p.provider_id} onRefresh={onRefresh} />
         </div>
       )}
       <div className="card-error-note">
@@ -317,6 +323,7 @@ function AbnormalBody({ p }: { p: ProviderSnapshot }) {
 export function ProviderCard({
   p,
   onDelete,
+  onRefresh,
   dragHandle,
   dragging = false,
   dragDy = 0,
@@ -324,6 +331,8 @@ export function ProviderCard({
   p: ProviderSnapshot;
   /** 传入即渲染卡内删除钮(仅真实实例); 参数 = provider_id(= 实例 id) */
   onDelete?: (id: string) => void;
+  /** t_034a6e81 Bug1 修: 已授权态点击 = 该卡刷线; 未传(mock 预览卡)时 done 态按钮禁用(不给可点但无效的按钮) */
+  onRefresh?: (id: string) => void;
   /** D-039 拖动手柄绑定(pointer 事件, 由 App useCardDragSort 提供); 传入即色块可拖 */
   dragHandle?: DragHandleProps;
   /** D-039 该卡正在被拖动(浮起视觉) */
@@ -343,20 +352,30 @@ export function ProviderCard({
       data-health={health}
     >
       <div className="card-head">
-        <span
-          className={`brand-block${dragHandle ? " drag-handle" : ""}`}
+        {/* P1 形态(handle+name+StatusDot+状态徽章 三件套一行, 9/7 用户拍板, t_27eeadad):
+         *   头部 BrandHandle = BrandLogo 拖把手(D-039) + display_name + StatusDot + statusBadge,
+         *   删除钮沿用主页契约(D-038)不动。dragHandle 绑定到把手块保持 D-039 拖动排序契约。 */}
+        <BrandHandle
+          p={p}
+          size={16}
+          className={`brand-handle${dragHandle ? " drag-handle" : ""}`}
+          testIdPrefix=""
           title={dragHandle ? t("card.dragSort", { name: p.display_name }) : p.provider_id}
           data-testid={dragHandle ? `drag-handle-${p.provider_id}` : undefined}
           {...dragHandle}
-        >
-          {/* P1(t_696ec820): 内置单色 SVG 品牌图标; descriptor.logo 生效(未收录回退品牌色块) */}
-          <BrandLogo platform={p.logo ?? p.provider_id} size={16} />
-        </span>
+        />
         <span className="card-name" title={p.display_name}>
           {p.display_name}
         </span>
-        <span className={`card-status-text text-${health}`}>{statusBadge(p)}</span>
+        <StatusDot health={health} size={8} />
+        <span className={`card-status-text text-${health}`} data-testid="card-status-badge">{statusBadge(p)}</span>
         {onDelete && !confirming && (
+          // t_433892c6 9/7 修订 H(老大 #1175 回归): 删钮 = 按钮自身 hover 热区,
+          // 删 .card-del-zone 透明 div + :has() 让位规则 + z-index 博弈 三层机制。
+          // 按钮 position:absolute 锚卡右上角, opacity:0 + pointer-events:auto
+          // (opacity 不影响 hit-test, 按钮始终在 hit-test tree), :hover 触发 opacity:1。
+          // 旧三层机制(c1d380f)结构死锁: zone 与 status badge 几何重叠 → zone 不 :hover
+          // → button 永不显; 本方案直接按钮自为热区, 一行 CSS 闭环。
           <button
             type="button"
             className="btn btn-icon btn-danger card-del-btn"
@@ -405,7 +424,7 @@ export function ProviderCard({
           </span>
         )}
       </div>
-      {p.status === "ok" ? <Template p={p} /> : <AbnormalBody p={p} />}
+      {p.status === "ok" ? <Template p={p} /> : <AbnormalBody p={p} onRefresh={onRefresh} />}
     </section>
   );
 }

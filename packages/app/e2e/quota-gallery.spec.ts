@@ -2,28 +2,30 @@ import { expect as pwExpect } from "@playwright/test";
 import { test } from "./fixtures";
 
 /**
- * L2(四元素排版变体对比页, t_35ff3c1f + t_23800bd4 mock 修正, feat/theme-glass 实验):
- * - 同意首开 → 设置 → 「排版变体方案」入口 → 方案页打开
- * - 5 段排版(qvar-row/duo/hero/micro/ticker) × 每段 4 条完整四元素(标题+重置+条+用量)
- * - 同一组数据喂所有排版(各段首条标题/用量一致, 首条 aria-valuenow=40)
- * - 数据(t_23800bd4): 前 3 条百分制三态(40%/72%/91%, 真实 provider 风格名, 无「xx 次」误导),
- *   第 4 条计数制演示(credits 2300/10000); 填充 ok 10 / warn 5 / bad 5
+ * L2(QuotaGallery Provider 卡片排版方案页, t_73c110ea 9/7 重建, 修订 #1116):
+ * - 同意首开 → 设置 → 「Provider 卡片排版方案」入口 → 方案页打开
+ * - 3 排版段 (P1/P2/P4) + 异常段 (auth_expired + error 共用 AbnormalBody 骨架)
+ * - 同一套三窗真实数据 (kimi-code rolling_5h + weekly + monthly, unit=requests)
+ * - 三窗 QuotaMeter(layout=micro) **常驻直显** = 卡片信息主体(无 hover 依赖, 修订 #1116)
+ * - micro = BarRowTooltip 内 QuotaMeter 的同一形态(title+bar+(usage|reset) 三层 grid, 4px 条)
+ * - 不再单独挂 <BarRowTooltip>: 信息全靠悬浮才见 = 不合格
  * - 复用 e2e DOM 契约(.progress/.progress-fill[data-health]/role=progressbar)
  * - 返回按钮回面板
- * - t_85237167 9/5 清空重建: 旧 S1-S4 删, 新 4 方案(A/B/C/D) + 异常段,
- *   全部基于 tooltip QuotaMeter(BarRowTooltip + QuotaMeter layout=micro) 组合
- *   总 progressbar 39 = 5 排版段 20 + 4 方案卡片段 19
+ *
+ * 旧契约(已作废, t_85237167 → t_73c110ea 9/7 重建):
+ *   - 5 排版对比段(qvar-row/duo/hero/micro/ticker) → 整段删除
+ *   - 4 方案 A/B/C/D + 异常段(qvar-cards2-*) → 替换为 P1/P2/P4 (qvar-cards3-*, 3 方案; P3 grid 在 360px 屏实测文字重叠 + 列被裁切, 本轮不交付)
+ *   - 总 progressbar 39 → 9 (3 ok 卡 × 3 窗 × 1 micro QuotaMeter, 修订 #1116 去掉 BarRowTooltip)
+ *   - 旧"1 种排版 + 4 头部装饰"差异(已作废) → 新"真排版维度"差异
  */
 
-const LAYOUTS = ["row", "duo", "hero", "micro", "ticker"] as const;
-
-/** 同意首开隐私声明 → 面板(侧栏出现) */
+/** 同意首开隐私声明 → 面板 */
 async function agree(page: import("@playwright/test").Page) {
   await page.getByTestId("consent-agree").click();
   await pwExpect(page.getByTestId("settings-btn")).toBeVisible();
 }
 
-/** 打开设置 → 进入排版变体方案页 */
+/** 打开设置 → 进入 Provider 卡片排版方案页 */
 async function openGallery(page: import("@playwright/test").Page) {
   await page.getByTestId("settings-btn").click();
   await pwExpect(page.getByTestId("settings-view")).toBeVisible();
@@ -31,123 +33,138 @@ async function openGallery(page: import("@playwright/test").Page) {
   await pwExpect(page.getByTestId("quota-gallery")).toBeVisible();
 }
 
-test("方案页: 同数据×5种排版, 每段 4 条完整四元素, 单位语义上屏, 契约复用", async ({ hostPage, page }) => {
+const SCHEMES = ["p1", "p2", "p4"] as const;
+
+test("方案页: 3 排版 + 异常段, 同一套三窗真实数据, QuotaMeter(micro) 三窗常驻直显, 契约复用", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await openGallery(page);
 
   const gallery = page.getByTestId("quota-gallery");
 
-  // 5 段排版齐; 每段画布内 4 条 meter, 每条四元素齐全
-  for (const layout of LAYOUTS) {
-    const canvas = page.getByTestId(`qvar-canvas-${layout}`);
+  // 3 排版段齐; 每段画布内 1 张 ok 卡, 卡名 = Kimi-Code #1, 健康由最紧窗 5h 80% → warn
+  for (const key of SCHEMES) {
+    const canvas = page.getByTestId(`qvar-canvas-cards3-${key}`);
     await pwExpect(canvas).toBeVisible();
-    await pwExpect(canvas.locator("[data-testid='quota-meter']")).toHaveCount(4);
-    await pwExpect(canvas.locator(".quota-title")).toHaveCount(4);
-    await pwExpect(canvas.locator(".quota-reset")).toHaveCount(4);
-    await pwExpect(canvas.locator('[role="progressbar"]')).toHaveCount(4);
-    await pwExpect(canvas.locator(".quota-usage")).toHaveCount(4);
+    const card = canvas.locator("[data-testid='qcard3']");
+    await pwExpect(card).toHaveCount(1);
+    await pwExpect(card.locator("[data-testid='qcard3-name']")).toHaveText("Kimi-Code #1");
+    // 卡头含 handle + 三态状态 data-health
+    await pwExpect(card.locator("[data-testid='qcard3-handle']")).toHaveCount(1);
+    await pwExpect(card).toHaveAttribute("data-health", "warn");
   }
 
-  // 同数据跨段: 每段第 1 条标题一致 = OpenCode 5 小时窗(真实 provider 风格, 无「xx 次」误导);
-  // 每段第 1 条 aria-valuenow = 40
-  const firstTitles: string[] = [];
-  for (const layout of LAYOUTS) {
-    const canvas = page.getByTestId(`qvar-canvas-${layout}`);
-    const firstTitle = (await canvas.locator(".quota-title").first().textContent()) ?? "";
-    firstTitles.push(firstTitle);
-    await pwExpect(canvas.locator('[role="progressbar"]').first()).toHaveAttribute("aria-valuenow", "40");
-  }
-  pwExpect(firstTitles).toEqual(Array(LAYOUTS.length).fill("OpenCode 5 小时窗"));
-
-  // 单位语义: row 段首条百分制 "40% / 100%", 第 4 条计数制演示带 credits
-  const rowCanvas = page.getByTestId("qvar-canvas-row");
-  await pwExpect(rowCanvas.locator(".quota-usage").first()).toHaveText("40% / 100%");
-  await pwExpect(rowCanvas.locator(".quota-usage").nth(3)).toContainText("2300 / 10000 credits");
-
-  // 总契约: 39 条 progressbar/进度条
-  //   5 排版段 4 × 5 = 20 + 4 方案卡片段 19 = 39
-  //   A=4 / B=6(2 row + 2 BarRowTooltip + 2 触发器 BarRowTooltip) / C=4 / D=5(2 row + 2 BarRowTooltip + 1 头部触发器)
-  //   异常 2 卡 0
-  // 填充 ok 19 / warn 15 / bad 5
-  // t_85237167 9/5 重建: 卡内方案段 4 方案 + 异常段
-  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(39);
-  await pwExpect(gallery.locator(".progress")).toHaveCount(39);
-  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(19);
-  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(15);
-  await pwExpect(gallery.locator(".progress-fill[data-health='bad']")).toHaveCount(5);
-
-  // 每段 meter 的 data-layout 与 class 和所在段一致(容器层排版生效)
-  for (const layout of LAYOUTS) {
-    const canvas = page.getByTestId(`qvar-canvas-${layout}`);
-    const meters = canvas.locator("[data-testid='quota-meter']");
-    await pwExpect(meters.first()).toHaveAttribute("data-layout", layout);
-    await pwExpect(meters.first()).toHaveClass(new RegExp(`quota-meter--layout-${layout}`));
+  // 三窗 QuotaMeter(micro) **常驻直显**(用户硬约束, 修订 #1116):
+  //   每张 ok 卡 = 3 bar-row, 每行嵌 1 个 QuotaMeter(layout=micro), 不再挂 BarRowTooltip
+  //   → 每张 ok 卡 = 3 progressbar (修订前是 6 = 3 行内 row + 3 tooltip 内 micro)
+  for (const key of SCHEMES) {
+    const card = page.getByTestId(`qvar-canvas-cards3-${key}`).locator("[data-testid='qcard3']");
+    await pwExpect(card.locator("[data-testid='qcard3-bar-row']")).toHaveCount(3);
+    await pwExpect(card.locator("[data-testid='quota-meter'][data-layout='micro']")).toHaveCount(3);
+    // 修订 #1116 删 BarRowTooltip: 整卡零 layout=row QuotaMeter, 零 .bar-tooltip 节点
+    await pwExpect(card.locator("[data-testid='quota-meter'][data-layout='row']")).toHaveCount(0);
+    await pwExpect(card.locator(".bar-tooltip")).toHaveCount(0);
+    await pwExpect(card.locator(".progress")).toHaveCount(3);
+    await pwExpect(card.locator('[role="progressbar"]')).toHaveCount(3);
   }
 
-  // 非表格确认: 旧矩阵结构不残留
-  await pwExpect(gallery.locator(".quota-table, .quota-row, .quota-vhead")).toHaveCount(0);
+  // 同一套三窗真实数据: 3 张 ok 卡标题/用量文案一致
+  // 数据契约: rolling_5h 960/1200 warn / weekly 1200/6000 ok / monthly 1800/6000 ok
+  for (const key of SCHEMES) {
+    const card = page.getByTestId(`qvar-canvas-cards3-${key}`).locator("[data-testid='qcard3']");
+    const microMeters = card.locator("[data-testid='quota-meter'][data-layout='micro']");
+    // 标题: 5 小时窗 / 周窗 / 月窗(zh)
+    await pwExpect(microMeters.locator(".quota-title").nth(0)).toHaveText("5 小时窗");
+    await pwExpect(microMeters.locator(".quota-title").nth(1)).toHaveText("周窗");
+    await pwExpect(microMeters.locator(".quota-title").nth(2)).toHaveText("月窗");
+  }
+
+  // P1/P2 两张卡的用量文案一致(计数制, zh 单位词「次」)
+  for (const key of ["p1", "p2"] as const) {
+    const card = page.getByTestId(`qvar-canvas-cards3-${key}`).locator("[data-testid='qcard3']");
+    const microMeters = card.locator("[data-testid='quota-meter'][data-layout='micro']");
+    // micro 短格式(t_f7d1beeb 9/7): quota-usage 只显百分比, 无括号 / 无单位标签
+    await pwExpect(microMeters.locator(".quota-usage").nth(0)).toContainText("80%"); // 5h 80%
+    await pwExpect(microMeters.locator(".quota-usage").nth(1)).toContainText("20%"); // weekly 20%
+    await pwExpect(microMeters.locator(".quota-usage").nth(2)).toContainText("30%"); // monthly 30%
+  }
+
+  // P4 头部数字(最紧窗数字内联):
+  //   headline = 窗名 + 数字, 最紧窗行 hideUsage 不渲染 .quota-usage
+  const cardP4 = page.getByTestId("qvar-canvas-cards3-p4").locator("[data-testid='qcard3']");
+  await pwExpect(cardP4.locator("[data-testid='qcard3-headline']")).toHaveCount(1);
+  // headline 含窗名 + requests 数字
+  await pwExpect(cardP4.locator(".qcard3-headline-window")).toHaveText("5 小时窗");
+  await pwExpect(cardP4.locator(".qcard3-headline-usage")).toContainText("960");
+  // 最紧窗(rolling_5h)行 QuotaMeter(micro) 无 .quota-usage(hideUsage)
+  const p4TightestRow = cardP4.locator("[data-testid='qcard3-bar-row'][data-metric='rolling_5h']");
+  await pwExpect(p4TightestRow.locator("[data-testid='quota-meter'][data-layout='micro'] .quota-usage")).toHaveCount(0);
+  // 非最紧窗行(weekly/monthly)行内 QuotaMeter 有 .quota-usage
+  await pwExpect(cardP4.locator("[data-testid='qcard3-bar-row'][data-metric='weekly'] [data-testid='quota-meter'][data-layout='micro'] .quota-usage")).toHaveCount(1);
+  await pwExpect(cardP4.locator("[data-testid='qcard3-bar-row'][data-metric='monthly'] [data-testid='quota-meter'][data-layout='micro'] .quota-usage")).toHaveCount(1);
+
+  // P2 头部综合态(StatusDot+综合态文字同行, 一行内整合)
+  const cardP2 = page.getByTestId("qvar-canvas-cards3-p2").locator("[data-testid='qcard3']");
+  await pwExpect(cardP2.locator("[data-testid='qcard3-status-group']")).toHaveCount(1);
+  await pwExpect(cardP2.locator("[data-testid='qcard3-status-group'] [data-testid='status-dot']")).toHaveCount(1);
+  await pwExpect(cardP2.locator(".qcard3-status-label")).not.toBeEmpty();
+
+  // (P3 双列 grid 在 360px 屏实测文字重叠 + 列被裁切, 本轮不交付, 故 e2e 不验证 P3)
+
+  // 总契约: 12 条 progressbar/进度条 (4 ok 卡 × 3 窗 × 1 micro QuotaMeter, t_5b092750 9/7 加的 P5 同步)
+  await pwExpect(gallery.locator('[role="progressbar"]')).toHaveCount(12);
+  await pwExpect(gallery.locator(".progress")).toHaveCount(12);
+  // 健康分布: rolling_5h 80% warn × 4 卡 = 4 warn; weekly + monthly ok × 4 卡 × 2 = 8 ok
+  await pwExpect(gallery.locator(".progress-fill[data-health='ok']")).toHaveCount(8);
+  await pwExpect(gallery.locator(".progress-fill[data-health='warn']")).toHaveCount(4);
+  await pwExpect(gallery.locator(".progress-fill[data-health='bad']")).toHaveCount(0);
+
+  // 旧契约清空(无 5 排版段, 无旧 4 方案卡片段)
+  for (const old of ["row", "duo", "hero", "micro", "ticker"]) {
+    await pwExpect(page.getByTestId(`qvar-${old}`)).toHaveCount(0);
+  }
+  for (const old of ["a", "b", "c", "d"]) {
+    await pwExpect(page.getByTestId(`qvar-canvas-cards2-${old}`)).toHaveCount(0);
+    await pwExpect(page.getByTestId(`qvar-canvas-cards2-${old}`).locator("[data-testid='qcard2']")).toHaveCount(0);
+  }
+  await pwExpect(gallery.locator("[data-testid='qcard2'], .qcard2")).toHaveCount(0);
+
+  // 异常段: 2 张卡(auth_expired warn + setup_hint / error bad 无 hint)
+  const abn = page.getByTestId("qvar-canvas-cards3-abn");
+  await pwExpect(abn.locator("[data-testid='qcard3']")).toHaveCount(2);
+  await pwExpect(abn.locator("[data-testid='qcard3-abnormal']")).toHaveCount(2);
+  // auth_expired: 黄灯 + setup_hint 授权面板(hint-copy-btn 复制命令原文)
+  await pwExpect(abn.locator(".qcard3-lamp")).toHaveCount(1);
+  await pwExpect(abn.locator("[data-testid='qcard3-hint']")).toHaveCount(1);
+  await pwExpect(abn.locator("[data-testid='hint-copy-btn']")).toHaveCount(1);
+  // 异常段无 progressbar(共用 AbnormalBody, 不渲染假窗口行 §2.1)
+  await pwExpect(abn.locator('[role="progressbar"]')).toHaveCount(0);
 
   // 图例三态色
   await pwExpect(page.getByTestId("quota-legend")).toBeVisible();
 
-  // Provider 卡片卡内排版方案段(t_85237167 9/5 重建): 4 方案 (A/B/C/D) + 异常段,
-  // 全部基于 tooltip QuotaMeter(BarRowTooltip + QuotaMeter layout=micro) 组合
-  for (const key of ["a", "b", "c", "d"]) {
-    const canvas = page.getByTestId(`qvar-canvas-cards2-${key}`);
-    await pwExpect(canvas).toBeVisible();
-    const cards = canvas.locator("[data-testid='qcard2']");
-    await pwExpect(cards).toHaveCount(1);
-    const card = cards.first();
-    // 卡头组合 + Kimi-Code #1(主页同形态)
-    await pwExpect(card.locator("[data-testid='qcard2-name']")).toHaveText("Kimi-Code #1");
-    // 每张 ok 卡 2 窗行, 每行嵌 1 个 BarRowTooltip(micro, tooltip 原语契约)
-    const rows = card.locator("[data-testid='qcard2-bar-row']");
-    await pwExpect(rows).toHaveCount(2);
-    await pwExpect(rows.first().locator("[data-testid='bar-tooltip']")).toHaveCount(1);
-  }
-  // 异常段: 2 张卡(auth_expired warn + setup_hint / error bad 无 hint)
-  const abn = page.getByTestId("qvar-canvas-cards2-abn");
-  await pwExpect(abn.locator("[data-testid='qcard2']")).toHaveCount(2);
-  await pwExpect(abn.locator("[data-testid='qcard2-hint']")).toHaveCount(1);
-  await pwExpect(abn.locator('[role="progressbar"]')).toHaveCount(0);
-  // 方案 C 锁住态容器: tabIndex + role=button + data-pinnable=true
-  const cardC = page.getByTestId("qvar-canvas-cards2-c").locator("[data-testid='qcard2']");
-  await pwExpect(cardC).toHaveAttribute("tabindex", "0");
-  await pwExpect(cardC).toHaveAttribute("role", "button");
-  // 方案 B 头部综合态: .qcard2-status-group + qcard2-trigger(ⓘ + 合并 tooltip)
-  const cardB = page.getByTestId("qvar-canvas-cards2-b").locator("[data-testid='qcard2']");
-  await pwExpect(cardB.locator("[data-testid='qcard2-status-group']")).toHaveCount(1);
-  await pwExpect(cardB.locator("[data-testid='qcard2-trigger']")).toHaveCount(1);
-  // 方案 D 头部承担最紧窗: qcard2-headline + qcard2-head-trigger(内嵌 BarRowTooltip)
-  const cardD = page.getByTestId("qvar-canvas-cards2-d").locator("[data-testid='qcard2']");
-  await pwExpect(cardD.locator("[data-testid='qcard2-headline']")).toHaveCount(1);
-  await pwExpect(cardD.locator("[data-testid='qcard2-head-trigger'] [data-testid='bar-tooltip']")).toHaveCount(1);
-
-  // 返回面板(侧栏仍在)
+  // 返回面板
   await page.getByTestId("quota-back").click();
   await pwExpect(page.getByTestId("quota-gallery")).toHaveCount(0);
   await pwExpect(page.getByTestId("settings-btn")).toBeVisible();
 });
 
-test("方案页截图取证(5 种排版 + 4 方案 + 异常段逐段落 /tmp)", async ({ hostPage, page }) => {
+test("方案页截图取证(3 排版 + 异常段逐段落 /tmp, t_73c110ea)", async ({ hostPage, page }) => {
   void hostPage;
   await agree(page);
   await openGallery(page);
   // 等 grow-in 动画落定避免截到半透明帧
   await page.waitForTimeout(700);
-  await page.getByTestId("quota-gallery").screenshot({ path: "/tmp/quota-layouts-top.png" });
-  for (const layout of LAYOUTS) {
-    const section = page.getByTestId(`qvar-${layout}`);
+  await page.getByTestId("quota-gallery").screenshot({ path: "/tmp/quota-cards3-top.png" });
+  for (const key of SCHEMES) {
+    const section = page.getByTestId(`qvar-cards3-${key}`);
     await section.scrollIntoViewIfNeeded();
     await page.waitForTimeout(250);
-    await section.screenshot({ path: `/tmp/quota-layout-${layout}.png` });
+    await section.screenshot({ path: `/tmp/quota-cards3-${key}.png` });
   }
-  // t_85237167 9/5 重建: 4 方案 + 异常段逐段落 /tmp(每方案一张)
-  for (const key of ["a", "b", "c", "d", "abn"]) {
-    const section = page.getByTestId(`qvar-cards2-${key}`);
-    await section.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(250);
-    await section.screenshot({ path: `/tmp/quota-card2-${key}.png` });
-  }
+  // 异常段截图
+  const abn = page.getByTestId("qvar-cards3-abn");
+  await abn.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(250);
+  await abn.screenshot({ path: "/tmp/quota-cards3-abn.png" });
 });

@@ -165,6 +165,8 @@ test("删除一张后 order 幽灵 id 不影响渲染(实例集合是真相源, 
   // 删除 bravo(卡内删除: hover → 删除钮 → 确认)
   const bravoCard = page.locator('[data-testid="provider-card"][data-provider="bravo"]');
   await bravoCard.hover();
+  // t_433892c6 9/7 修订 H(老大 #1175 回归): 按钮自为热区, hover 按钮直接 opacity:1
+  await bravoCard.locator(".card-del-btn").hover();
   await bravoCard.getByTestId("card-del-bravo").click();
   await bravoCard.getByTestId("card-confirm-del-bravo").click();
   await pwExpect(page.getByTestId("provider-card")).toHaveCount(2);

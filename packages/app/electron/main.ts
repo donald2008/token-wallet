@@ -152,7 +152,9 @@ function createTray(): void {
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 360,
-    height: 600,
+    // t_27eeadad: 9/4 用户提「整个 app 加一下高度」+ 9/7 拍板 600→720(8 倍数, 容纳更多 provider 卡);
+    // minHeight 沿用 400(P1 单卡 ≈ 112px + chrome 88 = 200, 400 容纳 1-2 卡, 保留窄屏安全冗余)。
+    height: 720,
     minWidth: 320,
     minHeight: 400,
     maximizable: false,

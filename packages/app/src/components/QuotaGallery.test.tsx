@@ -1,21 +1,33 @@
-// L1(QuotaGallery 排版变体对比页, t_35ff3c1f + t_23800bd4 mock 修正): 同一 4 行数据 × 5 种容器层排版。
-// - 5 段 qvar-row/duo/hero/micro/ticker, 每段画布 4 条完整四元素(标题+重置+条+用量)
-// - 同数据跨段: 每段第一条的标题/用量文案一致(同一 mock 喂不同排版)
-// - 数据(t_23800bd4): 前 3 行百分制三态(ok 40%/warn 72%/bad 91%, 真实 provider 风格名, 无「xx 次」误导),
-//   第 4 行计数制演示(credits 2300/10000)——用量行按 unit 语义格式化
-// - 填充计数: ok 10(2 ok 数据 × 5 段) / warn 5 / bad 5
-// - .progress/.progress-fill[data-health]/role=progressbar 契约保留; 图例/返回钮在
-// - 旧矩阵结构(.quota-table/.quota-row/.quota-vhead)零残留
-// - t_85237167 9/5 清空: Provider 卡片卡内排版方案段(279858d+d304801)已删, 故总 progressbar
-//   从 29 回归到 20(4 数据 × 5 排版); 填充 ok 14/warn 10/bad 5 → ok 10/warn 5/bad 5
-// - t_85237167 9/5 重建 + 9/6 终审修复: 4 方案卡片段 19 加入, 总 progressbar 39
+// L2(QuotaGallery Provider 卡片排版方案页, t_73c110ea 9/7 重建):
+// - 3 排版段 (P1/P2/P4) + 异常段 (auth_expired + error 共用骨架), 全部基于真排版维度
+// - P3 双列 grid 在 360px 屏实测文字重叠 + 列被裁切 —— 本轮不交付(留 3 个真维度: 空间结构/信息层级/头部承载)
+// - 同一套三窗真实数据 (kimi-code rolling_5h + weekly + monthly, unit=requests)
+// - 三窗 QuotaMeter(layout=micro) **常驻直显** = 卡片信息主体(无 hover 依赖, 修订 #1116)
+// - micro = BarRowTooltip 内 QuotaMeter 同一形态, 共享 `.quota-meter--layout-micro` CSS
+// - 不再单独挂 <BarRowTooltip>: 信息全靠悬浮才见 = 不合格
+// - 旧 5 排版对比段(A/B/C/D/E QuotaMeter 单元素 layout)整段删除
+// - 异常段无 progressbar(共用 AbnormalBody, 不渲染假窗口行 §2.1)
+//
+// 契约计数(ok 卡 = 三窗):
+//   每张 ok 卡 = 3 bar-row, 每行嵌 1 个 QuotaMeter(micro) = 3 progressbar
+//   3 ok 卡 × 3 = 9 progressbar
+//   异常段 0 progressbar
+//   总 progressbar = 9
+//
+// 健康分布(同数据三窗):
+//   rolling_5h 80% (960/1200) → warn × 3 卡 = 3 warn
+//   weekly 20% (1200/6000) → ok × 3 卡 = 3 ok
+//   monthly 30% (1800/6000) → ok × 3 卡 = 3 ok
+//   总: ok 6, warn 3, bad 0 (无 bad 数据)
+//
+// 渲染数据(title/usage 文案)在 3 张 ok 卡内一致(同一份 metrics 喂 3 个 render)
+//
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuotaGallery } from "./QuotaGallery";
-import { usageText } from "./QuotaMeter";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -40,102 +52,231 @@ function render(el: React.ReactElement) {
   act(() => root.render(el));
 }
 
-const LAYOUTS = ["row", "duo", "hero", "micro", "ticker"] as const;
+const SCHEMES = ["p1", "p2", "p4", "p5"] as const;
 
-function canvasOf(layout: string): HTMLElement {
-  return container.querySelector<HTMLElement>(`[data-testid='qvar-canvas-${layout}']`)!;
+function canvasOf(key: string): HTMLElement {
+  return container.querySelector<HTMLElement>(`[data-testid='qvar-canvas-cards3-${key}']`)!;
 }
-function metersOf(layout: string): HTMLElement[] {
-  return Array.from(canvasOf(layout).querySelectorAll<HTMLElement>("[data-testid='quota-meter']"));
+function cardOf(key: string): HTMLElement {
+  return canvasOf(key).querySelector<HTMLElement>("[data-testid='qcard3']")!;
+}
+function metersOfCard(key: string): HTMLElement[] {
+  return Array.from(cardOf(key).querySelectorAll<HTMLElement>("[data-testid='quota-meter']"));
+}
+function barsOfCard(key: string): HTMLElement[] {
+  return Array.from(cardOf(key).querySelectorAll<HTMLElement>("[data-testid='qcard3-bar-row']"));
 }
 
-describe("QuotaGallery 排版对比页(同数据 × 5 排版)", () => {
-  it("渲染 5 种排版段, 每段 4 条完整四元素实例(role=progressbar 段内 = 4)", () => {
+/** 三窗真实数据契约(同套 kimi-code 数据, 与 getProviderCardMockProviders() 对齐)
+ *  micro 排版只显百分比(t_f7d1beeb 9/7): 960/1200=80%, 1200/6000=20%, 1800/6000=30% */
+const EXPECTED_TITLES = ["5 小时窗", "周窗", "月窗"];
+const EXPECTED_USAGES = ["80%", "20%", "30%"];
+
+describe("QuotaGallery Provider 卡片排版方案页 v2 (t_73c110ea 9/7 重建)", () => {
+  it("3 排版段 (P1/P2/P4) + 异常段渲染: 4 个 qvar-canvas-cards3-* 段, 共 5 张 qcard3 卡 (3 ok + 2 异常)", () => {
     render(<QuotaGallery onBack={() => {}} />);
-    const sections = LAYOUTS.map((l) => container.querySelector(`[data-testid='qvar-${l}']`));
-    expect(sections.every(Boolean)).toBe(true);
-    for (const l of LAYOUTS) {
-      const meters = metersOf(l);
-      expect(meters.length).toBe(4);
-      for (const m of meters) {
-        expect(m.querySelectorAll('[role="progressbar"]').length).toBe(1);
-        expect(m.querySelector(".quota-title")!.textContent!.length).toBeGreaterThan(0);
-        expect(m.querySelector(".quota-reset")!.textContent!.length).toBeGreaterThan(0);
-        expect(m.querySelector(".quota-usage")!.textContent!.length).toBeGreaterThan(0);
-      }
+    // 3 排版段
+    for (const key of SCHEMES) {
+      const canvas = canvasOf(key);
+      expect(canvas, `canvas for ${key}`).toBeTruthy();
+      const cards = Array.from(canvas.querySelectorAll<HTMLElement>("[data-testid='qcard3']"));
+      expect(cards.length, `card count for ${key}`).toBe(1);
     }
-    // 总 progressbar = 5 排版段 20 + 4 方案卡片段 19 = 39(t_85237167 9/5 重建)
-    // - 5 排版段: 4 数据 × 5 段
-    // - 4 方案卡片段:
-    //   A 基线: 2 主页 row + 2 主页 BarRowTooltip = 4
-    //   B 头部综合态: 2 row + 2 BarRowTooltip + 2 触发器 BarRowTooltip(隐藏 DOM 仍计) = 6
-    //   C 状态色条: 2 row + 2 BarRowTooltip = 4
-    //   D 头部承担: 2 row + 2 BarRowTooltip + 1 头部触发器 BarRowTooltip = 5
-    //   异常段: 0
-    expect(container.querySelectorAll('[role="progressbar"]').length).toBe(39);
-    expect(container.querySelectorAll(".progress").length).toBe(39);
+    // 异常段
+    const abnCanvas = container.querySelector<HTMLElement>("[data-testid='qvar-canvas-cards3-abn']")!;
+    expect(abnCanvas).toBeTruthy();
+    const abnCards = Array.from(abnCanvas.querySelectorAll<HTMLElement>("[data-testid='qcard3']"));
+    expect(abnCards.length).toBe(2);
   });
 
-  it("同一组数据喂所有排版: 各段 4 条标题与用量文案两两一致", () => {
+  it("三窗 QuotaMeter(micro) 常驻直显: 每张 ok 卡 = 3 行 bar-row, 每行 1 个 QuotaMeter(micro) = 3 progressbar (修订 #1116, 不再挂 BarRowTooltip)", () => {
     render(<QuotaGallery onBack={() => {}} />);
-    const titles = LAYOUTS.map((l) =>
-      metersOf(l).map((m) => m.querySelector(".quota-title")!.textContent),
-    );
-    const usages = LAYOUTS.map((l) =>
-      metersOf(l).map((m) => m.querySelector(".quota-usage")!.textContent),
-    );
-    const first = titles[0]!;
-    for (let i = 1; i < titles.length; i++) {
-      expect(titles[i]).toEqual(first);
-    }
-    // 数据组合断言(t_23800bd4): 百分制 3 行(40/72/91, provider 风格标题) + 计数制 1 行(2300/10000 credits)
-    expect(first[0]).toBe("OpenCode 5 小时窗");
-    expect(usages[0]).toEqual([
-      usageText(40, 100, "percent"),
-      usageText(72, 100, "percent"),
-      usageText(91, 100, "percent"),
-      usageText(2300, 10000, "credits"),
-    ]);
-    // 单位语义上屏: 百分制带 % 无单位词, 计数制带 credits(不硬编码「次」)
-    expect(usages[0]![0]).toBe("40% / 100%");
-    expect(usages[0]![3]).toContain("credits");
-    for (let i = 1; i < usages.length; i++) {
-      expect(usages[i]).toEqual(usages[0]);
+    for (const key of SCHEMES) {
+      const card = cardOf(key);
+      const bars = barsOfCard(key);
+      expect(bars.length, `bar-row count for ${key}`).toBe(3);
+      // 每行 1 个 QuotaMeter(layout=micro) = 信息主体(无 hover 依赖, 修订 #1116)
+      const meters = metersOfCard(key);
+      expect(meters.length, `quota-meter count for ${key}`).toBe(3);
+      // 行内 QuotaMeter 必须 layout=micro(用户硬约束: 修订 #1116)
+      const microMeters = meters.filter((m) => m.getAttribute("data-layout") === "micro");
+      expect(microMeters.length, `micro layout meters for ${key}`).toBe(3);
+      // 不再挂 BarRowTooltip: 整卡零 layout=row QuotaMeter, 零 .bar-tooltip 节点
+      const rowMeters = meters.filter((m) => m.getAttribute("data-layout") === "row");
+      expect(rowMeters.length, `row layout meters for ${key}`).toBe(0);
+      expect(card.querySelectorAll(".bar-tooltip").length, `bar-tooltip count for ${key}`).toBe(0);
+      // DOM 契约零破: .progress + role=progressbar
+      const progresses = card.querySelectorAll(".progress");
+      expect(progresses.length, `.progress count for ${key}`).toBe(3);
+      const progressbars = card.querySelectorAll('[role="progressbar"]');
+      expect(progressbars.length, `progressbar count for ${key}`).toBe(3);
     }
   });
 
-  it("三态色按数据分布: 39 = 5 排版段(10/5/5) + 4 方案段(8 warn + 8 ok + 触发器内 2 warn 1 ok)", () => {
+  it("同一套三窗真实数据喂 P1/P2 两张 ok 卡: title 与 usage 文案两张一致(P4 因 hideUsage 单独验证)", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    // P1/P2 两张卡都完整渲染 .quota-usage; P4 hideUsage 不在此断言(P4 单独 it)
+    const titlesPerCard: string[][] = [];
+    const usagesPerCard: string[][] = [];
+    for (const key of ["p1", "p2"] as const) {
+      const card = cardOf(key);
+      const microMeters = Array.from(card.querySelectorAll<HTMLElement>("[data-testid='quota-meter'][data-layout='micro']"));
+      titlesPerCard.push(microMeters.map((m) => m.querySelector(".quota-title")!.textContent!));
+      usagesPerCard.push(microMeters.map((m) => m.querySelector(".quota-usage")!.textContent!));
+    }
+    // 3 张卡 3 标题相同
+    const firstTitles = titlesPerCard[0]!;
+    for (let i = 1; i < titlesPerCard.length; i++) {
+      expect(titlesPerCard[i]).toEqual(firstTitles);
+    }
+    expect(firstTitles).toEqual(EXPECTED_TITLES);
+    // 用量文案一致(同 kimi-code 三窗真实数据)
+    const firstUsages = usagesPerCard[0]!;
+    for (let i = 1; i < usagesPerCard.length; i++) {
+      expect(usagesPerCard[i]).toEqual(firstUsages);
+    }
+    expect(firstUsages).toEqual(EXPECTED_USAGES);
+    // micro 短格式 = "NN%": 无单位标签、无括号、无分母(t_f7d1beeb 9/7)
+    expect(firstUsages[0]).toBe("80%");
+    expect(firstUsages[1]).toBe("20%");
+    expect(firstUsages[2]).toBe("30%");
+    expect(firstUsages[0]).not.toContain("次");
+    expect(firstUsages[0]).not.toContain("requests");
+  });
+
+  it("健康分布(同三窗真实数据): ok 8 + warn 4 + bad 0 (4 张 ok 卡各 1 warn + 2 ok, P5 同 kimi 三窗)", () => {
     render(<QuotaGallery onBack={() => {}} />);
     const fills = Array.from(container.querySelectorAll(".progress-fill"));
     const byHealth = (h: string) => fills.filter((f) => f.getAttribute("data-health") === h).length;
-    // t_85237167 9/5 重建后:
-    //  - 5 排版段: ok 10(2 ok 数据 × 5 段) / warn 5 / bad 5
-    //  - 4 方案段每张 ok 卡: 主页 2 row(1 warn 5h + 1 ok 周) + BarRowTooltip 2 micro(1 warn 5h + 1 ok 周)
-    //    → 每卡 2 warn + 2 ok, 4 卡 = 8 warn + 8 ok
-    //  - B 触发器内 2 BarRowTooltip: 1 warn + 1 ok
-    //  - D 头部触发器内 1 BarRowTooltip: warn (最紧窗 5h)
-    //  - 异常段: 0
-    // 总 ok = 10 + 8 + 1 = 19; warn = 5 + 8 + 1 + 1 = 15; bad = 5
-    expect(byHealth("ok")).toBe(19);
-    expect(byHealth("warn")).toBe(15);
-    expect(byHealth("bad")).toBe(5);
-    // 每段内部: 3 百分制三态 + 1 计数制 ok
-    for (const l of LAYOUTS) {
-      const seg = Array.from(canvasOf(l).querySelectorAll(".progress-fill")).map((f) =>
-        f.getAttribute("data-health"),
-      );
-      expect(seg.sort()).toEqual(["bad", "ok", "ok", "warn"]);
+    // 4 张 ok 卡: 每张 3 个 progress-fill(3 行内 micro), 总 12
+    // 健康分布: rolling_5h 80% warn(4) + weekly 20% ok(4) + monthly 30% ok(4)
+    expect(byHealth("ok")).toBe(8);
+    expect(byHealth("warn")).toBe(4);
+    expect(byHealth("bad")).toBe(0);
+  });
+
+  it("总 progressbar = 12 (4 ok 卡 × 3 窗 × 1 micro QuotaMeter, P5 是 t_5b092750 9/7 加的方案),  异常段 = 0", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    expect(container.querySelectorAll('[role="progressbar"]').length).toBe(12);
+    expect(container.querySelectorAll(".progress").length).toBe(12);
+    // 异常段无 progressbar
+    const abnCanvas = container.querySelector<HTMLElement>("[data-testid='qvar-canvas-cards3-abn']")!;
+    expect(abnCanvas.querySelectorAll('[role="progressbar"]').length).toBe(0);
+  });
+
+  it("P1 基线: 卡头 qcard3-badge + 三窗 micro 经典布局, 无 headline/rollup/grid", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    const card = cardOf("p1");
+    expect(card.classList.contains("qcard3--baseline")).toBe(true);
+    expect(card.getAttribute("data-variant")).toBe("baseline");
+    // 基线含 .qcard3-badge + .qcard3-windows, 不含 headline/status-group/grid
+    expect(card.querySelector(".qcard3-badge")).toBeTruthy();
+    expect(card.querySelector(".qcard3-windows")).toBeTruthy();
+    expect(card.querySelector(".qcard3-headline")).toBeFalsy();
+    expect(card.querySelector(".qcard3-status-group")).toBeFalsy();
+    expect(card.querySelector(".qcard3-grid-3col")).toBeFalsy();
+  });
+
+  it("P2 头部综合态: 卡头含 qcard3-status-group(StatusDot+综合态文字同行), 三窗 micro 经典布局", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    const card = cardOf("p2");
+    expect(card.classList.contains("qcard3--head-rollup")).toBe(true);
+    expect(card.getAttribute("data-variant")).toBe("head-rollup");
+    // 含 status-group(Dot+label 同行)
+    const statusGroup = card.querySelector<HTMLElement>("[data-testid='qcard3-status-group']");
+    expect(statusGroup).toBeTruthy();
+    expect(statusGroup!.querySelector("[data-testid='status-dot']")).toBeTruthy();
+    expect(card.querySelector(".qcard3-status-label")!.textContent!.length).toBeGreaterThan(0);
+    // 三窗 micro 仍走 .qcard3-windows(非 grid)
+    expect(card.querySelector(".qcard3-windows")).toBeTruthy();
+    expect(card.querySelector(".qcard3-grid-3col")).toBeFalsy();
+    expect(card.querySelector(".qcard3-headline")).toBeFalsy();
+  });
+
+
+  it("P4 头部数字: 卡头含 qcard3-headline(最紧窗窗名+数字), 最紧窗(rolling_5h)行 QuotaMeter(micro) hideUsage 不渲染 .quota-usage", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    const card = cardOf("p4");
+    expect(card.classList.contains("qcard3--head-number")).toBe(true);
+    expect(card.getAttribute("data-variant")).toBe("head-number");
+    // headline = 窗名 + 数字
+    const headline = card.querySelector<HTMLElement>("[data-testid='qcard3-headline']");
+    expect(headline).toBeTruthy();
+    expect(headline!.querySelector(".qcard3-headline-window")!.textContent!.length).toBeGreaterThan(0);
+    expect(headline!.querySelector(".qcard3-headline-usage")!.textContent!.length).toBeGreaterThan(0);
+    // headline-usage 含 requests 单位(最紧窗 = rolling_5h 80%, 数字 "960 / 1200 requests")
+    expect(headline!.querySelector(".qcard3-headline-usage")!.textContent).toContain("requests");
+    // 最紧窗行(r5h)的行内 QuotaMeter(micro) 不渲染 .quota-usage(hideUsage)
+    const tightestRow = card.querySelector<HTMLElement>("[data-testid='qcard3-bar-row'][data-metric='rolling_5h']")!;
+    const tightestRowMeter = tightestRow.querySelector<HTMLElement>("[data-testid='quota-meter'][data-layout='micro']")!;
+    expect(tightestRowMeter.querySelector(".quota-usage")).toBeNull();
+    // 非最紧窗行(weekly/monthly)行内 QuotaMeter 有 .quota-usage
+    for (const key of ["weekly", "monthly"]) {
+      const row = card.querySelector<HTMLElement>(`[data-testid='qcard3-bar-row'][data-metric='${key}']`)!;
+      const rowMeter = row.querySelector<HTMLElement>("[data-testid='quota-meter'][data-layout='micro']")!;
+      expect(rowMeter.querySelector(".quota-usage")).toBeTruthy();
     }
   });
 
-  it("每条 meter 的 data-layout/class 与其所在段一致(容器层排版生效面)", () => {
+  it("P5 短窗并排: 卡头同 P1, .qcard3-windows-row 两列含 5h+周, .qcard3-windows-row--wide 独占月; 三窗 micro 复用, .progress/role=progressbar 契约零破(t_5b092750 用户 9/7 拍板)", () => {
     render(<QuotaGallery onBack={() => {}} />);
-    for (const l of LAYOUTS) {
-      const meters = metersOf(l);
-      for (const m of meters) {
-        expect(m.getAttribute("data-layout")).toBe(l);
-        expect(m.classList.contains(`quota-meter--layout-${l}`)).toBe(true);
-      }
+    const card = cardOf("p5");
+    // 卡头同 P1: qcard3-badge + qcard3-head; 无 headline/status-group(无 4 方案语义)
+    expect(card.classList.contains("qcard3--monitor-short-side")).toBe(true);
+    expect(card.getAttribute("data-variant")).toBe("monitor-short-side");
+    expect(card.querySelector(".qcard3-badge")).toBeTruthy();
+    expect(card.querySelector(".qcard3-headline")).toBeFalsy();
+    expect(card.querySelector(".qcard3-status-group")).toBeFalsy();
+    // 旧 P1 经典容器 .qcard3-windows 不存在(本卡专属 .qcard3-windows-row)
+    expect(card.querySelector(".qcard3-windows")).toBeFalsy();
+    // 第一行: 两列 grid 含 5h + 周
+    const row2 = card.querySelector<HTMLElement>("[data-testid='qcard3-windows-row']");
+    expect(row2).toBeTruthy();
+    const row2Bars = Array.from(row2!.querySelectorAll<HTMLElement>("[data-testid='qcard3-bar-row']"));
+    expect(row2Bars.map((b) => b.getAttribute("data-metric"))).toEqual(["rolling_5h", "weekly"]);
+    // 第二行: 全宽 wide 修饰符 + 独占 monthly
+    const wideRow = card.querySelector<HTMLElement>("[data-testid='qcard3-windows-row-wide']");
+    expect(wideRow).toBeTruthy();
+    expect(wideRow!.classList.contains("qcard3-windows-row--wide")).toBe(true);
+    expect(wideRow!.querySelector("[data-metric='monthly']")).toBeTruthy();
+    // 三窗全复用 micro QuotaMeter(layout="micro", .progress + role=progressbar 契约零破)
+    const meters = Array.from(card.querySelectorAll<HTMLElement>("[data-testid='quota-meter'][data-layout='micro']"));
+    expect(meters.length).toBe(3);
+    expect(card.querySelectorAll(".progress").length).toBe(3);
+    expect(card.querySelectorAll('[role="progressbar"]').length).toBe(3);
+    // 与 P1 标题/用量一致(同数据快照)
+    const titles = meters.map((m) => m.querySelector(".quota-title")!.textContent!);
+    expect(titles).toEqual(EXPECTED_TITLES);
+  });
+
+  it("异常段: auth_expired 卡含 status-line + setup_hint(hint-copy-btn); error 卡无 hint 但含 status-line", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    const abnCanvas = container.querySelector<HTMLElement>("[data-testid='qvar-canvas-cards3-abn']")!;
+    const abnCards = Array.from(abnCanvas.querySelectorAll<HTMLElement>("[data-testid='qcard3']"));
+    expect(abnCards.length).toBe(2);
+    // auth_expired: warn health + status-line + setup_hint(hint-copy-btn)
+    const authCard = abnCards[0]!;
+    expect(authCard.getAttribute("data-health")).toBe("warn");
+    expect(authCard.querySelector(".qcard3-status-line")).toBeTruthy();
+    expect(authCard.querySelector(".qcard3-lamp")).toBeTruthy();
+    expect(authCard.querySelector(".qcard3-hint")).toBeTruthy();
+    expect(authCard.querySelector("[data-testid='qcard3-hint']")).toBeTruthy();
+    expect(authCard.querySelectorAll("[data-testid='hint-copy-btn']").length).toBe(1);
+    // error: bad health + status-line, 无 hint
+    const errorCard = abnCards[1]!;
+    expect(errorCard.getAttribute("data-health")).toBe("bad");
+    expect(errorCard.querySelector(".qcard3-status-line")).toBeTruthy();
+    expect(errorCard.querySelector(".qcard3-hint")).toBeFalsy();
+  });
+
+  it("每张 ok 卡的卡头含 name = 'Kimi-Code #1'(同 ProviderSnapshot), 健康由 kimi 最紧窗 5h 80% 决定为 warn", () => {
+    render(<QuotaGallery onBack={() => {}} />);
+    for (const key of SCHEMES) {
+      const card = cardOf(key);
+      const name = card.querySelector<HTMLElement>("[data-testid='qcard3-name']")!.textContent;
+      expect(name).toBe("Kimi-Code #1");
+      // kimi-code 三窗最紧 = rolling_5h 80% (warn), providerHealth 选最紧窗 → warn
+      expect(card.getAttribute("data-health")).toBe("warn");
     }
   });
 
@@ -146,115 +287,24 @@ describe("QuotaGallery 排版对比页(同数据 × 5 排版)", () => {
     expect(back).toHaveBeenCalledTimes(1);
   });
 
-  it("确保非表格: 无 matrix/vhead/窗口行 残留结构", () => {
+  it("旧 5 排版对比段已清空: qvar-row/duo/hero/micro/ticker + qcard2/qvar-canvas--cards2 全无残留", () => {
     render(<QuotaGallery onBack={() => {}} />);
-    expect(container.querySelectorAll(".quota-table, .quota-row, .quota-vhead, .quota-cell").length).toBe(0);
-  });
-});
-
-/** t_85237167 9/5 重建: 4 方案 (A/B/C/D) + 异常段 mock, 全部基于 tooltip QuotaMeter 原语 */
-describe("QuotaGallery Provider 卡片卡内排版方案段 v2(t_85237167 9/5 重建)", () => {
-  function variantCanvas(key: string): HTMLElement {
-    return container.querySelector<HTMLElement>(`[data-testid='qvar-canvas-cards2-${key}']`)!;
-  }
-  function cardsOfCanvas(key: string): HTMLElement[] {
-    return Array.from(variantCanvas(key).querySelectorAll<HTMLElement>("[data-testid='qcard2']"));
-  }
-
-  it("4 方案 + 异常段渲染: 5 个 qvar-canvas-cards2-* 段, 6 张 qcard2 卡(4 方案各 1 + 异常 2)", () => {
-    render(<QuotaGallery onBack={() => {}} />);
-    for (const key of ["a", "b", "c", "d"]) {
-      const canvas = variantCanvas(key);
-      expect(canvas).toBeTruthy();
-      const cards = cardsOfCanvas(key);
-      expect(cards.length).toBe(1);
-      const card = cards[0]!;
-      // 卡头组件全在
-      expect(card.querySelector("[data-testid='qcard2-head']")).toBeTruthy();
-      expect(card.querySelector("[data-testid='qcard2-name']")!.textContent).toBe("Kimi-Code #1");
-      expect(card.querySelector("[data-testid='qcard2-handle']")).toBeTruthy();
-      // 每张 ok 卡 = 2 窗行, 每行嵌 BarRowTooltip(micro, tooltip 原语契约)
-      const rows = card.querySelectorAll<HTMLElement>("[data-testid='qcard2-bar-row']");
-      expect(rows.length).toBe(2);
-      expect(rows[0]!.querySelectorAll("[data-testid='bar-tooltip']").length).toBe(1);
-      expect(rows[1]!.querySelectorAll("[data-testid='bar-tooltip']").length).toBe(1);
-      // 4 元素契约保留: 每行有 progressbar + title; usage 在 hideUsage(D 方案最紧窗)时缺省不渲染
-      for (const r of rows) {
-        const meter = r.querySelector("[data-testid='quota-meter']")!;
-        expect(meter.querySelectorAll('[role="progressbar"]').length).toBe(1);
-        expect(meter.querySelector(".quota-title")!.textContent!.length).toBeGreaterThan(0);
-      }
-      // D 卡: 主页最紧窗行 hideUsage=true, QuotaMeter 不渲染 .quota-usage(契约: used undefined 缺省不渲染);
-      // 但行内 BarRowTooltip(micro) 仍渲染自己的 .quota-usage(BarRowTooltip 不传 hideUsage, 是独立 QuotaMeter)
-      // → tightestRow 下 2 个 QuotaMeter: 主页的没 .quota-usage, micro 的有
-      if (key === "d") {
-        const tightestRow = card.querySelector<HTMLElement>("[data-testid='qcard2-bar-row'][data-metric='rolling_5h']")!;
-        // 主页 QuotaMeter(layout=row, hideUsage) 无 .quota-usage
-        const mainMeter = tightestRow.querySelector<HTMLElement>("[data-testid='quota-meter'][data-layout='row']")!;
-        expect(mainMeter.querySelector(".quota-usage")).toBeNull();
-        // micro QuotaMeter 在 BarRowTooltip 内(layout=micro) 有 .quota-usage
-        const microMeter = tightestRow.querySelector<HTMLElement>("[data-testid='quota-meter'][data-layout='micro']")!;
-        expect(microMeter.querySelector(".quota-usage")).toBeTruthy();
-        // 周窗行(非最紧窗)hideUsage=false → 主页 QuotaMeter 有 .quota-usage
-        const otherRow = card.querySelector<HTMLElement>("[data-testid='qcard2-bar-row'][data-metric='weekly']")!;
-        expect(otherRow.querySelector("[data-testid='quota-meter'][data-layout='row'] .quota-usage")).toBeTruthy();
-      }
+    // 旧 5 段 testid 不应存在
+    for (const old of ["row", "duo", "hero", "micro", "ticker"]) {
+      expect(
+        container.querySelector(`[data-testid='qvar-${old}']`),
+        `legacy qvar-${old} should be gone`,
+      ).toBeFalsy();
     }
-    // 异常段: 2 张卡(auth_expired + error), 都用 VariantA 共用骨架
-    const abnCanvas = container.querySelector<HTMLElement>("[data-testid='qvar-canvas-cards2-abn']")!;
-    expect(abnCanvas).toBeTruthy();
-    const abnCards = Array.from(abnCanvas.querySelectorAll<HTMLElement>("[data-testid='qcard2']"));
-    expect(abnCards.length).toBe(2);
-    expect(abnCards[0]!.getAttribute("data-health")).toBe("warn"); // auth_expired
-    expect(abnCards[1]!.getAttribute("data-health")).toBe("bad"); // error
-    expect(abnCards[0]!.querySelectorAll("[data-testid='qcard2-hint']").length).toBe(1);
-    expect(abnCards[1]!.querySelectorAll("[data-testid='qcard2-hint']").length).toBe(0);
-    // 异常段无 progressbar(共用 AbnormalBody, 不渲染假窗口行 §2.1)
-    expect(abnCanvas.querySelectorAll('[role="progressbar"]').length).toBe(0);
-  });
-
-  it("方案 B 头部综合态: 灯+综合态文字同行, 整卡含 ⓘ 触发器", () => {
-    render(<QuotaGallery onBack={() => {}} />);
-    const card = cardsOfCanvas("b")[0]!;
-    // 头部模式 = expanded, 应有 .qcard2-status-group 而非裸 dot+badge
-    expect(card.querySelector(".qcard2-head--expanded")).toBeTruthy();
-    expect(card.querySelector("[data-testid='qcard2-status-group']")).toBeTruthy();
-    expect(card.querySelector("[data-testid='qcard2-trigger']")).toBeTruthy();
-    // ⓘ 触发器内嵌合并 tooltip 容器(双 BarRowTooltip)
-    const trigger = card.querySelector<HTMLElement>("[data-testid='qcard2-trigger']")!;
-    expect(trigger.querySelectorAll("[data-testid='qcard2-merged-tip'] [data-testid='bar-tooltip']").length).toBe(2);
-  });
-
-  it("方案 C 状态色条 + 锁住态容器: tabIndex + status-bar modifier, .qcard2--status-bar::before 由 data-health 决定颜色", () => {
-    render(<QuotaGallery onBack={() => {}} />);
-    const card = cardsOfCanvas("c")[0]!;
-    expect(card.classList.contains("qcard2--status-bar")).toBe(true);
-    expect(card.getAttribute("tabindex")).toBe("0");
-    expect(card.getAttribute("role")).toBe("button");
-    expect(card.getAttribute("data-pinnable")).toBe("true");
-    // data-health=warn (kimi 最紧窗 5h 80%)
-    expect(card.getAttribute("data-health")).toBe("warn");
-  });
-
-  it("方案 D 头部承担最紧窗: 头部 qcard2-headline + head-trigger 内嵌 BarRowTooltip", () => {
-    render(<QuotaGallery onBack={() => {}} />);
-    const card = cardsOfCanvas("d")[0]!;
-    expect(card.querySelector(".qcard2-headline")).toBeTruthy();
-    expect(card.querySelector("[data-testid='qcard2-headline']")).toBeTruthy();
-    expect(card.querySelector(".qcard2-headline-window")!.textContent!.length).toBeGreaterThan(0);
-    expect(card.querySelector(".qcard2-headline-usage")!.textContent!.length).toBeGreaterThan(0);
-    const trigger = card.querySelector<HTMLElement>("[data-testid='qcard2-head-trigger']")!;
-    // 头部触发器只嵌 1 个 BarRowTooltip(最紧窗), 不像 B 嵌 2 个
-    expect(trigger.querySelectorAll("[data-testid='bar-tooltip']").length).toBe(1);
-  });
-
-  it("方案 A 基线: 无 status-bar / headline / 触发器, 纯窗口行", () => {
-    render(<QuotaGallery onBack={() => {}} />);
-    const card = cardsOfCanvas("a")[0]!;
-    expect(card.classList.contains("qcard2--baseline")).toBe(true);
-    expect(card.querySelector(".qcard2-headline")).toBeFalsy();
-    expect(card.querySelector(".qcard2-status-group")).toBeFalsy();
-    expect(card.querySelector("[data-testid='qcard2-trigger']")).toBeFalsy();
-    expect(card.getAttribute("tabindex")).toBeFalsy();
+    // 旧 4 方案 + 异常段 testid 不应存在
+    for (const old of ["a", "b", "c", "d", "abn"]) {
+      expect(
+        container.querySelector(`[data-testid='qvar-canvas-cards2-${old}']`),
+        `legacy cards2 canvas ${old} should be gone`,
+      ).toBeFalsy();
+    }
+    // ProviderCardVariants.tsx 已删: 无 qcard2 残留
+    expect(container.querySelectorAll("[data-testid='qcard2']").length).toBe(0);
+    expect(container.querySelectorAll(".qcard2").length).toBe(0);
   });
 });

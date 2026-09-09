@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Bootstrap } from "./types";
 import { globalHealth, sortProviders, tooltipSummary, DEFAULT_SORT_CONFIG, type SortConfig } from "./health";
 import {
@@ -85,7 +86,7 @@ export default function App() {
 }
 
 function AppShell() {
-  const { mode: themeMode, setMode: setThemeMode, glass, setGlass } = useTheme();
+  const { mode: themeMode, setMode: setThemeMode, glass, setGlass, glassAlpha, setGlassAlpha } = useTheme();
   // Phase B: 启动读回持久化语言(真壳 settings.json → setLang 对齐模块级+重渲染; 浏览器=/mock 同语义)
   const { setLang: applyPersistedLang } = useLang();
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
@@ -289,6 +290,16 @@ function AppShell() {
   // 真实实例集合: 仅真实实例卡渲染删除钮(dev 场景 mock 预览卡不给无效按钮)
   const realInstanceIds = useMemo(() => new Set(instances.map((i) => i.id)), [instances]);
 
+  // t_034a6e81 Bug1 修: 真实实例卡在 auth_expired 状态下, "已授权"按钮点击 = 该卡刷线(重新采集),
+  // 不再误开授权页(原 onStart 走 commandAuthStart 又开浏览器)。
+  // mock 预览卡不给 onRefresh → ProviderCard 内部 OneClickAuth done 态按钮 disabled。
+  const onRefreshProvider = useCallback(
+    (id: string) => {
+      engine?.refresh(id);
+    },
+    [engine],
+  );
+
   // ESC 关闭模态(设置 / 添加向导)
   useEffect(() => {
     if (!settingsOpen && !addOpen) return;
@@ -377,8 +388,11 @@ function AppShell() {
             // P1(t_9639078b): 过滤三枚 icon 钮浮在卡片列表右上角 —— 与卡片列表同容器(绝对定位),
             // 随内容滚动运动(不吸顶), 因此滚动内容不会与钮组重叠(修 v0.1.2 平台 chips 被卡片盖住)。
             // 过滤后命中为空(如仅剩异常) → 居中「无匹配实例」(钮组仍在, 可点回其他视角)。
+            // t_f7d1beeb 9/7 修订 E: 用户反馈「主页上层的筛选按钮先隐藏, 感觉比较占地方」——
+            // 先隐藏(不删代码), filter state 管线(DEFAULT_FILTER/matchesFilter/filteredProviders)
+            // 全部保留, 后续要恢复时把下方 false 改 true 即可。e2e filter-icons 不再断言可见。
             <main className="card-list" data-testid="card-list">
-              <FilterIcons value={filter} onChange={setFilter} />
+              {false && <FilterIcons value={filter} onChange={setFilter} />}
               {filteredProviders.length === 0 ? (
                 <NoMatchState />
               ) : (
@@ -392,6 +406,7 @@ function AppShell() {
                       key={p.provider_id}
                       p={p}
                       onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
+                      onRefresh={realInstanceIds.has(p.provider_id) ? onRefreshProvider : undefined}
                       dragHandle={makeHandleProps(p.provider_id)}
                       dragging={drag?.id === p.provider_id}
                       dragDy={drag ? drag.dy : 0}
@@ -407,49 +422,59 @@ function AppShell() {
       </div>
       {/* t_d086543b: 底边栏(侧栏取消后全局动作落位) —— 添加 / 设置 左右分布 */}
       <BottomBar onAdd={openAddModal} onOpenSettings={openSettings} />
-      {settingsOpen && (
-        // 设置模态弹窗(P0-6): 半透明遮罩叠在面板上方, 点遮罩关闭; 弹层自身圆角+阴影(D-031 无边框窗口)
-        <div className="settings-overlay" data-testid="settings-overlay" onClick={closeSettings}>
-          <div
-            className="settings-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={t("common.settings")}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <SettingsView
-              variant="modal"
-              themeMode={themeMode}
-              onThemeMode={setThemeMode}
-              glass={glass}
-              onGlass={setGlass}
-              onBack={closeSettings}
-              onOpenQuota={() => {
-                closeSettings();
-                setView("quota");
-              }}
-            />
-          </div>
-        </div>
-      )}
-      {addOpen && (
-        // D-038: 添加向导弹窗(与设置弹窗同形态: 遮罩 + 圆角弹层, × / 遮罩 / ESC 关闭)
-        <div className="settings-overlay" data-testid="add-overlay" onClick={closeAddModal}>
-          <div
-            className="settings-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={t("common.add")}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <AddProviderWizard
-              variant="modal"
-              onBack={closeAddModal}
-              onSavedProvider={onProviderSaved}
-            />
-          </div>
-        </div>
-      )}
+      {settingsOpen &&
+        createPortal(
+          // 设置模态弹窗(P0-6): 半透明遮罩叠在面板上方, 点遮罩关闭; 弹层自身圆角+阴影(D-031 无边框窗口)
+          // t_c20d4d11 round-3 B3-2: portal 到 body 顶层 —— .panel 挂 backdrop-filter 成 backdrop root,
+          // 弹窗留在 panel 内其 backdrop-filter 采样被截断(Chromium 嵌套限制, 实测 modal blur 无效);
+          // portal 脱离后 modal backdrop-filter 正确模糊透出 dashboard 内容(色块化, 前景文字可读)。
+          <div className="settings-overlay" data-testid="settings-overlay" onClick={closeSettings}>
+            <div
+              className="settings-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("common.settings")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SettingsView
+                variant="modal"
+                themeMode={themeMode}
+                onThemeMode={setThemeMode}
+                glass={glass}
+                onGlass={setGlass}
+                glassAlpha={glassAlpha}
+                onGlassAlpha={setGlassAlpha}
+                onBack={closeSettings}
+                onOpenQuota={() => {
+                  closeSettings();
+                  setView("quota");
+                }}
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
+      {addOpen &&
+        createPortal(
+          // D-038: 添加向导弹窗(与设置弹窗同形态: 遮罩 + 圆角弹层, × / 遮罩 / ESC 关闭)
+          // t_c20d4d11 round-3 B3-2: 与 settings 同因 portal 到 body(见上注释)
+          <div className="settings-overlay" data-testid="add-overlay" onClick={closeAddModal}>
+            <div
+              className="settings-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("common.add")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <AddProviderWizard
+                variant="modal"
+                onBack={closeAddModal}
+                onSavedProvider={onProviderSaved}
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

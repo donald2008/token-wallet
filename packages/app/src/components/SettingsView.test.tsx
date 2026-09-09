@@ -4,7 +4,10 @@
  * 必须彻底消失, 通用偏好(主题/排序/开机自启/存储路径)必须全在;
  * 弹窗结构(head 固定 + body 滚动)不变(#829 R3)。
  * D-046: 关于区自动更新四态(unavailable/检查/发现→下载→就绪/error)由状态机驱动渲染。
+ * t_c20d4d11 round-3 B3-2: 玻璃态 overlay backdrop-filter 兜底 CSS 契约。
  */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -65,6 +68,8 @@ async function renderSettings(variant: "page" | "modal" = "modal"): Promise<HTML
         onThemeMode={() => {}}
         glass={false}
         onGlass={() => {}}
+        glassAlpha={1.0}
+        onGlassAlpha={() => {}}
 
         onBack={() => {}}
       />,
@@ -147,6 +152,8 @@ describe("排序区只留手动提示(t_d086543b)", () => {
           onThemeMode={() => {}}
           glass={false}
           onGlass={() => {}}
+        glassAlpha={1.0}
+        onGlassAlpha={() => {}}
           onBack={() => {}}
         />,
       );
@@ -189,6 +196,8 @@ describe("自动更新四态(D-046)", () => {
           onThemeMode={() => {}}
         glass={false}
         onGlass={() => {}}
+        glassAlpha={1.0}
+        onGlassAlpha={() => {}}
 
           onBack={() => {}}
         />,
@@ -290,6 +299,8 @@ describe("语言分段控件(Phase B i18n)", () => {
             onThemeMode={() => {}}
         glass={false}
         onGlass={() => {}}
+        glassAlpha={1.0}
+        onGlassAlpha={() => {}}
 
             onBack={() => {}}
           />
@@ -352,5 +363,62 @@ describe("语言分段控件(Phase B i18n)", () => {
     expect(view.querySelector("h3")!.textContent).toBe("设置");
     expect(ipcMocks.setLangPersisted).toHaveBeenCalledWith("zh");
     setLang("zh");
+  });
+});
+
+// ---- CSS 契约: 玻璃态 settings-modal backdrop-filter 兜底(t_c20d4d11 round-3 B3-2) ----
+describe("玻璃态 settings-modal backdrop-filter 兜底(B3-2, t_c20d4d11 round-3)", () => {
+  const css = readFileSync(resolve(process.cwd(), "src/app.css"), "utf8");
+
+  // 玻璃态下 .settings-modal 自身必须挂 backdrop-filter: var(--card-blur), 让透出内容退化为色块。
+  // 15% 档 modal 自身 15% 半透明底色 + 背后模糊色块 → 文字可读, 消除 dashboard 锐利叠影。
+  // ⚠️ blur 必须挂 modal 而非 overlay: overlay 是 .panel 子级, 而 .panel 已挂 backdrop-filter
+  // (L79-82) 成为 backdrop root —— 子级 overlay 再挂 blur 被 Chromium 采样截断(实测无效);
+  // blur 挂 modal 自身时 modal 矩形区域背景整块模糊成色块, 前景文字锐利可读。
+  // dark/light 玻璃主题共用一套规则(backdrop-filter 与主题色无关, 只对底层内容模糊)。
+  it("dark-glass / light-glass 下 .settings-modal 必须挂 backdrop-filter var(--card-blur)", () => {
+    expect(css).toMatch(
+      /:root\[data-theme="dark-glass"\]\s+\.settings-modal[\s\S]*?backdrop-filter:\s*var\(--card-blur\)/,
+    );
+    expect(css).toMatch(
+      /:root\[data-theme="light-glass"\]\s+\.settings-modal[\s\S]*?backdrop-filter:\s*var\(--card-blur\)/,
+    );
+    // 同时挂 -webkit-backdrop-filter(覆盖 Safari 旧版 + WebView2 兼容, 与 .panel L81-82 同形态)
+    expect(css).toMatch(
+      /:root\[data-theme="dark-glass"\]\s+\.settings-modal[\s\S]*?-webkit-backdrop-filter:\s*var\(--card-blur\)/,
+    );
+    expect(css).toMatch(
+      /:root\[data-theme="light-glass"\]\s+\.settings-modal[\s\S]*?-webkit-backdrop-filter:\s*var\(--card-blur\)/,
+    );
+  });
+
+  // blur 挂 modal 自身而非 overlay: overlay 是 .panel 子级, panel 已挂 blur 成 backdrop root,
+  // overlay 再挂 blur 会被 Chromium 采样截断(形同虚设, A/B M3 实测)。modal 自身的 blur 把
+  // modal 矩形区域背景(卡片+文字+黑罩)整块模糊 → 透出 dashboard 退化为色块。
+  it("glass 态 blur 规则挂 .settings-modal 而非 .settings-overlay", () => {
+    // overlay 基块(非 glass 态)保持原样, 不应夹带 glass 态 backdrop-filter
+    const overlayBlock = (() => {
+      const m = css.match(/\.settings-overlay\s*\{([^}]*)\}/);
+      expect(m, ".settings-overlay 规则块必须存在").toBeTruthy();
+      return m![1];
+    })();
+    expect(overlayBlock).not.toContain("backdrop-filter");
+    // glass 态下不得再有 .settings-overlay backdrop-filter 规则(旧方案残留, 截断无效)
+    expect(css).not.toMatch(
+      /:root\[data-theme="(dark|light)-glass"\]\s+\.settings-overlay[\s\S]*?backdrop-filter:/,
+    );
+  });
+
+  // 兜底必须正交于 alpha 滑槽: backdrop-filter 不依赖 var(--glass-alpha), 即使
+  // alpha=1.0(默认不透明)也常开 → 与用户拍板「拖低才出现玻璃感, blur 常开留档」一致
+  it("backdrop-filter 不引用 var(--glass-alpha)(兜底常开, 不受滑槽影响)", () => {
+    // 抽出所有 dark-glass/light-glass 下的 modal 规则, 验证不含 --glass-alpha
+    const modalRule = css.match(
+      /:root\[data-theme="(dark|light)-glass"\]\s+\.settings-modal\s*\{([^}]*)\}/g,
+    );
+    expect(modalRule, "glass 态 settings-modal 规则必须存在").toBeTruthy();
+    for (const rule of modalRule!) {
+      expect(rule, "modal 兜底规则不应引用 --glass-alpha").not.toContain("--glass-alpha");
+    }
   });
 });

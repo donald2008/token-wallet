@@ -136,6 +136,15 @@ body {
   color: var(--accent);
   border-color: var(--accent);
 }
+/* t_f7d1beeb 9/7 修订 D: 添加按钮纯图标(去文字)时的紧凑形态。
+ * 去 gap + padding 收成方形触控区(≥24px 触控友好), 与 settings 按钮(icon+label)
+ * 共用 .bottombar-btn 基类但本修饰符只覆盖无 label 场景。 */
+.bottombar-btn--icon-only {
+  gap: 0;
+  padding: 0 var(--space-4);
+  width: 28px;
+  justify-content: center;
+}
 
 .bottombar-label {
   font-size: 12px;
@@ -148,7 +157,12 @@ body {
   display: flex;
   align-items: center;
   gap: var(--gap);
-  padding: var(--space-12);
+  /* t_f7d1beeb 9/7 修订 C: 标题栏高度压矮到 32px(8px 网格内取整);
+   * padding 减半 + height 锁定 + align-items:center, 标题栏高度稳态 32px。
+   * 触控热区 .btn-icon 仍 30px (内嵌于 32px height 不溢出); drag 区不缩水。
+   * 三主题 360px 实测见 verification/quota-cards3/quota-cards-p*-*.png */
+  height: var(--space-32);
+  padding: 0 var(--space-12);
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
   flex: 0 0 auto;
@@ -257,10 +271,12 @@ body {
    * 过滤钮组(right:10px 绝对定位)不随滚动条出现向左漂移。槽宽 = 自定义滚动条
    * 8px(见文件头 ::-webkit-scrollbar), 代价 = 内容右侧常驻 8px 预留。 */
   scrollbar-gutter: stable;
-  /* P1 t_9639078b round2: 顶部预留 34px 带 —— 让过滤 icon 钮组(position:absolute top:4px, 高 24px
-   * 距顶 4px → 占 y4-28)浮在预留带内, 与第一张卡片(padding-top 起 y>=34)零重叠(修 round1 BLOCKING:
-   * 钮组骑跨首卡头行/状态字)。滚动手不动, 吸顶遮挡已由「随内容滚动不吸顶」解决。 */
-  padding: var(--space-32) var(--space-12) var(--space-12);
+  /* t_433892c6 9/7 修订 G(用户反馈「筛选隐藏了, 高度还在」): 筛选钮已 `{false && <FilterIcons>}`
+   * 条件隐藏(FilterIcons 调用/filter state 管线保留, 恢复时改 true), 原 34px 顶部预留带失去用途;
+   * 收敛 padding-top 到 var(--space-12) 与左右/底部同规(8px 网格, 12px = 1.5×8, 视觉与左右一致),
+   * 主页首卡顶距 == 卡片间距(无 32px 空带)。注释同步: 保留 "恢复 filter 时把预留带加回来即可" 的
+   * 文档线索(P1 旧注释存档)。 */
+  padding: var(--space-12) var(--space-12) var(--space-12);
   display: flex;
   flex-direction: column;
   gap: var(--gap);
@@ -366,20 +382,54 @@ body {
 /* ---- D-038: 卡内删除钮(实例动作分区) ----
  * hover 卡片时淡入(opacity 过渡, 不占常态视觉); 键盘 focus 兜底可见。
  * ⚠️ 只用 opacity 不加 pointer-events:none(与旧工具区同款实证: 后者会让
- *   Playwright/真实点击命中被拦, 且点击前 hover 已淡入, 无遮拦收益)。 */
+ *   Playwright/真实点击命中被拦, 且点击前 hover 已淡入, 无遮拦收益)。
+ * ---- t_f7d1beeb 9/7 修订 F: 删除钮从 flex 流中移出, position:absolute 锚定卡右上角。
+ * t_433892c6 9/7 修订 H(用户反馈「光标 hover 上 provider 卡上就出现, 能不能悬浮到右上角再显示」):
+ * 整卡 hover 即浮现误触感强。改「按钮自为热区」方案(零 JS, 一行 CSS 闭环):
+ * 按钮 position:absolute 锚卡右上角, opacity:0 + pointer-events:auto
+ * (opacity 不影响 hit-test, 按钮始终在 hit-test tree), :hover/.card:focus-within/
+ * :focus-visible 触发 opacity:1。
+ *
+ * 历史教训(老大 #1175 裁决): 旧三层机制(透明 div 热区 + 让位规则 + z-index 博弈)
+ * 结构死锁: 透明热区 40×40 与 card-head inline flex(status badge)在右上角几何重叠 →
+ * hover 热区命中 status badge → 热区不 :hover → button 永不显; button 默认 hidden
+ * 脱 hit-test 让 :has() 检测不到 hover → 让位规则永不触发。本方案彻底回归: 一条
+ * :hover 规则, 无热区、无 :has()、无 z-index 抢戏。
+ *
+ * 位置: 卡右上角, 与 status badge 同侧右对齐(right:var(--space-4));
+ * hover 出现不位移(避免视觉跳)。360px 实测: status badge ~30px 高, 按钮 top 4px
+ * 与 status 同行, 不重叠(按钮 padding 28px 热区向下扩到 status 之下)。
+ * 键盘可达性: .card:focus-within / .card-del-btn:focus-visible → opacity:1(沿用旧契约)。 */
 .card-del-btn {
-  flex: 0 0 auto;
-  padding: var(--space-4) var(--space-4);
+  position: absolute;
+  /* t_433892c6 9/7 修订 H(老大 #1184 B-2 裁决): 按钮下移到 badge 行之下避开几何重叠。
+   * 实测: status badge box y=61.5-78.5 (17px 高, card 内 9.5-26.5), button top 4px
+   * 盒 y=57-88 与之重叠 23×17px (三主题一致) — hover 徽章误触删除钮 + 盖状态文字。
+   * 修复: button top 下移到 var(--space-28) = 28px 相对 card (badge 底 26.5 + 1.5px gap),
+   * 零重叠。hover 链不破 (仍是按钮自为热区), 浮出时落在窗口行区不盖 badge。 */
+  top: var(--space-28);
+  right: var(--space-4);
+  padding: var(--space-8); /* 28px 热区(padding 8 + icon 13 + padding 8), 触控友好 */
   border-color: transparent;
+  background: transparent;
   opacity: 0;
+  /* z-index:1 显式创建 stacking context — 窗口行 quota-meter 有 animation(stacking
+   * context 无 z), 若不加 button 会被压在 quota-meter 之下导致 hover 拦截(B-2 修复
+   * 下移后实测 quota-meter intercepts pointer events)。 */
+  z-index: 1;
+  pointer-events: auto; /* 关键: opacity:0 不影响 hit-test, 按钮始终接收 pointer events */
   transition: opacity 0.15s ease;
+  cursor: pointer;
 }
-.card:hover .card-del-btn,
+/* 按钮内的 svg 容器(13×13 icon), 命中按钮本体不命中 svg */
+.card-del-btn > svg,
+.card-del-btn > .card-del-icon {
+  pointer-events: none;
+}
+.card-del-btn:hover,
 .card:focus-within .card-del-btn,
 .card-del-btn:focus-visible {
   opacity: 1;
-}
-.card-del-btn:hover {
   border-color: var(--bad);
   background: color-mix(in srgb, var(--bad) 12%, transparent);
 }
@@ -523,6 +573,10 @@ body {
 
 .card-status-text {
   font-size: 12px;
+  /* t_f7d1beeb 9/7 修订 F: status 固定贴卡右上角(在 flex 流中靠右对齐)。
+   * margin-left:auto 把 status 推到 flex 容器最右; del-btn 已绝对定位不占 flex 位,
+   * status 位置不再被 flex 流中的 del-btn 挤偏。360px 三主题实测 status 右缘稳定贴齐 card 右内缘。 */
+  margin-left: auto;
 }
 
 /* 状态文字色走 --X-fg 双 token(D-016) */
@@ -993,15 +1047,30 @@ body {
 }
 
 /* ---- 设置弹窗(P0-6): 半透明遮罩叠在面板上方, 弹层自画圆角+阴影(无边框透明窗口) ---- */
+/* t_c20d4d11 round-3 B3-2: position: fixed + inset: 8px — 弹窗经 React portal 渲染到 body
+   顶层(见 App.tsx), 不再嵌套在 .panel 内。fixed 相对视口对齐原 .panel 几何(panel margin 8px);
+   若仍 absolute 相对 panel 会因 DOM 父级变为 body 而错位。 */
 .settings-overlay {
-  position: absolute;
-  inset: 0;
+  position: fixed;
+  inset: 8px;
   z-index: 10;
   border-radius: var(--radius-16); /* 与 .panel 圆角卡片协调(被 overflow:hidden 裁齐) */
   background: rgba(0, 0, 0, 0.45);
   display: flex;
   /* P1: 显式排除 drag 区干扰 — 弹窗控件(取消/×)命中不被 -webkit-app-region: drag 祖先吃掉 */
   -webkit-app-region: no-drag;
+}
+
+/* t_c20d4d11 9/7 round-3 B3-2: 玻璃态(theme=*-glass)下 modal 自身补 backdrop-filter 兜底。
+   15% 档 modal 背景 15% 半透明, 无 blur 时透出 dashboard 锐利内容叠影不可读。
+   ⚠️ 弹窗已 portal 到 body 顶层(脱离 .panel backdrop root): modal backdrop-filter 现在能
+   正确采样整页背景(卡片+文字+黑罩)并整块模糊成色块, 前景文字锐利可读。
+   与 alpha 滑槽正交(兜底常开, 不受 alpha 影响)。
+   dark/light 玻璃主题共用: backdrop-filter 作用于 modal 背后所有内容, 与主题色无关 */
+:root[data-theme="dark-glass"] .settings-modal,
+:root[data-theme="light-glass"] .settings-modal {
+  -webkit-backdrop-filter: var(--card-blur);
+  backdrop-filter: var(--card-blur);
 }
 
 .settings-modal {
@@ -1320,6 +1389,46 @@ body {
   align-items: center;
   gap: var(--space-4);
   font-size: 12px;
+}
+/* t_c20d4d11 9/7: 玻璃透明度滑槽 — 容器 + 实时数值 + 原生 range 主题化
+ * t_c20d4d11 9/7 round-2(W1): 直引 --bg-elev, 不再 color-mix(--bg-elev, ...) 递归.
+ * 旧版在 dark-glass 下 --bg-elev 已是 color-mix(... calc(var(--glass-alpha) * 100%), transparent),
+ * 再 color-mix(--bg-elev 80%, transparent) 是嵌套 color-mix: 不支持 color-mix 浏览器整条
+ * 失效(无背景), slider-row 仅剩边框/容器不可见. 直引 --bg-elev 在 glass 主题下背景等同面板. */
+.slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding: var(--space-8);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+}
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.slider-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.slider {
+  width: 100%;
+  height: var(--space-16);
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent); /* 原生 range 主题化(Chrome/Safari/Firefox 全支持) */
+}
+.slider:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-4);
 }
 /* t_52e3a7fb: 玻璃/自启复选框原原生描边过弱看不清勾选态 —— 加大命中区 + accent 蓝勾选
  * (accent-color 让原生 checkbox 勾选态用主题强调色, 深浅主题均清晰)。 */
@@ -1906,18 +2015,14 @@ body {
   gap: var(--space-8);
 }
 
-/* Provider 卡片卡内排版方案段(t_85237167, 9/5 清空重建): 旧 .qcard-* 与
- * .qvar-canvas--cards 已删(279858d+d304801 引入); 新方案 css 见各 ProviderCard mock
- * 命名 .qcard2-* / .qvar-canvas--cards2(任务 B 重建后再写)。 */
 
-/* ============ Provider 卡片卡内排版 4 方案(t_85237167) ============
- * 4 方案差异: A 基线 / B 头部综合态 / C 状态色条 + 锁住 / D 头部承担最紧窗
- * 不占真卡 .card/.card-head, 新前缀 .qcard2-* / .qvar-canvas--cards2
- * BarRowTooltip(micro) 契约零改; CSS 通过父级 .qcard2[data-pinned] /
- *   .qcard2-trigger:hover 让 .bar-tooltip 常驻或合并触发, 全走 CSS, 零 JS 状态机 */
+/* ============ Provider 卡片排版 4 方案(t_73c110ea 9/7 重建) ============
+ * 4 方案差异: P1 基线竖排 / P2 头部综合态 / P3 双列并列 / P4 头部数字
+ * 不占真卡 .card/.card-head, 新前缀 .qcard3-* / .qvar-canvas--cards3
+ * BarRowTooltip(micro) 契约零改; QuotaMeter(row) 三窗常驻直显(用户 9/7 硬约束) */
 
 /* 画布容器: 透明叠层 + 卡片间距 */
-.qvar-canvas--cards2 {
+.qvar-canvas--cards3 {
   background: transparent;
   border: 0;
   padding: 0;
@@ -1925,7 +2030,7 @@ body {
 }
 
 /* 4 方案共用卡壳 */
-.qcard2 {
+.qcard3 {
   position: relative;
   box-sizing: border-box;
   width: 100%;
@@ -1935,25 +2040,18 @@ body {
   padding: var(--space-8) var(--space-12);
 }
 
-/* 头部: 4 方案共用结构(handle + name + StatusDot + 徽章/综合态) */
-.qcard2-head {
+/* 头部: 4 方案共用结构(handle + name + 状态组/数字/徽章), 一行排满 */
+.qcard3-head {
   display: flex;
   align-items: center;
   gap: var(--gap);
-  margin-bottom: var(--space-4);
-}
-
-/* 头部 wrap: 含触发器(ⓘ/head-tip)的方案 B/D 加一层 */
-.qcard2-head-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-8);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-8);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 /* 拖把手 = BrandLogo(D-039): mock 放大到 20px 盒 + 虚线缘仅为可读性提示 */
-.qcard2-handle {
+.qcard3-handle {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -1965,8 +2063,8 @@ body {
   color: var(--fg-dim);
 }
 
-.qcard2-name {
-  flex: 1;
+.qcard3-name {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1974,155 +2072,100 @@ body {
   font-weight: 600;
 }
 
-.qcard2-badge {
+.qcard3-badge {
   font-size: var(--font-11);
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
-/* 方案 B: 综合态徽章(灯+文字同行, 一行内整合) */
-.qcard2-status-group {
+/* P2: 综合态徽章(灯+文字同行, 一行内整合) */
+.qcard3-status-group {
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
   font-size: var(--font-11);
   font-weight: 600;
   white-space: nowrap;
-}
-.qcard2-status-group > [data-testid="status-dot"] {
   flex: 0 0 auto;
 }
-.qcard2-status-label {
-  /* 与 dot 同行右, 不换行 */
+.qcard3-status-group > [data-testid="status-dot"] {
+  flex: 0 0 auto;
+}
+.qcard3-status-label {
   white-space: nowrap;
 }
 
-/* 方案 D: 头部承担最紧窗用量(数字内联, 不是摘要条) */
-.qcard2-headline {
+/* P4: 头部承担最紧窗用量(数字内联, 不是摘要条) */
+.qcard3-headline {
   display: inline-flex;
   align-items: baseline;
   gap: var(--space-4);
   margin-right: var(--space-4);
   white-space: nowrap;
+  flex: 0 0 auto;
 }
-.qcard2-headline-window {
+.qcard3-headline-window {
   font-size: var(--font-10);
   color: var(--fg-dim);
 }
-.qcard2-headline-usage {
+.qcard3-headline-usage {
   font-size: var(--font-11);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-/* 方案 B/D 共用触发器 ⓘ (含 hover 揭示 tooltip 子层)
- * t_03bdaf1f 终审修正: D 方案 trigger 不再显数字(避免与 qcard2-headline 重复),
- * 改为 ⓘ 形态与 B 一致, 只作 hover 锚 */
-.qcard2-trigger {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--space-20);
-  height: var(--space-20);
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  color: var(--fg-dim);
-  font-size: var(--font-10);
-  cursor: help;
-  position: relative;
-}
-.qcard2-trigger--head {
-  /* D 方案头部触发器: 与 B ⓘ 形态一致, 仅触发器位置略不同(卡头右侧) */
-  cursor: help;
-}
-
-/* 合并 tooltip(B 用 ⓘ, D 用 head-tip): 显隐纯 CSS, 跟随 BarRowTooltip 既有结构
- * 不用 .bar-tooltip 自身(--space-8 padding + 阴影 + border-radius 已有), 直接用
- * .bar-tooltip 容器 + 嵌套多个 BarRowTooltip 实例 */
-.qcard2-merged-tip,
-.qcard2-head-tip {
-  position: absolute;
-  top: calc(100% + var(--space-4));
-  right: 0;
-  z-index: 6;
-  display: none;
+/* 窗口行列表: 沿用主页 .bar-row 壳作为语义锚点(数据契约 + drag-sort 复用),
+ * 卡内 WindowRow 只挂 QuotaMeter(layout=micro), 不再挂 <BarRowTooltip>;
+ * 方案页常驻直显 = micro 直接展开, 信息无 hover 依赖(修订 #1116)。
+ * 这里只控制 qcard3 内的窗间节奏(micro 紧凑, 4px gap) */
+.qcard3-windows {
+  display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-8);
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
-  -webkit-backdrop-filter: var(--card-blur, none);
-  backdrop-filter: var(--card-blur, none);
-  pointer-events: none;
-  min-width: 240px;
 }
-.qcard2-trigger:hover .qcard2-merged-tip,
-.qcard2-trigger:focus-within .qcard2-merged-tip,
-.qcard2-trigger--head:hover .qcard2-head-tip,
-.qcard2-trigger--head:focus-within .qcard2-head-tip {
-  display: flex;
-}
-
-/* 窗口行列表: 沿用主页 .bar-row 壳(BarRowTooltip 已挂 hover 揭示), 共享一套契约
- * 这里只控制 qcard2 内的窗间节奏 */
-.qcard2-windows {
-  display: flex;
-  flex-direction: column;
+/* ============ P5 · 短窗并排(t_5b092750 用户 9/7 拍板) ============
+ * 数据契约: rolling_5h + weekly 同窗两列 grid, monthly 独占下一行全宽。
+ * gap 走 8px 网格(--space-8 = 8px); 列内复用 layout="micro" QuotaMeter。
+ * 360px 硬门槛: 与 P3 三列 grid 不同, 两列各 ~144px, 列内 micro title+bar+(usage|reset) grid
+ * 装得下, 无文字重叠 / 无裁切(月独占一行全宽更宽裕)。
+ * --wide 修饰符覆盖默认两列, 让月窗独占一行横铺(grid-column 1/-1)。
+ *
+ * micro 用量文案 = 单百分比 token(NN%, t_f7d1beeb 9/7): 短文本 nowrap + tabular-nums
+ * 在 ~144px 双列与 ~360px 主页窗口行都装得下, 无撞字; 同列右端 quota-reset 也不撞。
+ * 早期「拆字换行」CSS(white-space: normal; overflow-wrap: anywhere)已删,
+ * 恢复 micro 原 nowrap 契约(QuotaMeter.tsx L147 分支)。 */
+.qcard3-windows-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-8);
 }
-/* qcard2 内 .bar-row 的 tooltip 浮于卡之上不溢出 panel:
+.qcard3-windows-row + .qcard3-windows-row {
+  margin-top: var(--space-4); /* 行间 4px 节奏(同 .qcard3-windows gap) */
+}
+.qcard3-windows-row--wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* qcard3 内 .bar-row 的 tooltip 浮于卡之上不溢出 panel(t_23800bd4 主页契约):
  * 沿用既有 .bar-row + .bar-tooltip 契约(见 app.css 上方 .bar-row / .bar-tooltip);
- * 仅在 qcard2 首行改为向下弹出(避免顶部裁剪, 与 bars 模板首行同规) */
-.qcard2 .bar-row:first-child .bar-tooltip {
+ * 仅在 qcard3 首行改为向下弹出(避免顶部裁剪, 与 bars 模板首行同规)。
+ * (本方案页 WindowRow 当前不挂 BarRowTooltip; 此条规则保留以保主场 .bar-row 契约) */
+.qcard3 .bar-row:first-child .bar-tooltip {
   bottom: auto;
   top: calc(100% + var(--space-4));
 }
 
-/* 方案 C: 整卡左竖 2px 状态色条(用 border-left 0 + ::before 2px, 不挤压内容) */
-.qcard2--status-bar::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: currentColor;
-  border-top-left-radius: var(--radius-12);
-  border-bottom-left-radius: var(--radius-12);
-  pointer-events: none;
-}
-.qcard2--status-bar[data-health="ok"]::before { color: var(--ok); }
-.qcard2--status-bar[data-health="warn"]::before { color: var(--warn); }
-.qcard2--status-bar[data-health="bad"]::before { color: var(--bad); }
-
-/* 方案 C: 锁住态 — 整卡聚焦/激活, 让内部 .bar-tooltip 常驻揭示(不依赖 hover)
- * 用 :focus-within(键盘 Tab 可达) + 自定义 [data-pinned] 属性;
- * 实现在实现卡接 OneClickAuth 类交互, 当前为 mock 静态 */
-.qcard2--status-bar:focus-within .bar-tooltip,
-.qcard2--status-bar[data-pinned="true"] .bar-tooltip {
-  opacity: 1;
-  visibility: visible;
-}
-.qcard2--status-bar:focus-within,
-.qcard2--status-bar[data-pinned="true"] {
-  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  outline-offset: -1px;
-}
-
-/* 异常卡共用骨架(4 方案同一套 body 变体, 共享 .qcard2-abnormal) */
-.qcard2-abnormal {
+/* ============ 异常卡 AbnormalBody(共用骨架, t_73c110ea 9/7 重建) ============ */
+.qcard3-abnormal {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
 }
-.qcard2-status-line {
+.qcard3-status-line {
   font-size: var(--font-12);
   font-weight: 600;
 }
 /* auth_expired 黄灯(§2.1): 自绘圆点 + 光晕 */
-.qcard2-lamp {
+.qcard3-lamp {
   display: inline-block;
   margin-right: var(--space-4);
   font-size: 10px;
@@ -2133,7 +2176,7 @@ body {
     0 0 6px var(--warn);
   vertical-align: middle;
 }
-.qcard2-hint {
+.qcard3-hint {
   font-size: var(--font-11);
   color: var(--warn-fg);
   background: color-mix(in srgb, var(--warn) 12%, transparent);
@@ -2142,29 +2185,17 @@ body {
   padding: var(--space-4) var(--space-8);
   line-height: 1.5;
   display: flex;
-  flex-wrap: wrap; /* t_52e3a7fb 语义: 说明文字独占整行自然折行, 动作钮换行并排 */
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--space-8);
 }
-.qcard2-hint-text {
-  flex: 1 1 100%; /* 独占整行, 不单行挤压 */
+.qcard3-hint-text {
+  flex: 1 1 100%;
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.qcard2-hint-actions {
-  display: flex;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-.qcard2-chip {
-  font-size: var(--font-10);
-  line-height: 1.4;
-  padding: var(--space-4) var(--space-8);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--fg-dim);
-}
-.qcard2-note {
+.qcard3-note {
   font-size: var(--font-10);
   color: var(--fg-dim);
 }
+

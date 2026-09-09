@@ -2,12 +2,20 @@ import { expect as pwExpect } from "@playwright/test";
 import { test } from "./fixtures";
 
 /**
- * L2(t_a398348b): 窗口行悬停 tooltip —— micro 排版四元素微型展示。
- * - 悬停窗口行 → 行内 .bar-tooltip 揭示, 内含 quota-meter[data-layout="micro"]
- *   四元素(标题/重置/条/用量), 数据与行同源(golden 真实链路)
- * - 定位不溢出面板: tooltip rect 含于 card-list rect(1px 容差)
- * - 模板首行向下弹出(防首卡吸顶时上缘被裁剪), 其余行向上
- * - 移出即隐藏; 深/浅/玻璃三态渲染正常(截图取证落 /tmp)
+ * L2(t_27eeadad, 2026-09-07 用户拍板): 主页 P1 化后 BarRowTooltip 不再挂载。
+ *
+ * 历史契约(t_a398348b): 窗口行悬停 → micro tooltip 四元素揭示。
+ * 新契约(t_27eeadad): 主页窗口行已是 QuotaMeter(layout="micro") 三窗常驻直显,
+ *   悬浮复读同一信息是冗余 → BarRowTooltip 从主页窗口行移除。
+ *
+ * 本规约断言:
+ *   - 主页 provider-card 内 .bar-tooltip 节点数 == 0(无悬停复读)
+ *   - 窗口行 hover 不再揭示 tooltip(@srsholmes/tauri-playwright 断言节点空)
+ *   - 微 meter = QuotaMeter[data-layout="micro"] 仍在窗口行直接子级(信息常驻)
+ *   - 三态截图(dark/light/glass)仍取, 落 /tmp 取证主页 P1 形态
+ *
+ * 组件本身(BarRowTooltip.tsx)保留作为契约锚点 + 旧 BarRowTooltip 自身的 vitest 回归护栏;
+ * 方案页 ProviderCardLayouts/QuotaGallery 也不再挂 BarRowTooltip(quota-gallery.spec.ts 沿检 .bar-tooltip == 0)。
  */
 
 /** 预置一个 opencode 实例(golden: rolling 0% / weekly 100% / monthly 48% → 三条 bar-row) */
@@ -33,106 +41,64 @@ async function seedOpencodeInstance(page: import("@playwright/test").Page) {
   await page.reload();
 }
 
-/** 窗口按时间窗升序: rolling_5h(5h,0%) → weekly(周,100%) → monthly(月,48%) */
-const ROW_WEEKLY = 1;
-const ROW_MONTHLY = 2;
-
-type Box = { x: number; y: number; width: number; height: number };
-
-/** tooltip 四边含于容器四边(1px 容差) */
-function expectContained(inner: Box, outer: Box) {
-  pwExpect(inner.x).toBeGreaterThanOrEqual(outer.x - 1);
-  pwExpect(inner.y).toBeGreaterThanOrEqual(outer.y - 1);
-  pwExpect(inner.x + inner.width).toBeLessThanOrEqual(outer.x + outer.width + 1);
-  pwExpect(inner.y + inner.height).toBeLessThanOrEqual(outer.y + outer.height + 1);
-}
-
-test("悬停窗口行 → micro tooltip 四元素揭示, 与行同源, 不溢出面板; 移出隐藏", async ({
+test("主页 P1 化: provider-card 内 .bar-tooltip == 0(无悬停复读, t_27eeadad)", async ({
   hostPage,
   page,
 }) => {
   void hostPage;
-  await page.setViewportSize({ width: 360, height: 600 });
+  await page.setViewportSize({ width: 360, height: 720 });
   await seedOpencodeInstance(page);
 
   const card = page.getByTestId("provider-card").first();
   await pwExpect(card).toBeVisible({ timeout: 10_000 });
   const rows = card.locator(".bar-row");
-  await pwExpect(rows).toHaveCount(3);
+  await pwExpect(rows).toHaveCount(3); // 主页仍是 3 窗
 
-  const monthlyRow = rows.nth(ROW_MONTHLY);
-  const tip = monthlyRow.getByTestId("bar-tooltip");
+  // 硬契约: 主页窗口行不挂 BarRowTooltip(整卡零 .bar-tooltip 节点)
+  await pwExpect(card.locator(".bar-tooltip")).toHaveCount(0);
 
-  // 悬停前: 隐藏(visibility)
-  await pwExpect(tip).toBeHidden();
-
-  // 悬停 monthly 行 → tooltip 揭示, micro 排版四元素
+  // 窗口行 hover 也不揭示 tooltip(已无 .bar-tooltip 子节点)
+  const monthlyRow = rows.nth(2);
   await monthlyRow.hover();
-  await pwExpect(tip).toBeVisible();
-  const meter = tip.getByTestId("quota-meter");
-  await pwExpect(meter).toHaveAttribute("data-layout", "micro");
-  await pwExpect(meter).toHaveClass(/quota-meter--layout-micro/);
-  await pwExpect(tip.locator(".quota-title")).toHaveText("月窗");
-  await pwExpect(tip.locator(".quota-usage")).toHaveText("48% / 100%");
-  await pwExpect(tip.locator(".quota-reset")).not.toBeEmpty(); // 重置倒计时(≥1天档)
-  await pwExpect(tip.locator("[role='progressbar']")).toHaveAttribute("aria-valuenow", "48");
-  await pwExpect(tip.locator(".progress-fill")).toHaveAttribute("data-health", "ok"); // 48% 剩余 52% → ok
+  await pwExpect(card.locator(".bar-tooltip")).toHaveCount(0);
 
-  // 不溢出面板: tooltip ⊂ card-list
-  const tipBox = (await tip.boundingBox())!;
-  const listBox = (await page.locator(".card-list").boundingBox())!;
-  expectContained(tipBox, listBox);
-
-  // micro 结构取证: 条 4px + 重置并入用量行(usage.y ≈ reset.y)
-  const barBox = (await tip.locator("[role='progressbar']").boundingBox())!;
-  pwExpect(barBox.height).toBeLessThanOrEqual(5);
-  const usageBox = (await tip.locator(".quota-usage").boundingBox())!;
-  const resetBox = (await tip.locator(".quota-reset").boundingBox())!;
-  pwExpect(Math.abs(usageBox.y - resetBox.y)).toBeLessThanOrEqual(4);
-
-  // 移出(悬停标题栏) → tooltip 隐藏
-  await page.locator(".titlebar").hover();
-  await pwExpect(tip).toBeHidden();
-
-  // 最紧窗口行(weekly 100% 耗尽, data-tightest): tooltip 同步 bad 着色 + 满格用量
-  const weeklyRow = rows.nth(ROW_WEEKLY);
-  const wTip = weeklyRow.getByTestId("bar-tooltip");
-  await weeklyRow.hover();
-  await pwExpect(wTip).toBeVisible();
-  await pwExpect(wTip.locator(".quota-title")).toHaveText("周窗");
-  await pwExpect(wTip.locator(".quota-usage")).toHaveText("100% / 100%");
-  await pwExpect(wTip.locator(".progress-fill")).toHaveAttribute("data-health", "bad");
+  // micro meter 仍在窗口行直接子级(.bar-row > .quota-meter[data-layout="micro"], 常驻直显)
+  const monthlyMeter = monthlyRow.locator(".quota-meter");
+  await pwExpect(monthlyMeter).toHaveAttribute("data-layout", "micro");
+  await pwExpect(monthlyMeter.locator(".quota-title")).toHaveText("月窗");
+  // micro 排版短格式(t_f7d1beeb 9/7): micro quota-usage 只显百分比, 不走 usageText 完整文案
+  await pwExpect(monthlyMeter.locator(".quota-usage")).toHaveText("48%");
+  await pwExpect(monthlyMeter.locator(".progress-fill")).toHaveAttribute("data-health", "ok");
 });
 
-test("模板首行 tooltip 向下弹出(防吸顶裁剪), 仍含于面板", async ({ hostPage, page }) => {
+test("P1 头: handle+name+StatusDot+状态徽章 三件套一行, 删除钮仍存在(D-038 兼容)", async ({
+  hostPage,
+  page,
+}) => {
   void hostPage;
-  await page.setViewportSize({ width: 360, height: 600 });
+  await page.setViewportSize({ width: 360, height: 720 });
   await seedOpencodeInstance(page);
 
   const card = page.getByTestId("provider-card").first();
   await pwExpect(card).toBeVisible({ timeout: 10_000 });
-  const firstRow = card.locator(".bar-row").first();
-  const tip = firstRow.getByTestId("bar-tooltip");
 
-  await firstRow.hover();
-  await pwExpect(tip).toBeVisible();
-  await pwExpect(tip.locator(".quota-title")).toHaveText("5 小时窗");
-  await pwExpect(tip.locator(".quota-usage")).toHaveText("0% / 100%");
-  await pwExpect(tip.locator(".progress-fill")).toHaveAttribute("data-health", "ok");
-
-  // 首行: tooltip 在行下方(top ≥ row.bottom - 1), 非上方
-  const tipBox = (await tip.boundingBox())!;
-  const rowBox = (await firstRow.boundingBox())!;
-  pwExpect(tipBox.y).toBeGreaterThanOrEqual(rowBox.y + rowBox.height - 1);
-
-  // 仍含于 card-list
-  const listBox = (await page.locator(".card-list").boundingBox())!;
-  expectContained(tipBox, listBox);
+  const head = card.locator(".card-head");
+  await pwExpect(head.locator(".brand-block")).toHaveCount(1); // 拖把手
+  await pwExpect(head.locator(".card-name")).toHaveText("opencode Go #1");
+  await pwExpect(head.locator(".status-dot")).toHaveCount(1); // P1 新增
+  await pwExpect(head.locator(".card-status-text").first()).not.toBeEmpty(); // 状态徽章
+  // 删除钮: hover 右上角按钮才显出(opacity 0 → 1, D-038; 修订 H 自为热区)
+  // t_433892c6 9/7 修订 H(老大 #1175 回归): button opacity:0 + pointer-events:auto, :hover 触发 opacity:1
+  await card.locator('[data-testid^="card-del-"]').hover();
+  await pwExpect(card.locator('[data-testid^="card-del-"]').first()).toBeVisible();
 });
 
-test("三态截图取证(dark/light/glass 各悬停 monthly 行落 /tmp)", async ({ hostPage, page }) => {
+test("三态截图取证(dark/light/glass 各 hover monthly 行落 /tmp, 主页 P1 形态)", async ({
+  hostPage,
+  page,
+}) => {
   void hostPage;
-  await page.setViewportSize({ width: 360, height: 600 });
+  await page.setViewportSize({ width: 360, height: 720 });
   for (const [name, theme, glass] of [
     ["dark", "dark", "0"],
     ["light", "light", "0"],
@@ -148,17 +114,12 @@ test("三态截图取证(dark/light/glass 各悬停 monthly 行落 /tmp)", async
     await seedOpencodeInstance(page);
     const card = page.getByTestId("provider-card").first();
     await pwExpect(card).toBeVisible({ timeout: 10_000 });
-    const monthlyRow = card.locator(".bar-row").nth(ROW_MONTHLY);
+    const monthlyRow = card.locator(".bar-row").nth(2);
     await monthlyRow.hover();
-    const tip = monthlyRow.getByTestId("bar-tooltip");
-    await pwExpect(tip).toBeVisible();
-    // 等 grow-in/淡入动画落定避免截到半透明帧
     await page.waitForTimeout(600);
-    // 三态正常取证: tooltip 仍含于面板 + micro meter 在
-    const tipBox = (await tip.boundingBox())!;
-    const listBox = (await page.locator(".card-list").boundingBox())!;
-    expectContained(tipBox, listBox);
-    await pwExpect(tip.getByTestId("quota-meter")).toHaveAttribute("data-layout", "micro");
+    // 三态正常取证: micro meter 在行直接子级 + 无 .bar-tooltip
+    await pwExpect(monthlyRow.locator(".quota-meter")).toHaveAttribute("data-layout", "micro");
+    await pwExpect(card.locator(".bar-tooltip")).toHaveCount(0);
     await page.locator(".panel").screenshot({ path: `/tmp/bar-tooltip-${name}.png` });
   }
 });

@@ -41,6 +41,13 @@ export interface SchedulerInstanceDef {
   kind?: "http" | "command";
   /** 显式超时覆盖(毫秒) */
   timeoutMs?: number;
+  /**
+   * 通道标识(t_034a6e81 火山自撞锁修): 同 channel 实例的 fetch 严格串行执行。
+   * 用于 command 通道上 CLI 自己持有进程内互斥(如 arkcli 启动即占 SSO 锁),
+   * N 个同 channel 实例并发 → N 个 CLI 同时刷新 SSO → 互撞锁报「另一进程占用」。
+   * 不传 = 仍走全并行(原行为, 零变化)。
+   */
+  channel?: string;
   /** 每次采集结束回调(成功/失败/跳过前的实际结果), 宿主在此写库 */
   onResult?: (snapshot: ProviderSnapshot, meta: RunMeta) => void;
 }
@@ -106,6 +113,13 @@ export class Scheduler {
     now: () => number;
   };
   private readonly instances = new Map<string, InstanceRuntime>();
+  /**
+   * t_034a6e81 火山自撞锁修: 同 channel 实例的串行执行队列。
+   * 键 = channel, 值 = 该 channel 当前的"在途串行链"Promise。
+   * 每个新请求接到前一个 resolve 后再接, 严格 FIFO; 不存在 channel 走全并行(原行为)。
+   * 命令通道 CLI(arkcli/bl)内部持进程级互斥锁, N 个同通道实例并发会互撞; 串行后零撞锁。
+   */
+  private readonly channelInFlight = new Map<string, Promise<unknown>>();
 
   constructor(options: SchedulerOptions = {}) {
     this.opts = {
@@ -201,7 +215,35 @@ export class Scheduler {
       rt.stats.haltReason = undefined;
       rt.stats.consecutiveFailures = 0;
     }
-    await this.run(rt);
+    // t_034a6e81 火山自撞锁修: 同 channel 实例的 fetch 严格串行。
+    // 实现 = 把本实例的 run() 接到 channel 串行链尾部;
+    // 前一个未 resolve → 本实例等待; resolve → 本实例开始; 不同 channel 互不阻塞。
+    // 等待而非 skip: 选"等"保数据新鲜(用户期望"已授权后点击=刷新出数据");
+    // 同 channel 在 tick 自然节拍下也仅在少数 case 撞锁(refresh 集中触发最甚),
+    // tick 自撞由 stats.skipped 自然吸收, 此处只防并发执行撞 CLI 内部锁。
+    const ch = rt.def.channel;
+    if (!ch) {
+      await this.run(rt);
+      return;
+    }
+    const prev = this.channelInFlight.get(ch) ?? Promise.resolve();
+    // 接链: 不论 prev 状态如何, 链上挂上本实例; 完成后用 settled 状态覆盖(不持有 rejected 阻塞后续)。
+    let settled!: Promise<void>;
+    settled = prev.then(
+      () => this.run(rt),
+      () => this.run(rt), // 前一个失败不传染本实例(独立 fail-isolated, 与"全异步并发故障隔离"同源)
+    );
+    // 同步设置新链头(其后所有同 channel 任务挂到本实例之后);
+    // catch 是为了不让 unhandled rejection 让进程崩; 真正的错误由 onResult/RunMeta 透出。
+    const tracked = settled.catch(() => {});
+    this.channelInFlight.set(ch, tracked);
+    // 链尾清理: settled 真正结束时, 若本实例仍是链头(即链上没再挂更新任务)则清掉 map 键,
+    // 避免 Map 持有已 resolve 的 Promise(可能闭包 ref 大对象)无限增长。
+    // 同 channel 新 refresh 进来时, channelInFlight.get(ch) 若已被清 → 拿到 Promise.resolve()(无等待)。
+    void settled.finally(() => {
+      if (this.channelInFlight.get(ch) === tracked) this.channelInFlight.delete(ch);
+    });
+    await settled;
   }
 
   async refreshAll(): Promise<void> {

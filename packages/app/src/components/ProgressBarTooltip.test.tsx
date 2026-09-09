@@ -62,13 +62,16 @@ describe("bar-row 悬停 tooltip(t_a398348b): micro 排版四元素", () => {
     expect(tip.querySelector(".quota-title")!.textContent).toBe("周窗");
     expect(tip.querySelector(".quota-reset")!.textContent).toBe("1.0天");
     expect(tip.querySelector("[role='progressbar']")!.getAttribute("aria-valuenow")).toBe("40");
-    expect(tip.querySelector(".quota-usage")!.textContent).toBe("40% / 100%");
+    // micro 排版短格式(t_f7d1beeb 9/7): BarRowTooltip 内 QuotaMeter layout=micro 也只显百分比
+    expect(tip.querySelector(".quota-usage")!.textContent).toBe("40%");
   });
 
-  it("percent 浮点尾差修正: used=37.941548… → 用量行 '37.9% / 100%'(t_23800bd4 单位语义)", () => {
+  it("micro 短格式取整百分比: used=37.941548… → 用量行 '38%'(t_f7d1beeb 9/7, Math.round 整数百分比)", () => {
+    // BarRowTooltip 内 QuotaMeter layout=micro: micro 走 Math.round 取整(38),
+    // 与 usageText percent 单位的 fmt1(37.9)不同, micro 短格式 = 整数% 契约
     renderRow(metricOf({ used: 0.37941548 * 100 }));
     const tip = container.querySelector(".bar-tooltip")!;
-    expect(tip.querySelector(".quota-usage")!.textContent).toBe("37.9% / 100%");
+    expect(tip.querySelector(".quota-usage")!.textContent).toBe("38%");
   });
 
   it("健康度着色与行一致(91% → bad), 条宽 = 用量比例", () => {

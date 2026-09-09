@@ -119,7 +119,8 @@ test("实例: 向导添加 → 面板出卡 → 卡内删除 → 回空态(D-038
   const card = page.getByTestId("provider-card").filter({ hasText: "DeepSeek-按量 #1" });
   await pwExpect(card).toHaveCount(1, { timeout: 10_000 });
   // 删除 = 卡内删除钮 + 确认气泡(两次点击, 就近操作)
-  await card.hover();
+  // t_433892c6 9/7 修订 H(老大 #1175 回归): 按钮自为热区, hover 按钮直接 opacity:1
+  await card.locator(".card-del-btn").hover();
   await card.getByTestId(/^card-del-/).click();
   await card.getByTestId(/^card-confirm-del-/).click();
   // 删完回空态(scenario=empty), 空态大按钮引导首加不受影响

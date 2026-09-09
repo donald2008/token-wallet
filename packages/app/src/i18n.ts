@@ -82,6 +82,8 @@ const zh = {
     copyCmdAria: "复制命令 {cmd}",
     authStart: "一键授权",
     authDone: "已授权 ✓",
+    authDonePreviewTitle: "预览卡不可刷新(仅真实实例可点)",
+    authDonePreviewAria: "已授权 - 预览卡不可刷新",
     authWorking: "处理中…",
     authBrowserHint: "浏览器已打开, 请完成授权后粘贴页面显示的授权码",
     authWaitingCallback: "等待浏览器授权完成…(已自动处理授权码)",
@@ -254,6 +256,9 @@ const zh = {
     closeAria: "关闭设置",
     theme: "主题",
     glass: "玻璃特效(半透明面板 · 背景模糊)",
+    // t_c20d4d11 9/7 玻璃透明度滑槽: 范围 15%-100%, 默认 100% 不透明
+    glassAlpha: "玻璃透明度",
+    glassAlphaHint: "默认不透明, 拖低滑槽变半透明(背景模糊常开 32px)。停手自动保存。",
     themeHint:
       "默认追随系统外观, 可在此覆盖。标题栏 ☀ 钮可快切浅色/深色/跟随系统, 与此处三档同走一套主题。",
     sort: "排序",
@@ -280,51 +285,32 @@ const zh = {
     failed: "更新失败, 稍后重试",
   },
   quota: {
-    title: "四元素排版变体",
+    title: "Provider 卡片排版方案",
     subtitle:
-      "同一份四元素数据(标题 + 重置时间 + 进度条 + 用量), 分别用 5 种排版渲染, 供肉眼对比「同数据不同摆法」。A 行式(窗口行) / B 大数字(汇总 hero) / C 紧凑竖排(tooltip) / D 数字优先(ticker) / E 两行堆叠(通用明细)。条统一 slim, 排除形态/颜色干扰。全部走 tokens.css / 8px 网格 / D-016 三态(dark/light/glass)。",
+      "同一套 kimi-code 三窗真实数据(rolling_5h + weekly + monthly, requests 计数制), 分别用 3 种卡头×三窗空间关系渲染。**三窗 QuotaMeter(layout=micro) 常驻直显**是信息主体(无 hover 依赖)—— micro 就是悬浮窗内 QuotaMeter 的同一形态(title+bar+(usage|reset) 三层 grid, 4px 条, font-10)。差异落在真排版维度, 不是头部装饰件堆叠。",
     open: "查看方案页",
-    // t_23800bd4: mock 标题改真实 provider 风格名 + 去掉「xx 次」误导(数据是百分制演示)
-    iWin5h: "OpenCode 5 小时窗",
-    iWeek: "Kimi 周窗",
-    iMonth: "阿里云百炼 月窗",
-    iCount: "智谱 GLM 周窗 · 计数制",
-    iResetSoon: "即将重置",
-    iResetDayFrac: "3.4 天后重置",
-    iResetHours: "6.4 小时后重置",
-    vNameRow: "行式 · 窗口行",
-    vDescRow: "场景 A ProviderCard 窗口行(5h/周/月多行并存): 标题定宽左 + 条中 + 用量右, 重置小字垫底",
-    vNameDuo: "两行 · 明细堆叠",
-    vDescDuo: "场景 E 通用明细(列表/瓦片): 标题+用量一行分左右, 条+重置一行",
-    vNameHero: "大数字 · 汇总 hero",
-    vDescHero: "场景 B 汇总区(借鉴 token-monitor): 用量 22px 主视觉, 标题/条/重置降为配",
-    vNameMicro: "紧凑竖排 · tooltip",
-    vDescMicro: "场景 C 托盘 tooltip / 本地 agent: 无卡竖排超紧凑, 条 4px, 重置并入用量行",
-    vNameTicker: "数字优先 · ticker",
-    vDescTicker: "场景 D 余额制金额模板: 单值滚动, 数字优先, 上行 caption + 右侧微条",
     legendOk: "ok(健康)",
     legendWarn: "warn(偏低)",
     legendBad: "bad(耗尽)",
-    // t_85237167: Provider 卡片卡内排版方案段(4 方案 + 异常段, 9/5 清空重建)
-    card2AName: "Provider 卡 · 方案 A 简洁双行基线",
-    card2ADesc:
-      "头部最小化(handle + 名称 + StatusDot + 状态徽章), 双窗各一行 QuotaMeter(row), 窗间 8px 节奏, 无新结构。**与主页窗口行 1:1 完全一致, 认知零成本**。每窗行内嵌 BarRowTooltip(micro), 行 hover 弹四元素。与 tooltip 关系: 纯沿用, 无新增。取舍: 2 窗总高 ~88px 最中性, 无惊喜。",
-    card2BName: "Provider 卡 · 方案 B 头部综合态(信息上抬, 无摘要条)",
-    card2BDesc:
-      "头部右侧合并「灯 + 综合态文字」单行(整卡 health 综合态徽章), 整卡右上角 ⓘ hover 触发合并 tooltip(双 BarRowTooltip 堆叠)。**信息上抬但不引入摘要条形态**——不抽最紧窗颜色, 风险颜色仍走行内自身 color。取舍: 综合态一行让「健康/偏低/告急」一瞥可读, ⓘ 是新交互; 真实屏 ~336px 宽下「灯+综合态文字+ⓘ」是否拥挤需选型测。",
-    card2CName: "Provider 卡 · 方案 C 状态色条 + 锁住态 tooltip",
-    card2CDesc:
-      "整卡左竖 2px 色条(--ok/--warn/--bad, 对应最紧窗 health), 整卡可点击锁住(tabIndex+role=button, 无 JS 状态机)。**锁住态 CSS 让 .bar-tooltip 常驻揭示**(不再依赖 hover, 持续可见双窗 micro 适合对比)。取舍: 色条 2px 不占宽度预算; 锁住态=新交互(键盘 Tab 可达, 按 Esc 取消聚焦); 状态色条是纯视觉锚点, 与摘要条不同源(色条=整卡外缘, 摘要条=头部下方色块)。",
-    card2DName: "Provider 卡 · 方案 D 头部承担最紧窗(无摘要条)",
-    card2DDesc:
-      "头部右侧并入「最紧窗用量数字 + 窗名小字」, 该窗行隐藏用量避免重复(QuotaMeter 缺省即不渲染, 契约不破); 头部 hover 弹该最紧窗 BarRowTooltip。**风险数字内联到头部信息流, 不用摘要条形态**(数字融入头部, 不抽警示色带)。取舍: 隐含 S2「风险上抬」精神但换形态, 与 B 同属头部扩展, 区别在 D 显数字 / B 显综合态文字。",
-    card2AbnName: "Provider 卡 · 异常卡共用骨架(4 方案同一套)",
-    card2AbnDesc:
-      "auth_expired / error 共用骨架 body 变体, 不渲染假窗口行(§2.1)。auth_expired: 黄灯 + setup_hint 授权面板(保留 t_52e3a7fb 列式修复); error: 红字 + 无 hint。卡骨架与正常卡同构(data-health 一致), 排序扫描形态一致。",
-    card2Hours: "小时后重置",
-    card2Days: "天后重置",
-    card2MergedTip: "查看双窗合并详情",
-    card2HeadTip: "最紧窗详情",
+    // t_73c110ea 9/7 重建: 3 方案 + 异常段 mock, 全部基于真排版维度差异(无头部装饰件堆叠)
+    // t_5b092750 9/7 加 P5(短窗并排) — 短窗两列 grid + 月独占一行, 来自 token-monitor 布局
+    // P3 三列 grid 在 360px 屏下实测文字重叠 + 列被裁切 —— 故本轮不交付 P3
+    // 留 4 个真维度方案: 空间结构(P1)/信息层级(P2)/头部承载(P4)/短窗并排(P5)
+    cardP1Name: "Provider 卡 · P1 基线竖排(主页同构)",
+    cardP1Desc:
+      "卡头 = handle + 名称 + StatusDot + 状态徽章(一行)。三窗 micro 各一行 QuotaMeter, 窗间 4px gap(micro = 悬浮窗内 QuotaMeter 的同一形态, title+bar+(usage|reset) 三层 grid)。**与主页 ProviderCard 形态对齐, 认知零成本**。",
+    cardP2Name: "Provider 卡 · P2 头部综合态(信息上抬, 无摘要条)",
+    cardP2Desc:
+      "卡头右侧合并「StatusDot + 综合态文字」一行(整卡 health 一瞥可读); 三窗 micro 同 P1。**不引入摘要条形态**——风险颜色仍走行内自身 color, 头部不抽警示带。",
+    cardP4Name: "Provider 卡 · P4 头部数字(最紧窗内联, 无摘要条)",
+    cardP4Desc:
+      "卡头右侧并入「最紧窗用量数字 + 窗名小字」一行, 该窗行隐藏用量避免重复(QuotaMeter 缺省即不渲染, 契约不破)。**风险数字内联到头部信息流, 不用摘要条形态**。",
+    cardP5Name: "Provider 卡 · P5 短窗并排(monitor 布局, 5h+周同窗/月独占)",
+    cardP5Desc:
+      "卡头同 P1; **5h+周两窗同一行两列 grid**(gap=8), **月窗独占下一行全宽**。三窗全复用 layout=\"micro\" QuotaMeter — **不重造单元, 只重排窗口间网格**。来自用户 9/7 拍板的 token-monitor 窗口布局。360px 双列实测无文字重叠 / 无裁切。",
+    cardAbnName: "Provider 卡 · 异常卡共用骨架(4 方案同一套)",
+    cardAbnDesc:
+      "auth_expired / error 共用 AbnormalBody(不计入独立布局): 状态灯 + 状态文字 + (auth_expired only) setup_hint 授权面板(复制命令) + 最近更新/alerts。结构与主页 ProviderCard AbnormalBody 同构。",
   },
 } as const;
 
@@ -392,6 +378,8 @@ const en: Dict = {
     copyCmdAria: "Copy command {cmd}",
     authStart: "Authorize",
     authDone: "Authorized ✓",
+    authDonePreviewTitle: "Preview card cannot refresh (only real instances)",
+    authDonePreviewAria: "Authorized - preview card cannot refresh",
     authWorking: "Working…",
     authBrowserHint: "Browser opened. After approving, paste the code shown on the page",
     authWaitingCallback: "Waiting for approval in browser… (code auto-handled)",
@@ -562,6 +550,9 @@ const en: Dict = {
     closeAria: "Close settings",
     theme: "Theme",
     glass: "Glass effect (translucent panel · blurred background)",
+    // t_c20d4d11 9/7 glass alpha slider: 15%-100%, default 100% opaque
+    glassAlpha: "Glass opacity",
+    glassAlphaHint: "Opaque by default; drag down for translucency (background blur stays at 32px). Saves on release.",
     themeHint:
       "Defaults to system (prefers-color-scheme); override here. The ☀ button in the title bar cycles the same three modes sharing one theme state.",
     sort: "Sort order",
@@ -589,51 +580,32 @@ const en: Dict = {
     failed: "Update failed, retry later",
   },
   quota: {
-    title: "Four-element layout variants",
+    title: "Provider card layout options",
     subtitle:
-      "The same four-element data (title + reset time + progress bar + usage) rendered in 5 layouts, to compare 'same data, different arrangements'. A row (window rows) / B big-number hero (summary) / C compact vertical (tooltip) / D number-first (ticker) / E two-line split (generic detail). All bars slim to rule out shape/color noise. All via tokens.css / 8px grid / D-016 three states (dark/light/glass).",
+      "The same kimi-code three-window real data (rolling_5h + weekly + monthly, requests count), rendered in 3 head × three-window spatial relations. **Three-window QuotaMeter (layout=micro) is always-on and direct** — that's the card's information main body, no hover dependency. micro = the same compact vertical stack as the hover tooltip's QuotaMeter (title+bar+(usage|reset) three-layer grid, 4px bar, font-10). Differences live in real layout dimensions, not in head decoration stacking.",
     open: "View gallery",
-    // t_23800bd4: mock titles use real provider-style names; no misleading "N uses" (data is percent-based)
-    iWin5h: "OpenCode 5h window",
-    iWeek: "Kimi weekly",
-    iMonth: "Aliyun Bailian monthly",
-    iCount: "Zhipu GLM weekly · count",
-    iResetSoon: "resets soon",
-    iResetDayFrac: "resets in 3.4d",
-    iResetHours: "resets in 6.4h",
-    vNameRow: "Row · window rows",
-    vDescRow: "Scenario A ProviderCard window rows (5h/week/month stacked): fixed-width title left + bar center + usage right, reset as small sub-line",
-    vNameDuo: "Two-line · detail split",
-    vDescDuo: "Scenario E generic detail (list/tile): title + usage share one row, bar + reset share the next",
-    vNameHero: "Big-number · summary hero",
-    vDescHero: "Scenario B summary area (token-monitor style): 22px usage as hero, title/bar/reset demoted",
-    vNameMicro: "Compact vertical · tooltip",
-    vDescMicro: "Scenario C tray tooltip / local agent: chrome-less tight vertical, 4px bar, reset merged into usage line",
-    vNameTicker: "Number-first · ticker",
-    vDescTicker: "Scenario D balance-style money template: scrolling single value, number-first, caption row + right mini-bar",
     legendOk: "ok (healthy)",
     legendWarn: "warn (low)",
     legendBad: "bad (exhausted)",
-    // t_85237167: Provider card interior-layout options (4 schemes + abnormal skeleton, 9/5 rebuild)
-    card2AName: "Provider card · Scheme A simple two-row baseline",
-    card2ADesc:
-      "Minimal head (handle + name + StatusDot + badge); each window a QuotaMeter (row), 8px rhythm between windows, no new structure. **1:1 with the home page window rows, zero cognitive cost.** Each row embeds BarRowTooltip (micro); row hover reveals four elements. Tooltip relation: pure reuse, nothing added. Trade-off: ~88px tall for 2 windows is the most neutral baseline.",
-    card2BName: "Provider card · Scheme B head carries rollup (no summary strip)",
-    card2BDesc:
-      "Head right side merges 'dot + rollup label' into one line (whole-card health rollup); a small ⓘ at the card's top-right triggers a merged tooltip on hover (two BarRowTooltip instances stacked). **Rollup is information-elevation, NOT a summary strip** — we don't extract the tightest window's color; risk color stays on each row's own color. Trade-off: rollup line makes 'healthy / low / critical' glanceable, ⓘ is a new interaction; verify the 'dot+rollup+ⓘ' fits in the ~336px real panel width during selection.",
-    card2CName: "Provider card · Scheme C status bar + pinned tooltip",
-    card2CDesc:
-      "Whole-card left 2px status bar (--ok / --warn / --bad, mirrors tightest window health); the whole card is clickable to pin (tabIndex + role=button, no JS state machine). **Pinned state turns .bar-tooltip always-on via CSS** (no longer hover-gated; both windows' micro stays visible for side-by-side compare). Trade-off: the 2px bar costs no width budget; pinned is a new interaction (Tab-reachable, Esc unfocus); the bar is a pure visual anchor, semantically distinct from a summary strip.",
-    card2DName: "Provider card · Scheme D head carries tightest (no summary strip)",
-    card2DDesc:
-      "Head right side embeds 'tightest-window usage number + window label sub-line'; that row hides its usage to avoid duplication (QuotaMeter omits when prop undefined, contract intact); head hover reveals that tightest window's BarRowTooltip. **The risk number lives inside the head's information flow, not in a strip** (number inlines, no warning bar). Trade-off: shares S2's 'risk elevation' intent via a different shape; both B and D extend the head; D shows the number, B shows the rollup label.",
-    card2AbnName: "Provider card · Abnormal skeleton (shared by all 4 schemes)",
-    card2AbnDesc:
-      "auth_expired / error share one body variant; never render fake window rows (§2.1). auth_expired: yellow lamp + setup_hint auth panel (keeps t_52e3a7fb column-layout fix); error: red text, no hint. Skeleton stays isomorphic with normal cards (same data-health), so sorting/scan shape stays consistent.",
-    card2Hours: "h to reset",
-    card2Days: "d to reset",
-    card2MergedTip: "Show merged window details",
-    card2HeadTip: "Tightest window details",
+    // t_73c110ea 9/7 rebuild: 3 schemes + abnormal skeleton, all based on real layout dimensions (no head decoration stacking)
+    // t_5b092750 9/7 add P5 (short-side-by-side) — two-col grid for short windows + monthly full-width row, from token-monitor layout
+    // P3 three-column grid had measured text overlap + column clipping at 360px panel — therefore dropped this round.
+    // Keep 4 real-dimension schemes: spatial (P1)/info hierarchy (P2)/head carrying (P4)/short-side (P5)
+    cardP1Name: "Provider card · P1 baseline vertical (home page aligned)",
+    cardP1Desc:
+      "Head = handle + name + StatusDot + status badge (one row). Three windows as QuotaMeter(micro) each on its own line, 4px gap between windows (micro = same compact stack as the hover tooltip's QuotaMeter, title+bar+(usage|reset) three-layer grid). **Aligned with home page ProviderCard, zero cognitive cost**.",
+    cardP2Name: "Provider card · P2 head carries rollup (info elevation, no summary strip)",
+    cardP2Desc:
+      "Head right side merges 'StatusDot + rollup label' into one line (whole-card health at a glance); three windows micro, same as P1. **No summary strip** — risk color stays on each row's own color, the head does not extract a warning band.",
+    cardP4Name: "Provider card · P4 head carries tightest number (no summary strip)",
+    cardP4Desc:
+      "Head right side embeds 'tightest-window usage number + window label sub-line'; that row hides its usage to avoid duplication (QuotaMeter omits when prop undefined, contract intact). **Risk number lives inside the head's information flow, no strip**.",
+    cardP5Name: "Provider card · P5 short-side-by-side (monitor layout, 5h+weekly same row / monthly full-width row)",
+    cardP5Desc:
+      "Head same as P1; **5h + weekly two windows share one row as two-column grid** (gap=8), **monthly window takes the next row full-width**. All three windows reuse layout=\"micro\" QuotaMeter — **no new unit, only the between-window grid is reshaped**. From the token-monitor window layout the user confirmed on 9/7. Measured at 360px: no text overlap, no clipping in the two-column row.",
+    cardAbnName: "Provider card · Abnormal skeleton (shared by all 4 schemes)",
+    cardAbnDesc:
+      "auth_expired / error share AbnormalBody (does NOT count as an independent layout): status lamp + status text + (auth_expired only) setup_hint auth panel (copy command) + last-update/alerts. Structurally isomorphic with the home page ProviderCard AbnormalBody.",
   },
 };
 

@@ -1,0 +1,8 @@
+{
+  "_comment": "t_f261dadb 9/8 fixture 修正: 老 fixture 末尾追加了「token 交换失败: invalid_request - refresh_token is invalid」伪造段(只来自 arkcli auth status, 不来自 usage plan)。实测推翻: 真实 usage plan 报错的 SSO 失效形态只有「STS 续期失败」「另一个 arkcli 进程正在刷新 SSO 凭证」「please run arkcli auth login volc-sso」「requires Volcengine Ark SSO STS」四类, 没有 invalid_request 串。9/8 用户拍板: 这套『锁竞争文案』= token 失效的**真实信号**, 不再当并发锁, 统一收敛到 auth_expired。本 fixture 与 ark-usage-sts-lock.json 形态一致(都是用户 Windows 1.0.23 + njbx02 1.0.22 双版本真机贴的原文), 仅作语义别名便于 review 时区分『真机中毒』vs『并发撞锁』。",
+  "ok": false,
+  "error": {
+    "type": "error",
+    "message": "auto-discover subscriptions: trade.list_subscribe: ark: ListSubscribeTrade: ark: ListSubscribeTrade requires Volcengine Ark SSO STS, please run `arkcli auth login volc-sso`: identity volc-2121790915 STS 续期失败: 另一个 arkcli 进程正在刷新 SSO 凭证，请稍后重试"
+  }
+}

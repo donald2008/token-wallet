@@ -94,6 +94,13 @@
   --c-glass-white-a16: rgba(255, 255, 255, 0.16);
   --c-glass-highlight-a32: rgba(255, 255, 255, 0.32);
   --c-glass-black-a42: rgba(0, 0, 0, 0.42);
+  /* t_c20d4d11 9/7 玻璃透明度滑槽: useTheme().glassAlpha 写到 <html style>,
+   * theme.css 用 color-mix(..., calc(<baseline>% * var(--glass-alpha, 1)), transparent) 计算实际背景色。
+   * 占位默认值 1 = 不透明(基线 0.72/0.66 完整应用, 与未改前观感一致)。
+   * 滑槽下限 0.15 → 实际背景 ≈ 基线 11%/10%(极透, 白字仍可读)。
+   * 不支持 color-mix 的浏览器走 fallback: --glass-alpha 未被消费 → var(--glass-alpha, 1) 默认 1,
+   *   但 color-mix 整体语法失败 → --bg 不被设置 → 继承上面 dark/light 主题的不透明 --bg。 */
+  --glass-alpha: 1;
 }
 
 /* ================= semantic ================= */

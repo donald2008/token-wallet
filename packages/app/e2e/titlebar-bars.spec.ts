@@ -84,11 +84,12 @@ test("标题栏: 360px 与 800px 视口高度一致, app-title 不换行两行(t
   pwExpect(ws).toBe("nowrap");
 });
 
-test("进度条对齐: 三行进度条左缘 x 坐标差 ≤1px(tightest 占位一致)", async ({
+test("P5 短窗并排: 5h 列左缘 == 月窗列左缘(同垂直线对齐), 周列位于 5h 右侧约列宽(t_433892c6)", async ({
   hostPage,
   page,
 }) => {
   void hostPage;
+  await page.setViewportSize({ width: 360, height: 720 });
   await seedOpencodeInstance(page);
 
   const card = page.getByTestId("provider-card").first();
@@ -97,13 +98,27 @@ test("进度条对齐: 三行进度条左缘 x 坐标差 ≤1px(tightest 占位�
   // (t_a398348b tooltip 的 micro meter 在 .bar-tooltip 内, 不命中)
   const bars = card.locator(".bar-row > .quota-meter > .progress");
   await pwExpect(bars).toHaveCount(3);
-  // tightest 行(weekly 100% 耗尽)存在 —— 对齐断言必须覆盖它(历史漂移源)
-  await pwExpect(card.locator(".bar-row[data-tightest]")).toHaveCount(1);
-
+  // t_433892c6 P5 形态: 短窗并排 + 月窗全宽。三窗顺序按 sortByWindowSpan → [5h, 周, 月]
+  // P5 排版契约:
+  //   - 第一行 grid 2 列: 5h(.bar-row[0]) 与 周(.bar-row[1]) 同高(同一 grid 行)
+  //   - 第二行 grid 1 列: 月(.bar-row[2]) 全宽, 左缘 == 5h 列左缘(同垂直线)
+  //   - 周列左缘 - 5h 列左缘 = 列宽(≥80px, 360px 卡内 ~144px)
+  // 旧 P1 竖排契约(每行单独, 左缘差 ≤1px)在 P5 不再成立 — 同列同垂直线 = 新契约
   const xs: number[] = [];
   for (let i = 0; i < 3; i++) {
     xs.push((await bars.nth(i).boundingBox())!.x);
   }
-  const spread = Math.max(...xs) - Math.min(...xs);
-  pwExpect(spread).toBeLessThanOrEqual(1);
+  const ys: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    ys.push((await bars.nth(i).boundingBox())!.y);
+  }
+  // 月窗全宽行左缘 == 短行左列(5h)左缘(同垂直线对齐)
+  pwExpect(xs[2]).toBe(xs[0]);
+  // 周列左缘 - 5h 左缘 = 列宽(>80px 表示真分两列, 不是同一格)
+  pwExpect(xs[1] - xs[0]).toBeGreaterThan(80);
+  // 短窗两格同 y(月窗独占下一行 y 不同)
+  pwExpect(Math.abs(ys[0] - ys[1])).toBeLessThanOrEqual(2);
+  pwExpect(ys[2]).toBeGreaterThan(ys[0]);
+  // tightest 标红仍存在(weekly 100% 耗尽)
+  await pwExpect(card.locator(".bar-row[data-tightest]")).toHaveCount(1);
 });

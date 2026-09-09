@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthExpiredError, Scheduler } from "../src/scheduler.js";
+import { AuthExpiredError, Scheduler, type SchedulerInstanceDef } from "../src/scheduler.js";
 import type { ProviderSnapshot } from "../src/schema.js";
 
 const okSnap = (id = "p1"): ProviderSnapshot => ({
@@ -319,6 +319,132 @@ describe("调度器 — 全异步并发/故障隔离", () => {
     expect(results).toHaveLength(1);
     expect(results[0][0].provider_id).toBe("a");
     expect(results[0][1].consecutiveFailures).toBe(0);
+    sch.stopAll();
+  });
+});
+
+// ---- t_034a6e81 火山自撞锁修: channel 级串行 ----
+describe("调度器 — channel 级串行(防 command 通道 CLI 内部互斥锁撞锁)", () => {
+  // 本组用例依赖真实 setTimeout 推进证明"start/resolve 顺序";
+  // 顶层 beforeEach 全局开了 fake timers, 此处局部切回 real。
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+  afterEach(() => {
+    vi.useFakeTimers();
+  });
+
+  it("同 channel 两实例 refreshAll: fetch 调用严格串行(第二个等第一个 resolve 后才起)", async () => {
+    const sch = makeScheduler();
+    // 同步记录 fetch 调用顺序; 用 deferred 句柄手动控制 resolve(不依赖 fake timer 推进)
+    const order: string[] = [];
+    const mkDeferred = (id: string) => {
+      let resolve!: (s: ProviderSnapshot) => void;
+      const promise = new Promise<ProviderSnapshot>((res) => {
+        resolve = res;
+      });
+      const fn: SchedulerInstanceDef["fetch"] = async () => {
+        order.push(`${id}-start`);
+        const snap = await promise;
+        order.push(`${id}-resolve`);
+        return snap;
+      };
+      return { fn, resolve: () => resolve(okSnap(id)) };
+    };
+    const a = mkDeferred("a");
+    const b = mkDeferred("b");
+    sch.add({ id: "a", channel: "volc-ark", fetch: a.fn });
+    sch.add({ id: "b", channel: "volc-ark", fetch: b.fn });
+    // 启动 refreshAll(不 await, 排队后立刻让 a 走完)
+    const all = sch.refreshAll();
+    // 让 a 在 b 之前 resolve: 排空 microtask 让 a-start 已发生
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order).toEqual(["a-start"]); // b 还在等 a 完成
+    a.resolve();
+    // 排空 microtask: a 完成的 onFulfilled 链 → b 启动(中间隔 settled_a.catch → 链头更新 → b's prev 解析)
+    // 用真实 setTimeout(0) flush microtask + macrotask(已切回 real timers, see beforeEach)
+    await new Promise<void>((r) => setTimeout(r, 0));
+    await new Promise<void>((r) => setTimeout(r, 0));
+    expect(order).toEqual(["a-start", "a-resolve", "b-start"]);
+    b.resolve();
+    await all; // 等 refreshAll 全闭环
+    expect(order).toEqual(["a-start", "a-resolve", "b-start", "b-resolve"]);
+    sch.stopAll();
+  });
+
+  it("不同 channel 并行不阻塞(原行为零变化: 不同 channel 仍全并行)", async () => {
+    const sch = makeScheduler();
+    const order: string[] = [];
+    const aFn: SchedulerInstanceDef["fetch"] = async () => {
+      order.push("a-start");
+      await new Promise<void>((r) => setTimeout(r, 20));
+      order.push("a-resolve");
+      return okSnap("a");
+    };
+    const bFn: SchedulerInstanceDef["fetch"] = async () => {
+      order.push("b-start");
+      await new Promise<void>((r) => setTimeout(r, 20));
+      order.push("b-resolve");
+      return okSnap("b");
+    };
+    sch.add({ id: "a", channel: "volc-ark", fetch: aFn });
+    sch.add({ id: "b", channel: "aliyun-bailian", fetch: bFn });
+    await sch.refreshAll();
+    // 不同 channel: 两 start 必都先出现(无 channel 串行)
+    const aStartIdx = order.indexOf("a-start");
+    const bStartIdx = order.indexOf("b-start");
+    expect(aStartIdx).toBeGreaterThanOrEqual(0);
+    expect(bStartIdx).toBeGreaterThanOrEqual(0);
+    // 并行证据: a 还未 resolve 时 b 已 start(否则串行)
+    const aResolveIdx = order.indexOf("a-resolve");
+    expect(bStartIdx).toBeLessThan(aResolveIdx); // 关键: b 启动时 a 还没完
+    expect(order).toEqual(["a-start", "b-start", "a-resolve", "b-resolve"]);
+    sch.stopAll();
+  });
+
+  it("无 channel 实例仍走全并行(原行为零变化, 兼容性回退保障)", async () => {
+    const sch = makeScheduler();
+    const order: string[] = [];
+    const mkFetch = (id: string): SchedulerInstanceDef["fetch"] => async () => {
+      order.push(`${id}-start`);
+      await new Promise<void>((r) => setTimeout(r, 20));
+      order.push(`${id}-resolve`);
+      return okSnap(id);
+    };
+    sch.add({ id: "a", fetch: mkFetch("a") }); // 无 channel
+    sch.add({ id: "b", fetch: mkFetch("b") }); // 无 channel
+    await sch.refreshAll();
+    // 全并行: 两 start 必接近(无 channel 串行不入队)
+    const aStartIdx = order.indexOf("a-start");
+    const bStartIdx = order.indexOf("b-start");
+    const aResolveIdx = order.indexOf("a-resolve");
+    const bResolveIdx = order.indexOf("b-resolve");
+    expect(Math.abs(aStartIdx - bStartIdx)).toBeLessThanOrEqual(1);
+    // 并行证据: a-resolve 之前 b 已 start
+    expect(bStartIdx).toBeLessThan(aResolveIdx);
+    expect(aStartIdx).toBeLessThan(bResolveIdx);
+    sch.stopAll();
+  });
+
+  it("同 channel 串行: 一个实例失败不阻塞下一个的 start(fail-isolated)", async () => {
+    const sch = makeScheduler();
+    const order: string[] = [];
+    const fail: SchedulerInstanceDef["fetch"] = async () => {
+      order.push("fail-start");
+      throw new Error("boom");
+    };
+    const ok: SchedulerInstanceDef["fetch"] = async () => {
+      order.push("ok-start");
+      await new Promise<void>((r) => setTimeout(r, 10));
+      order.push("ok-resolve");
+      return okSnap("b");
+    };
+    sch.add({ id: "a", channel: "volc-ark", fetch: fail });
+    sch.add({ id: "b", channel: "volc-ark", fetch: ok });
+    await sch.refreshAll();
+    // fail-start → ok-start → ok-resolve(同源"全异步并发故障隔离")
+    expect(order).toEqual(["fail-start", "ok-start", "ok-resolve"]);
     sch.stopAll();
   });
 });

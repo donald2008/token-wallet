@@ -1,11 +1,32 @@
 // @vitest-environment jsdom
 // L1 组件级断言(t_553dcb5a): 徽章文字 = statusBadge(原因), 颜色 = providerHealth(不变)。
 // 同一快照渲染后 data-health 与 text-* class 必须与健康度一致 —— 只改文字, 不改颜色。
+//
+// t_034a6e81 Bug1 修: OneClickAuth done 态点击 = onRefresh(不再走 onStart) 的真流程断言
+// —— vi.mock 替换 ipc 的 commandAuthStart/Finish, 走完 callback 模式(浏览器授权自动收 code)
+// 让 stage 推进 idle→starting→waiting→done, 再 fireEvent click 已授权按钮断言 onRefresh 被调。
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// t_034a6e81 Bug1: 模块级 vi.mock 替换 ipc, 让 OneClickAuth 走完 callback 流程到 done 态。
+// 本文件其它 describe 段(徽章/删除/setup_hint 复制)不依赖 ipc, 替换无害。
+// 复用一组 vi.fn + beforeEach 重置, 跨用例统计 commandAuthStart 次数
+// (反证 done 态点击不再调 onStart → 不再起 commandAuthStart)。
+// 签名用宽松类型透传(ProviderCard 调用面是 string / sessionId+code),
+// ts 端用 .mock.calls 读 call 列表, 不参与编译期类型推断。
+// 关键: vi.mock 工厂里要写"真函数"形态, 内部委托到 vi.fn(否则 vitest 类型校验不过)。
+const commandAuthStartImpl = vi.fn();
+const commandAuthFinishImpl = vi.fn();
+const commandAuthCancelImpl = vi.fn(async (_sessionId: string) => ({ ok: true }));
+vi.mock("../ipc", () => ({
+  commandAuthStart: (cli: string) => commandAuthStartImpl(cli),
+  commandAuthFinish: (sessionId: string, code: string) => commandAuthFinishImpl(sessionId, code),
+  commandAuthCancel: (sessionId: string) => commandAuthCancelImpl(sessionId),
+}));
+
 import { providerHealth, statusBadge } from "../health";
 import type { HealthLevel, Metric, ProviderSnapshot, ProviderStatus } from "../types";
 import { ProviderCard } from "./ProviderCard";
@@ -48,9 +69,13 @@ afterEach(() => {
   container.remove();
 });
 
-function renderCard(p: ProviderSnapshot, onDelete?: (id: string) => void): HTMLElement {
+function renderCard(
+  p: ProviderSnapshot,
+  onDelete?: (id: string) => void,
+  onRefresh?: (id: string) => void,
+): HTMLElement {
   act(() => {
-    root.render(<ProviderCard p={p} onDelete={onDelete} />);
+    root.render(<ProviderCard p={p} onDelete={onDelete} onRefresh={onRefresh} />);
   });
   return container.querySelector<HTMLElement>('[data-testid="provider-card"]')!;
 }
@@ -231,7 +256,173 @@ describe("setup_hint 复制钮(契约4)", () => {
   });
 });
 
-// ---- CSS 契约: hover 淡入 + 气泡浮层(不挤压 360px 卡头) ----
+// ---- t_27eeadad: 主页 P1 形态接入(9/7 用户拍板) ----
+describe("主页 P1 形态头部(9/7 用户拍板)", () => {
+  it("head 行 = handle + name + StatusDot + 状态徽章 四件套", () => {
+    const card = renderCard(snap("ok", [windowMetric(100, 1200)]));
+    const head = card.querySelector(".card-head")!;
+    expect(head).toBeTruthy();
+    // 拖把手(沿用 .brand-block,选择器族零改)
+    expect(head.querySelectorAll(".brand-block").length).toBe(1);
+    // 卡名
+    expect(head.querySelector(".card-name")!.textContent).toBe("Kimi-Code #1");
+    // StatusDot: P1 形态新增(原主页只有状态徽章文字,现在加圆点)
+    expect(head.querySelectorAll(".status-dot").length).toBe(1);
+    const dot = head.querySelector(".status-dot")!;
+    expect(dot.getAttribute("data-health")).toBe("ok");
+    // 状态徽章文字(t_553dcb5a: statusBadge = 文案表达原因)
+    expect(head.querySelector(".card-status-text")!.textContent).toBe("健康");
+  });
+
+  it("异常卡(auth_expired)head 仍有 StatusDot + 黄灯状态徽章", () => {
+    const card = renderCard({ ...snap("auth_expired"), setup_hint: "去重授权" });
+    const head = card.querySelector(".card-head")!;
+    const dot = head.querySelector(".status-dot")!;
+    expect(dot.getAttribute("data-health")).toBe("warn"); // auth_expired 裁决为 warn(§2.1)
+    expect(head.querySelector(".card-status-text")!.textContent).toBe("待授权");
+  });
+
+  it("BarsTemplate 渲染 QuotaMeter(layout=micro) 三窗常驻直显, 不再挂 BarRowTooltip", () => {
+    const card = renderCard(snap("ok", [
+      windowMetric(100, 1200),
+      { ...windowMetric(1200, 6000), key: "weekly", reset_at: NOW + 5 * 86400 },
+      { ...windowMetric(1800, 6000), key: "monthly", reset_at: NOW + 21 * 86400 },
+    ]));
+    // 沿用 .bar-row 壳(主页 e2e 契约 + drag-sort 复用)
+    const rows = card.querySelectorAll(".bar-row");
+    expect(rows.length).toBe(3);
+    // DOM 契约: .progress / .progress-fill[data-health] / role=progressbar 仍由 QuotaMeter 保证
+    // (QuotaMeter 内部: .quota-meter > .progress > .progress-fill,progress 4 层选)
+    expect(card.querySelectorAll(".bar-row > .quota-meter > .progress").length).toBe(3);
+    expect(card.querySelectorAll('.bar-row > .quota-meter > .progress[role="progressbar"]').length).toBe(3);
+    expect(card.querySelectorAll(".bar-row > .quota-meter > .progress > .progress-fill[data-health]").length).toBe(3);
+    // micro 排版: QuotaMeter 挂 quota-meter--layout-micro modifier
+    const meters = card.querySelectorAll(".bar-row > .quota-meter");
+    expect(meters.length).toBe(3);
+    meters.forEach((m) => {
+      expect((m as HTMLElement).getAttribute("data-layout")).toBe("micro");
+      expect(m.classList.contains("quota-meter--layout-micro")).toBe(true);
+    });
+    // 硬契约: 主页窗口行不再挂 BarRowTooltip
+    expect(card.querySelectorAll(".bar-tooltip").length).toBe(0);
+    expect(card.querySelectorAll('[data-testid="bar-tooltip"]').length).toBe(0);
+    // data-tightest 仍由最紧窗标志(主页 e2e 契约; 此处 3 窗全 ok 不标红, 标红另在 titlebar-bars.spec.ts golden 验)
+    expect(card.querySelectorAll(".bar-row[data-tightest]").length).toBe(0);
+  });
+
+  it("三窗含风险窗时, data-tightest 标志位 = 1(主页 opencode golden 同规, t_05271be0)", () => {
+    const card = renderCard(snap("ok", [
+      windowMetric(100, 1200), // rolling_5h 8% ok
+      { ...windowMetric(6000, 6000), key: "weekly", reset_at: NOW + 5 * 86400 }, // weekly 100% bad(耗尽)
+      { ...windowMetric(1800, 6000), key: "monthly", reset_at: NOW + 21 * 86400 }, // monthly 30% ok
+    ]));
+    expect(card.querySelectorAll(".bar-row[data-tightest]").length).toBe(1);
+    // tightest = weekly(最高 used/limit)
+    const tight = card.querySelector(".bar-row[data-tightest]")!;
+    expect(tight.getAttribute("data-metric")).toBe("weekly");
+    expect(tight.querySelector(".progress-fill")!.getAttribute("data-health")).toBe("bad");
+  });
+});
+
+// ---- t_034a6e81 Bug1 修: OneClickAuth done 态点击 = onRefresh(不再走 onStart) ----
+// 真流程断言: vi.mock ipc 走完 callback 模式(stage 推进 idle→starting→waiting→done),
+// 然后 fireEvent click 已授权按钮, 断言 onRefresh 被调(commandAuthStart 调用次数未增)。
+describe("OneClickAuth done 态 = 刷线 + 预览卡禁用(t_034a6e81 Bug1 修)", () => {
+  const hint = "请运行 `bl auth login --console` 重新授权";
+
+  beforeEach(() => {
+    commandAuthStartImpl.mockReset();
+    commandAuthFinishImpl.mockReset();
+  });
+
+  /** 走完 callback 模式让 stage=done: 返 ok+callback, 后台 finish 也返 ok */
+  function mockCallbackSuccess(): void {
+    commandAuthStartImpl.mockResolvedValue({
+      ok: true,
+      sessionId: "s1",
+      url: "https://oauth.local/device",
+      finishMode: "callback",
+    });
+    commandAuthFinishImpl.mockResolvedValue({ ok: true, message: "" });
+  }
+
+  /** 一次性 flush 多次 microtask 直到 setStage("done") 真正落到 DOM */
+  async function flushUntilDone(): Promise<void> {
+    // callback 模式链路: click idle → setStage("starting") → commandAuthStart.then
+    //   → setStage("waiting") + 同步发起 commandAuthFinish → 后者.then → setStage("done")
+    // 至少 4 轮 microtask 推进
+    for (let i = 0; i < 6; i++) {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    }
+  }
+
+  it("idle → 一键授权 → 走完 callback 链路 → done 态按钮 = 「已授权」", async () => {
+    mockCallbackSuccess();
+    const card = renderCard({ ...snap("auth_expired"), setup_hint: hint }, () => {}, () => {});
+    const btn = card.querySelector<HTMLButtonElement>('[data-testid="oneclick-auth-btn"]')!;
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toBe("一键授权");
+
+    // 点 idle 按钮触发 onStart
+    click(btn);
+    await flushUntilDone();
+
+    // 链路走完 → stage=done → 按钮文案 = 「已授权」
+    const doneBtn = card.querySelector<HTMLButtonElement>('[data-testid="oneclick-auth-btn"]')!;
+    expect(doneBtn).toBeTruthy();
+    expect(doneBtn.textContent).toBe("已授权 ✓");
+    // commandAuthStart 被调 1 次(idle 那次), commandAuthFinish 也被调 1 次(callback 自动收)
+    expect(commandAuthStartImpl).toHaveBeenCalledTimes(1);
+    expect(commandAuthFinishImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("done 态点击已授权按钮 → onRefresh(provider_id) 被调 1 次, commandAuthStart 不增", async () => {
+    mockCallbackSuccess();
+    const refreshed: string[] = [];
+    const card = renderCard(
+      { ...snap("auth_expired"), setup_hint: hint },
+      () => {},
+      (id) => refreshed.push(id),
+    );
+
+    // 走完 callback 链路进入 done
+    click(card.querySelector('[data-testid="oneclick-auth-btn"]'));
+    await flushUntilDone();
+
+    // 此时按钮已是 done 态, 点击应触发 onRefresh(不再走 onStart)
+    const doneBtn = card.querySelector<HTMLButtonElement>('[data-testid="oneclick-auth-btn"]')!;
+    expect(doneBtn.textContent).toBe("已授权 ✓");
+    const beforeStartCalls = commandAuthStartImpl.mock.calls.length;
+    expect(beforeStartCalls).toBe(1); // 链路已调一次
+
+    click(doneBtn);
+
+    // 核心断言: onRefresh 被调一次且参数 = provider_id(由 snap("auth_expired") 给 "kimi-code")
+    expect(refreshed).toEqual(["kimi-code"]);
+    // 反证: done 态点击**不**再调 commandAuthStart(原 Bug 现象: 已授权态点击又开授权页)
+    expect(commandAuthStartImpl).toHaveBeenCalledTimes(beforeStartCalls);
+  });
+
+  it("预览卡未传 onRefresh → 走完 callback 链路后 done 态按钮 disabled + 提示文案", async () => {
+    mockCallbackSuccess();
+    const card = renderCard({ ...snap("auth_expired"), setup_hint: hint }, () => {});
+
+    // 走完 callback 链路进入 done(不传 onRefresh)
+    click(card.querySelector('[data-testid="oneclick-auth-btn"]'));
+    await flushUntilDone();
+
+    const doneBtn = card.querySelector<HTMLButtonElement>('[data-testid="oneclick-auth-btn"]')!;
+    expect(doneBtn.textContent).toBe("已授权 ✓");
+    // 预览卡 done 态按钮禁用(不给用户可点但无效的按钮)
+    expect(doneBtn.disabled).toBe(true);
+    // 提示文案: title + aria-label
+    expect(doneBtn.getAttribute("title")).toBe("预览卡不可刷新(仅真实实例可点)");
+    expect(doneBtn.getAttribute("aria-label")).toBe("已授权 - 预览卡不可刷新");
+  });
+});
 describe("卡内删除 CSS 契约(D-038)", () => {
   const css = readFileSync(resolve(process.cwd(), "src/app.css"), "utf8");
 
@@ -242,14 +433,29 @@ describe("卡内删除 CSS 契约(D-038)", () => {
     return m![1];
   }
 
-  it(".card-del-btn 默认 opacity 0 + 过渡; hover 卡片/focus 时淡入", () => {
+  // t_433892c6 9/7 修订 H(老大 #1175 回归): 删钮 = 按钮自为热区, 一行 CSS 闭环。
+  // 默认 opacity:0 + pointer-events:auto(opacity 不影响 hit-test, 按钮始终在 hit-test tree),
+  // :hover/.card:focus-within/:focus-visible 触发 opacity:1。无 zone、无 :has()、无 z-index。
+  it(".card-del-btn 默认 opacity:0 + pointer-events:auto; hover / focus 时显出", () => {
     const block = ruleBlock(".card-del-btn");
     expect(block).toContain("opacity: 0");
-    expect(block).toContain("transition: opacity");
-    // 只用 opacity, 不加 pointer-events:none(否则点击命中被拦)
-    expect(block).not.toContain("pointer-events");
-    expect(css).toContain(".card:hover .card-del-btn");
+    // 关键: 默认 pointer-events:auto(opacity:0 不影响 hit-test, 按钮始终接收 pointer events)
+    expect(block).toContain("pointer-events: auto");
+    // 按钮 position:absolute 锚卡右上角, top 下移到 badge 行之下(B-2 零重叠)
+    expect(block).toContain("top: var(--space-28)");
+    expect(block).toContain("right: var(--space-4)");
+    // 触发选择器: 按钮自身 hover/focus-within/focus-visible 显出
     expect(css).toContain(".card:focus-within .card-del-btn");
+    expect(css).toContain(".card-del-btn:focus-visible");
+    // 按钮自身 hover 触发显示(契约 self-hover) + 红色背景
+    expect(css).toMatch(/\.card-del-btn:hover[\s\S]*?opacity:\s*1/);
+    expect(css).toMatch(/\.card-del-btn:hover[\s\S]*?var\(--bad\)/);
+    // .card-del-zone 透明 div 已删除(c1d380f 三层机制结构死锁, 老大 #1175 裁决回归)
+    expect(css).not.toMatch(/\.card-del-zone[\s\{]/);
+    // :has() 让位规则已删除
+    expect(css).not.toContain(":has(.card-del-btn");
+    // z-index:1 显式 stacking context(防 animation 窗口行压住 hover, B-2 修复加)
+    expect(block).toContain("z-index: 1");
   });
 
   it(".card-confirm 绝对定位浮在卡右上 + 红调边框(卡头布局不被挤压)", () => {
@@ -258,5 +464,62 @@ describe("卡内删除 CSS 契约(D-038)", () => {
     expect(block).toContain("border: 1px solid var(--bad)");
     // 定位容器: .card 必须 position: relative
     expect(ruleBlock(".card")).toContain("position: relative");
+  });
+});
+
+// ---- t_ee76442e: 火山 SETUP_HINT 一键授权链路契约(零命令行) ----
+// 任务背景: 用户 9/7 拍板「火山生命周期全进 app, 零命令行」。判别修正后火山卡 auth_expired
+// 必出现「请重新授权」+ 一键授权按钮; 点按钮 = extractCliFromHint(SETUP_HINT) → "arkcli" →
+// commandAuthStart("arkcli") → 主进程 spawn arkcli auth login volc-sso --no-browser 拉起
+// 设备码流程。本段钉死两条契约: (1) SETUP_HINT 含 --no-browser 参数不影响 extractCliFromHint
+// 取首词 "arkcli"; (2) 点 idle 按钮 commandAuthStart 实参 = "arkcli"(参数不被命令行 flag 干扰)。
+describe("t_ee76442e: 火山 SETUP_HINT 一键授权链路(--no-browser 不干扰首词解析)", () => {
+  // 与 packages/core/src/channels/volcengine-ark.ts:62 SETUP_HINT 同字面量,
+  // 钉死契约: core 侧改 SETUP_HINT 时必须同步在本测试反映。
+  const ARK_SETUP_HINT =
+    "运行 `arkcli auth login volc-sso --no-browser` 重新授权(SSO 会话由 CLI 管理)";
+
+  beforeEach(() => {
+    commandAuthStartImpl.mockReset();
+    commandAuthFinishImpl.mockReset();
+  });
+
+  it("extractCliFromHint(SETUP_HINT) = 'arkcli'(反引号内首词, --no-browser 不干扰)", async () => {
+    const { extractCliFromHint } = await import("./ProviderCard");
+    expect(extractCliFromHint(ARK_SETUP_HINT)).toBe("arkcli");
+  });
+
+  it("extractCommandFromHint(SETUP_HINT) = 'arkcli auth login volc-sso --no-browser'(反引号全文)", async () => {
+    const { extractCommandFromHint } = await import("./ProviderCard");
+    expect(extractCommandFromHint(ARK_SETUP_HINT)).toBe(
+      "arkcli auth login volc-sso --no-browser",
+    );
+  });
+
+  it("idle 一键授权 → commandAuthStart 实参 = 'arkcli'(走 arkcli 设备码流程, 不被 --no-browser 干扰)", async () => {
+    // 模拟火山 auth login 设备码模式: 返 finishMode=code(用户复制粘贴 code 回喂)
+    commandAuthStartImpl.mockResolvedValue({
+      ok: true,
+      sessionId: "s-ark",
+      url: "https://oauth.volcengine.com/device?code=ABCD",
+      finishMode: "code",
+    });
+    commandAuthFinishImpl.mockResolvedValue({ ok: true, message: "" });
+    const card = renderCard({ ...snap("auth_expired"), setup_hint: ARK_SETUP_HINT }, () => {}, () => {});
+    const btn = card.querySelector<HTMLButtonElement>('[data-testid="oneclick-auth-btn"]')!;
+    expect(btn).toBeTruthy();
+
+    click(btn);
+    // 等 idle → starting → waiting 微任务推进(设备码模式无 finish 自动收, 只验 start 实参)
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // commandAuthStart 实参 = "arkcli", 不含 --no-browser(主进程 spawn 时再拼 args)
+    expect(commandAuthStartImpl).toHaveBeenCalledTimes(1);
+    expect(commandAuthStartImpl).toHaveBeenCalledWith("arkcli");
+    // 设备码模式: finishMode=code 已传入, 等待用户粘贴 code 回喂 → stage=waiting
+    expect(card.querySelector('[data-testid="oneclick-auth-panel"]')).toBeTruthy();
   });
 });

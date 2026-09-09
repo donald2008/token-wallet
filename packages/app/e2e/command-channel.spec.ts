@@ -43,9 +43,9 @@ test("command 通道: 添加百炼实例 → 引擎走 command_run 桥 → 面�
   await pwExpect(card).toBeVisible({ timeout: 10_000 });
   await pwExpect(card).toHaveAttribute("data-health", "ok");
 
-  // weekly 窗口指标(bars 模板): 37.9% 已用
+  // weekly 窗口指标(bars 模板): 37.9% 已用 → micro 排版短格式(t_f7d1beeb 9/7)走 Math.round 取整为 38%
   await pwExpect(card.getByTestId("bars-template")).toBeVisible();
-  await pwExpect(card).toContainText("37.9");
+  await pwExpect(card).toContainText("38%");
 
   // 桥确实被调用(channel=aliyun-bailian/token-plan 载荷)
   const calls = await getCapturedInvokes(page);
@@ -112,7 +112,8 @@ test("command 通道: CLI 重新授权后点 ⟳ → 15s 内恢复(不重启 app
   await page.evaluate(() => localStorage.removeItem("token-wallet.mock.commandfail"));
   await page.locator('.titlebar [data-testid="refresh-btn"]').click();
   await pwExpect(card).toHaveAttribute("data-health", "ok", { timeout: 15_000 });
-  await pwExpect(card).toContainText("37.9"); // 健康 mock 值(37.9% → 文案一位小数)
+  // 健康 mock 值 37.9% → micro 短格式取整 38%(t_f7d1beeb 9/7)
+  await pwExpect(card).toContainText("38%");
 });
 
 test("command 通道: testConnection 走真实桥(成功态预览快照)", async ({ hostPage, page }) => {

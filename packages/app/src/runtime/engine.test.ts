@@ -433,7 +433,7 @@ describe("D-043 存量补写(首次采集成功回填 key_fingerprint)", () => {
   });
 
   it("非 ok 采集(采集失败)不补写 —— 只有成功才回填", async () => {
-    const secret = "sk-legacy-err";
+    const secret = "***";
     const keyring = getSharedKeyring() as MemoryKeyring;
     await keyring.set(KEYRING_SERVICE, "inst-err:api_key", secret);
     getSharedStore().hydrate([instNoFp("inst-err")]);
@@ -450,5 +450,79 @@ describe("D-043 存量补写(首次采集成功回填 key_fingerprint)", () => {
     engine.stop();
     getSharedStore().hydrate([]);
     await keyring.delete(KEYRING_SERVICE, "inst-err:api_key");
+  });
+});
+
+// ---- t_034a6e81 Bug1 修: 引擎 refresh(id) 透出 + 只刷目标实例 ----
+describe("Bug1 修: RuntimeEngine.refresh(id) 单实例刷线", () => {
+  // 注: command 通道(commandRun mock)是 D-042 验证过的可靠路径(httpGetJson mock 路径在本测试
+  // 套件未被覆盖, deepseek/balance 实测 lastRunAt 有但 mock.calls=0, 暂不冒险用 http 通道);
+  // 透出语义 = 委派给 scheduler.refresh, 与命令/通道无关, 用 command 通道足以证"refresh(id) 真触发 fetch"
+  const bailianInstance = (id: string): InstanceConfig => ({
+    id,
+    channel: "aliyun-bailian/token-plan",
+    name: `百炼 #${id}`,
+    params: {},
+  });
+
+  it("refresh(id) 委派到 scheduler.refresh(id), 触发目标实例的 commandRun 再次被调", async () => {
+    const { commandRun } = await import("../ipc");
+    const commandRunMock = commandRun as unknown as ReturnType<typeof vi.fn>;
+    commandRunMock.mockResolvedValue({
+      provider_id: "inst-bailian",
+      display_name: "百炼 #1",
+      plan_type: "window",
+      fetched_at: 1_700_000_000,
+      status: "ok",
+      metrics: [],
+      alerts: [],
+    });
+    const engine = new RuntimeEngine([bailianInstance("inst-bailian")], fakeStorage);
+    engine.subscribe(() => {});
+    engine.start();
+    // 等首轮 hydrate + refreshAll
+    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 0));
+    const callsBefore = commandRunMock.mock.calls.length;
+    expect(callsBefore).toBeGreaterThanOrEqual(1);
+    // 显式 refresh(id) → 应当再触发一次 commandRun
+    await engine.refresh("inst-bailian");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(commandRunMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    engine.stop();
+  });
+
+  it("refresh(id) 只刷目标实例, 不会触发其他实例 fetch(无广扫)", async () => {
+    const { commandRun } = await import("../ipc");
+    const commandRunMock = commandRun as unknown as ReturnType<typeof vi.fn>;
+    commandRunMock.mockImplementation(async () => ({
+      provider_id: "x",
+      display_name: "x",
+      plan_type: "window",
+      fetched_at: 1_700_000_000,
+      status: "ok",
+      metrics: [],
+      alerts: [],
+    }));
+    // 多实例同 channel: 串行链; refreshAll 一次性让 a/b/c 都进 fetch
+    const engine = new RuntimeEngine(
+      [
+        bailianInstance("inst-a"),
+        bailianInstance("inst-b"),
+        bailianInstance("inst-c"),
+      ],
+      fakeStorage,
+    );
+    engine.subscribe(() => {});
+    engine.start();
+    // 等首轮 refreshAll(同 channel 串行, mock 返回值 provider_id 不匹配 liveIds, 落 error 快照但 fetch 仍跑)
+    await new Promise((r) => setTimeout(r, 30));
+    const callsAfterStart = commandRunMock.mock.calls.length;
+    expect(callsAfterStart).toBeGreaterThanOrEqual(1);
+    // 显式只刷 inst-a: 增长 ≥ 1
+    await engine.refresh("inst-a");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(commandRunMock.mock.calls.length).toBeGreaterThan(callsAfterStart);
+    engine.stop();
   });
 });

@@ -67,6 +67,8 @@ async function deleteProviderCard(page: import("@playwright/test").Page, provide
   const card = page.locator(`[data-testid="provider-card"][data-provider="${providerId}"]`);
   await pwExpect(card).toHaveCount(1);
   await card.hover();
+  // t_433892c6 9/7 修订 H(老大 #1175 回归): 按钮自为热区, hover 按钮直接 opacity:1
+  await card.locator(".card-del-btn").hover();
   await card.getByTestId(`card-del-${providerId}`).click();
   await card.getByTestId(`card-confirm-del-${providerId}`).click();
   await pwExpect(card).toHaveCount(0, { timeout: 10_000 });
