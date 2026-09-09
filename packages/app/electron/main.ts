@@ -426,9 +426,11 @@ function registerIpc(): void {
     appUpdater.install();
   });
 
-  // ---- D-048: MCP daemon 托管 9 通道(t_4bd214de) ----
+  // ---- D-048: MCP daemon 托管 11 通道(t_4bd214de + t_9255cb63) ----
   // 主进程持有 daemon 真实生命周期: probe / start / stop / restart / config / key /
   // autostart / guide — round-2 增 restart 通道编排 key regen 后真实停启。
+  // t_9255cb63 增 mcp_usage_summary / mcp_usage_report_echo 读数据桥 —
+  // 主页 Agent 卡 + 大屏方案 C 数据源。
   // 全部 shim 在 mcp-daemon.ts 注入便于测试, 真运行时用 defaultSpawnShim/defaultPathShim
   // + 简易 fetch 实现 defaultHttpShim(POST /mcp initialize, 卡体钉死不裸 TCP)
   registerMcpIpc({

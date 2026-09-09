@@ -2409,3 +2409,358 @@ body {
   font-size: var(--font-12, 12px);
   margin: var(--space-4, 4px) 0 0 0;
 }
+
+/* ============= t_9255cb63: 主页 Agent 卡区 + 大屏方案 C =============
+ * 数据源 = MCP daemon usage_summary(group_by=["agent"]); 不再用 mock。
+ * Agent 卡与 ProviderCard 同构(共用 .card/.card-head/.card-name/.card-status-text),
+ * 大屏方案 C 移植自 feat/mcp-server dev-pages/agent-dashboard-C.html,
+ * 用项目 tokens.css 变量统一色板(深/浅主题自适应)。
+ */
+
+.agent-card-section {
+  margin-top: var(--space-16, 16px);
+  padding: var(--space-8, 8px) var(--space-12, 12px) 0 var(--space-12, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+}
+.agent-card-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-12, 12px);
+  padding: 0 var(--space-4, 4px);
+}
+.agent-card-section-title {
+  font-size: var(--font-13, 13px);
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: 0.01em;
+}
+.agent-card-section-meta {
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.agent-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+}
+.agent-card {
+  padding: var(--space-12, 12px) var(--space-16, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+}
+.agent-card .card-head {
+  gap: var(--space-8, 8px);
+}
+.agent-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-28, 28px);
+  height: var(--space-28, 28px);
+  border-radius: var(--radius-8, 8px);
+  background: var(--bg-hover, #232a35);
+  color: var(--fg);
+  font-size: var(--font-14, 14px);
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.agent-card-body {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas:
+    "tokens cost detail"
+    "meta   meta  meta";
+  align-items: end;
+  gap: var(--space-12, 12px);
+  row-gap: var(--space-8, 8px);
+}
+.agent-tokens {
+  grid-area: tokens;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4, 4px);
+  font-variant-numeric: tabular-nums;
+}
+.agent-tokens-number {
+  font-size: var(--font-32, 32px);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--fg);
+}
+.agent-tokens-unit {
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+}
+.agent-cost {
+  grid-area: cost;
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.agent-cost.is-empty {
+  /* 拍板契约: 无金额时彻底留空(不显示 0/—/N/A) */
+  display: none;
+}
+.agent-detail-btn {
+  grid-area: detail;
+  align-self: end;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-8, 8px);
+  padding: var(--space-4, 4px) var(--space-12, 12px);
+  font-size: var(--font-12, 12px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.agent-detail-btn:hover,
+.agent-detail-btn:focus-visible {
+  background: var(--bg-hover, #232a35);
+  border-color: var(--accent);
+  outline: none;
+}
+.agent-meta {
+  grid-area: meta;
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+  border-top: 1px dashed var(--border);
+  padding-top: var(--space-8, 8px);
+  font-variant-numeric: tabular-nums;
+}
+.agent-meta strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.agent-card-empty .agent-empty-reason {
+  margin: 0;
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+}
+
+/* ---- AgentDashboardC(方案 C 移植) ---- */
+.agent-dashboard-c {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+  padding: var(--space-12, 12px);
+  /* 900×600 设计基准, 内部 grid 用 %; 容器不强制固定尺寸(panel 自动撑开) */
+  width: 100%;
+  min-height: 600px;
+}
+.agent-dashboard-c-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12, 12px);
+}
+.agent-dashboard-c-title {
+  font-size: var(--font-13, 13px);
+  font-weight: 500;
+  color: var(--fg);
+}
+.agent-dashboard-c-title strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+.agent-dashboard-c-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12, 12px);
+}
+.theme-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  overflow: hidden;
+  background: var(--bg-elev);
+}
+.theme-toggle button {
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  padding: var(--space-4, 4px) var(--space-12, 12px);
+  font-size: var(--font-11, 11px);
+  cursor: pointer;
+}
+.theme-toggle button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+.agent-dashboard-c-back {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-8, 8px);
+  padding: var(--space-4, 4px) var(--space-12, 12px);
+  font-size: var(--font-12, 12px);
+  cursor: pointer;
+}
+.agent-dashboard-c .hero-strip {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-16, 16px);
+  padding: var(--space-12, 12px) var(--space-16, 16px);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-12, 12px);
+}
+.agent-dashboard-c .hero {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8, 8px);
+}
+.agent-dashboard-c .hero-tokens {
+  font-size: var(--font-32, 32px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.agent-dashboard-c .hero-unit {
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+}
+.agent-dashboard-c .hero-cost {
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+}
+.agent-dashboard-c .hero-cost.is-empty {
+  display: none;
+}
+.agent-dashboard-c .meta {
+  display: flex;
+  gap: var(--space-16, 16px);
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+}
+.agent-dashboard-c .meta strong {
+  color: var(--fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.agent-dashboard-c .row-grid {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: var(--space-12, 12px);
+}
+.agent-dashboard-c .panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-12, 12px);
+  padding: var(--space-12, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8, 8px);
+  min-height: 220px;
+}
+.agent-dashboard-c .panel-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.agent-dashboard-c .panel-title {
+  margin: 0;
+  font-size: var(--font-12, 12px);
+  font-weight: 600;
+  color: var(--fg);
+}
+.agent-dashboard-c .panel-title-row .right {
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.agent-dashboard-c .chart-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 180px;
+}
+.agent-dashboard-c .split-bar {
+  display: flex;
+  width: 100%;
+  height: var(--space-12, 12px);
+  background: var(--bg-hover);
+  border-radius: var(--radius-pill, 999px);
+  overflow: hidden;
+}
+.agent-dashboard-c .seg-hit  { background: var(--accent); }
+.agent-dashboard-c .seg-miss { background: var(--ok); }
+.agent-dashboard-c .seg-out  { background: var(--warn); }
+.agent-dashboard-c .pct {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-11, 11px);
+  color: var(--fg);
+}
+.agent-dashboard-c .pct strong {
+  font-variant-numeric: tabular-nums;
+}
+.agent-dashboard-c .v-dim {
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.agent-dashboard-c .detail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 4px);
+  overflow: auto;
+  flex: 1;
+}
+.agent-dashboard-c .detail-list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--space-12, 12px);
+  font-size: var(--font-11, 11px);
+  padding: var(--space-4, 4px) 0;
+  border-bottom: 1px solid var(--border);
+}
+.agent-dashboard-c .detail-list .name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8, 8px);
+  color: var(--fg);
+}
+.agent-dashboard-c .detail-list .idle-tag {
+  font-size: var(--font-10, 10px);
+  padding: 0 var(--space-4, 4px);
+  border-radius: var(--radius-4, 4px);
+  background: var(--warn);
+  color: var(--warn-fg);
+}
+.agent-dashboard-c .detail-list .tokens {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  text-align: right;
+}
+.agent-dashboard-c .detail-list .cost {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+  text-align: right;
+  min-width: 80px;
+}
+.agent-dashboard-c .detail-list .cost.is-empty {
+  /* 拍板契约: 无金额时彻底留空(占位用 visibility:hidden 保持列对齐, 不显示破折号) */
+  visibility: hidden;
+}
+.agent-dashboard-c-footer {
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.agent-dashboard-c-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+  padding: var(--space-12, 12px);
+  align-items: flex-start;
+}
