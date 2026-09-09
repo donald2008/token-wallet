@@ -34,7 +34,7 @@ electron-builder 产出后 **gitee stable 是公共主渠道**（D-054, 2026-09-
 
 **gitee stable 必发流程**（v0.2.4 起每次发版都做，缺一等于没发）：
 1. **删旧 3 附件**：删稳定 release `token-wallet_setup.exe` / `latest.yml` / `token-wallet_setup.exe.blockmap`（Gitee API 上同一 stable release 只能保留一份）
-2. **传新 3 件套**：删旧附件后用 Gitee Releases API **POST `https://gitee.com/api/v5/repos/ITEater/token-wallet/releases/<release_id>/attach_files`**（multipart/form-data，access_token 走 `-F "access_token=$TOKEN"` form 字段——Gitee API 不吃 Authorization header；`$TOKEN` 走 Consul `ai-hermes/security/integration/gitee-token`，仓主 token，发布机不可读，发布动作归仓主/老大侧人肉作业）；3 个附件分三次调用，每次返回 201 + attachment URL；随后用 `PUT https://gitee.com/api/v5/repos/ITEater/token-wallet/releases/<release_id>` 把 attachment URL 写入 release assets 列表（Ditee 三件套绑定由 release asset API 完成，不是 download URL 直接 PUT）
+2. **传新 3 件套**：删旧附件后用 Gitee Releases API **POST `https://gitee.com/api/v5/repos/ITEater/token-wallet/releases/<release_id>/attach_files`**（multipart/form-data，access_token 走 `-F "access_token=$TOKEN"` form 字段——Gitee API 不吃 Authorization header；`$TOKEN` 走 Consul `ai-hermes/security/integration/gitee-token`，仓主 token，发布机不可读，发布动作归仓主/老大侧人肉作业）；3 个附件分三次调用，每次返回 201 + attachment URL（即绑 release，POST 后可直接进 step3 匿名 curl 双校验）
 3. **匿名 curl 验证**：`curl -sL https://gitee.com/ITEater/token-wallet/releases/download/stable/latest.yml | grep version`（确认 version == 新的） + `curl -sI .../token-wallet_setup.exe` 验 Content-Length 匹配 SHA256 文件声明；**匿名视角验证 = 用户下载路径已生效**（API 操作成功≠用户端已能下载，Gitee CDN 有缓存窗口）
 
 **8889 内部开发通道**（可选辅助，非主渠道）：njbx02 nginx `http://10.200.1.88:8889/token-wallet/` 仅用于内部 smoke + 自动化测试，**不进公开文档 / 用户视野**（2026-09-01 用户硬纠正「开源 README 禁内网路径」）。
