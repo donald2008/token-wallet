@@ -36,3 +36,25 @@ verdict: changes_requested   # 3 BLOCKING + 1 WARNING + 1 SUGGESTION
 ## SUGGESTION
 
 5. [docs/RELEASE.md L7] 「当前里程碑 = v0.2.8（master HEAD `89b6ae2`）」——89b6ae2 是版本基线 commit 而非 master HEAD（push 时 HEAD=8f1d90a, 现 3943335）。建议改「版本基线 `89b6ae2`」, 防后续操作者误以为 master 停在旧 commit
+
+---
+
+# Round-2 人工终审意见（追加）
+
+reviewer: njbx02 (default 老大人工终审, run 856, execution lens)
+verdict: changes_requested  # 3 BLOCKING + 1 WARNING（round-2 自身引入）
+
+## 复验范围
+
+- 干净 git 状态: origin/master = 133d6f2 (ls-remote 一致), diff 37af7cf..133d6f2 = 5 files +33/-32 全 docs, 零 packages/ 越界 ✓
+- Round-1 五项修复逐一核对通过（详见 comment #1257）: 内网 IP 公共文档 0 残留 / 已知遗留段删除 / 渠道拓扑 gitee stable / D-054 补齐 / 版本基线措辞
+
+## Round-2 新引入问题（BLOCKING）
+
+1. [docs/DECISIONS.md:57 D-053] 标题「拖即变停即存」被误改「拖即变置即存」——round-1 (33c9761) 该行无 glass-value 笔误（2 处均 glass-alpha-value 正确），round-2 报告声称的修复对象不存在；实际改动破坏语义（正文自证「停即存=onMouseUp/onPointerUp/onTouchEnd 持久化」，README/USER_GUIDE/theme.ts 全写「拖即变停即存」）。要求恢复「停即存」。
+2. [docs/RELEASE.md:37 + docs/DECISIONS.md:58] Consul key 拼错 `ai-hemes`（实测 keys=ai-hermes/security/integration/gitee-token，config.yaml secrets_mapping 亦 ai-hermes/*）。要求改 ai-hermes。
+3. [docs/RELEASE.md:5] 「更更新源」错字 → 「更新源」。
+
+## WARNING
+
+4. [docs/RELEASE.md:37 step2] 上传端点写「PUT .../releases/download/stable/」，与 token-wallet skill 已验证流程（DELETE 旧附件 → POST /api/v5/.../releases/<id>/attach_files -F file, 匿名 curl 双校验）不一致，PUT 下载 URL 非可执行上传 API。要求对齐 skill 实证流程。
