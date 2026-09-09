@@ -108,8 +108,9 @@ describe("ProviderCard 徽章: 文案表达原因, 颜色不动", () => {
       expect(card.getAttribute("data-health")).toBe(health);
       expect(health).toBe(providerHealth(p));
       // t_5d8c3c81: 徽章在 card-head(data-testid="card-status-badge")。
-      // 无旧数据异常卡的 AbnormalBody 内还有一行 .card-status-text(data-testid="abnormal-status-line"),
-      // 此处只断言 head 徽章 —— 用 testid 精确选, 不被 AbnormalBody 行干扰。
+      // 无旧数据异常卡的 AbnormalBody 内还有一行异常状态长文案
+      // (className="abnormal-status-detail", data-testid="abnormal-status-detail", 不是 .card-status-text),
+      // 此处只断言 head 徽章 —— 用 testid 精确选, 不被 AbnormalBody 长文案干扰。
       const badgeEl = card.querySelector<HTMLElement>('[data-testid="card-status-badge"]')!;
       expect(badgeEl.className).toContain(`text-${health}`);
       // 文案表达原因(单一真相源 statusBadge)
@@ -119,9 +120,9 @@ describe("ProviderCard 徽章: 文案表达原因, 颜色不动", () => {
       expect(badgeEl.textContent).not.toBe("过期");
       if (p.status !== "ok") expect(badgeEl.textContent).not.toBe("未知");
       // t_5d8c3c81: 全卡只能有一个「采集失败/待授权/...」徽章文字,
-      // 防止 AbnormalBody 顶部重复 card-status-text 行回退到原 bug 形态。
-      // 无旧数据异常卡会有一行 abnormal-status-line(整卡文字形态必备),
-      // head 的 card-status-badge 也存在 —— 共两个 .card-status-text,但「采集失败」徽章文字仅在 head。
+      // 防止 AbnormalBody 长文案行重复 card-status-text 形态回退到原 bug 形态。
+      // 无旧数据异常卡会有一行 abnormal-status-detail(整卡文字形态必备, class 不是 card-status-text),
+      // head 的 card-status-badge 也存在 —— 共两个不同 class 的状态文字元素, 但「采集失败」徽章文字仅在 head。
       const allStatusTexts = card.querySelectorAll<HTMLElement>(".card-status-text");
       const badgeTexts = Array.from(allStatusTexts)
         .map((el) => el.textContent?.trim() ?? "")

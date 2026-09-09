@@ -316,13 +316,13 @@ function AbnormalBody({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: 
     );
   }
   // 无旧数据(首次就失败 / 整卡 metrics 空): 整卡文字形态(§2.1 无假数据原则)
-    // t_5d8c3c81: 长文案(详细原因, e.g. "登录态过期, 请重新授权") + head 短徽章("待授权")并存 —— 两个不同文字,
-    // 不是字面重复(e2e smoke/badge-semantics 契约 + 用户期望看完整原因)。
-    // className 改名 abnormal-status-detail 而非 card-status-text —— 避免被 head 徽章的选择器误选
-    // (e.g. .card-status-text.first() 命中 head 而非卡内长文案)。
-    const health = providerHealth(p);
-    return (
-      <div className="abnormal-body abnormal-body--no-data" data-testid="abnormal-body">
+  // t_5d8c3c81: 长文案(详细原因, e.g. "登录态过期, 请重新授权") + head 短徽章("待授权")并存 —— 两个不同文字,
+  // 不是字面重复(e2e smoke/badge-semantics 契约 + 用户期望看完整原因)。
+  // className 改名 abnormal-status-detail 而非 card-status-text —— 避免被 head 徽章的选择器误选
+  // (e.g. .card-status-text.first() 命中 head 而非卡内长文案)。
+  const health = providerHealth(p);
+  return (
+    <div className="abnormal-body abnormal-body--no-data" data-testid="abnormal-body">
         <div className={`abnormal-status-detail text-${health}`} data-testid="abnormal-status-detail">
           {STATUS_DETAIL[p.status] ? t(STATUS_DETAIL[p.status] as Parameters<typeof t>[0]) : p.status}
         </div>
