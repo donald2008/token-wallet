@@ -21,6 +21,8 @@ export interface DetailRow {
   cost: number | null;
   currency: string | null;
   calls: number;
+  /** completed > 0 → active, calls > 0 && completed = 0 → idle, calls = 0 → no_report_today */
+  completed: number;
   idle: boolean;
 }
 

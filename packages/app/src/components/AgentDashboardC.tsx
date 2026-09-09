@@ -63,6 +63,7 @@ function buildDetailRows(summary: UsageSummaryOutput): DetailRow[] {
     cost: r.cost_total,
     currency: r.currency,
     calls: r.calls,
+    completed: r.by_status.completed,
     // 与 AgentCard activity 契约对齐(active = completed > 0, idle = calls > 0 && completed = 0,
     //  no_report_today = calls = 0)。dashboard hero "活跃" 计数同口径。
     idle: r.calls > 0 && r.by_status.completed === 0,
@@ -302,7 +303,7 @@ export function AgentDashboardC({
         </div>
         <div className="meta">
           <div>
-            活跃 <strong data-testid="agent-dashboard-c-active">{detailRows.filter((r) => !r.idle).length}</strong>
+            活跃 <strong data-testid="agent-dashboard-c-active">{detailRows.filter((r) => r.completed > 0).length}</strong>
           </div>
           <div>
             样本{" "}

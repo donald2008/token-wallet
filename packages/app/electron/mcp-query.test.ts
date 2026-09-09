@@ -18,21 +18,27 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 
-/** 简易 mock: 把请求参数存到 captured, 返回预置 body */
+/** 简易 mock: 把请求参数存到 captured, 返回预置 body。
+ * 类型签名与 HttpShim 一致: <T>(opts) => Promise<{status, body: T}>; mock 端默认 unknown,
+ * 由调用方在使用处 cast(本测试只读 captured,不依赖 body 类型)。 */
 function mockHttp(respond: (req: { body: unknown; headers: Record<string, string>; url: string }) => {
   status: number;
   body: unknown;
 }): { shim: HttpShim; captured: Array<{ body: unknown; headers: Record<string, string>; url: string }> } {
   const captured: Array<{ body: unknown; headers: Record<string, string>; url: string }> = [];
-  return {
-    captured,
-    shim: {
-      postJson: async ({ url, headers, body }) => {
-        captured.push({ body, headers, url });
-        return respond({ body, headers, url });
-      },
+  const shim: HttpShim = {
+    postJson: <T,>(opts: {
+      url: string;
+      headers: Record<string, string>;
+      body: unknown;
+      timeoutMs: number;
+    }): Promise<{ status: number; body: T }> => {
+      captured.push({ body: opts.body, headers: opts.headers, url: opts.url });
+      const r = respond({ body: opts.body, headers: opts.headers, url: opts.url });
+      return Promise.resolve(r as { status: number; body: T });
     },
   };
+  return { shim, captured };
 }
 
 function buildJsonRpcOk<T>(parsed: T): JsonRpcResponse {
@@ -80,7 +86,7 @@ const fakeSummary: UsageSummaryOutput = {
 
 describe("callMcpTool", () => {
   it("构造正确的 JSON-RPC envelope + Bearer header + endpoint", async () => {
-    const { shim, captured } = mockHttp(({ body }) => ({
+    const { shim, captured } = mockHttp(() => ({
       status: 200,
       body: buildJsonRpcOk(fakeSummary),
     }));
@@ -167,6 +173,18 @@ describe("callMcpTool", () => {
       id: 1,
       result: { content: [{ type: "text", text: "not json" }] },
     };
+    const { shim } = mockHttp(() => ({ status: 200, body: bad }));
+    await expect(
+      callMcpTool(
+        { host: "127.0.0.1", port: 9131, key: "k" },
+        { name: "usage_summary", arguments: {} },
+        shim,
+      ),
+    ).rejects.toMatchObject({ kind: "protocol_error" });
+  });
+
+  it("result 缺 content 字段 → kind=protocol_error", async () => {
+    const bad: JsonRpcResponse = { jsonrpc: "2.0", id: 1 };
     const { shim } = mockHttp(() => ({ status: 200, body: bad }));
     await expect(
       callMcpTool(

@@ -40,12 +40,14 @@ function mount(node: React.ReactNode): { container: HTMLDivElement; root: Root }
 }
 
 afterEach(() => {
-  if (root && container) {
-    act(() => root.unmount());
-    container.remove();
-    container = null;
-    root = null;
+  const r = root;
+  const c = container;
+  if (r !== null && c !== null) {
+    act(() => r.unmount());
+    c.remove();
   }
+  container = null;
+  root = null;
 });
 
 describe("AgentCard", () => {
