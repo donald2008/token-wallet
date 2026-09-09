@@ -12,7 +12,14 @@ import { test, expect } from "./fixtures";
 import { seedMcpState } from "./fixtures";
 
 test.describe("设置页 MCP 服务区", () => {
-  test("未安装场景: 状态点 red + 启动按钮 disabled", async ({ page }) => {
+  test.beforeEach(async ({ hostPage: page }) => {
+    // 跳过首开 consent(单独测 mcp 区块, 不测 consent 流; 真实测试在 i18n/panel 类)
+    await page.evaluate(() => {
+      localStorage.setItem("token-wallet.mock.consent.v1", "1");
+    });
+  });
+
+  test("未安装场景: 状态点 red + 启动按钮 disabled", async ({ hostPage: page }) => {
     await page.goto("/");
     await seedMcpState(page, { installed: false });
     await page.reload();
