@@ -257,8 +257,13 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
 
 /** 品牌色块(§6.1 第 4 条): 16px 平台识别色 — P1(t_696ec820)起由内置单色 SVG 品牌图标(BrandLogo)取代 */
 
-/** 值为 i18n 键(渲染时经 t() 取文案, D-047) */
-const STATUS_TEXT: Record<string, string> = {
+/** 异常卡长文案(§2.1): 与 head 短徽章不同 —— head = statusBadge(单字原因, e.g. "采集失败"),
+ * 长文案 = 详细原因(对用户讲明白怎么了) —— 例如 auth_expired 长文案 = "登录态过期, 请重新授权"。
+ * 两者并存: head 一瞥可见红/黄状态, 卡内长文案给完整修复指引(为什么 + 怎么办)。
+ * 关键: 长文案 ≠ 徽章文字, 不算"重复渲染"(t_5d8c3c81 修的是 error 卡"采集失败"两行字面重复,
+ * 仍由 head 单独承担; 长文案保留 —— e2e 契约 + 完整错误原因)。
+ */
+const STATUS_DETAIL: Record<string, string> = {
   stale: "statusText.stale",
   auth_expired: "statusText.auth_expired",
   unsupported: "statusText.unsupported",
@@ -278,36 +283,70 @@ function agoText(fetchedAt: number): string {
  * - auth_expired: 亮黄灯(§2.1: 登录态失效非配额耗尽) + setup_hint 指引恢复
  * - stale / unsupported: 灰
  * - error: 红
+ *
+ * t_5d8c3c81 只读缓存语义(用户 9/9 拍板): 失败时保留旧数据(metrics 非空)。
+ * 异常卡分两态:
+ *   - 有旧数据(失败前采到过 ok 快照, metrics 非空)
+ *     → 渲染正常卡形态(getTemplateFor 跑 BarsTemplate/TickerTemplate 等),
+ *       头部已显状态徽章, 此处只补「数据时效标注」(失败时旧 fetched_at)+ 错误原因行
+ *     → 用户看到: 进度条/余额 + 「采集失败」徽章 + 「数据来自 N 分钟前」 + 「为什么失败」
+ *   - 无旧数据(首次就失败 / metrics 空)
+ *     → 整卡文字(原状, 无假数据原则不变) + setup_hint 授权引导(若 auth_expired)
+ *
+ * 状态徽章(card-status-text)由 card-head 统一承担, 此处不再重复渲染。
  */
 function AbnormalBody({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: string) => void }) {
-  const health = providerHealth(p);
-  return (
-    <div className="abnormal-body" data-testid="abnormal-body">
-      <div className={`card-status-text text-${health}`}>
-        {p.status === "auth_expired" && (
-          <span className="lamp" data-lamp="auth_expired" title={t("card.lampAuthTitle")} aria-label={t("card.lampAuthAria")}>
-            ●
-          </span>
-        )}
-        {STATUS_TEXT[p.status] ? t(STATUS_TEXT[p.status] as Parameters<typeof t>[0]) : p.status}
-      </div>
-      {p.status === "auth_expired" && p.setup_hint && (
-        <div className="setup-hint" data-testid="setup-hint">
-          <span className="setup-hint-text">⚑ {p.setup_hint}</span>
-          {/* t_66b67453 契约4: 一键复制授权命令(反引号内完整原文), 免手抄易错 */}
-          <HintCopyButton hint={p.setup_hint} />
-          {/* t_fb8c44d8: command 通道一键授权 — 自动开浏览器 + 粘贴 code 回喂, 消灭开终端 */}
-          <OneClickAuth hint={p.setup_hint} providerId={p.provider_id} onRefresh={onRefresh} />
+  const hasStaleData = p.metrics.length > 0;
+  if (hasStaleData) {
+    // 有旧数据的异常卡: 渲染正常模板 + 数据时效标注 + 错误原因。
+    // 状态徽章已由 card-head 渲染(无重复)。
+    const Template = getTemplateFor(p).component;
+    return (
+      <div className="abnormal-body abnormal-body--stale-data" data-testid="abnormal-body">
+        <Template p={p} />
+        <div className="abnormal-body-stale-note" data-testid="stale-fetched-note">
+          {t("card.staleFetchedAgo", { ago: agoText(p.fetched_at) })}
         </div>
-      )}
-      <div className="card-error-note">
-        {t("card.lastUpdate", { ago: agoText(p.fetched_at) })}
-        {p.alerts.length > 0 ? ` — ${p.alerts.map((a) => a.message).join("; ")}` : ""}
-        {p.error_message && p.error_message !== p.alerts.map((a) => a.message).join("; ") ? ` · ${p.error_message}` : ""}
+        {p.error_message ? (
+          <div className="abnormal-body-error-reason text-error" data-testid="abnormal-error-reason">
+            {p.error_message}
+          </div>
+        ) : null}
       </div>
-    </div>
-  );
-}
+    );
+  }
+  // 无旧数据(首次就失败 / 整卡 metrics 空): 整卡文字形态(§2.1 无假数据原则)
+    // t_5d8c3c81: 长文案(详细原因, e.g. "登录态过期, 请重新授权") + head 短徽章("待授权")并存 —— 两个不同文字,
+    // 不是字面重复(e2e smoke/badge-semantics 契约 + 用户期望看完整原因)。
+    // className 改名 abnormal-status-detail 而非 card-status-text —— 避免被 head 徽章的选择器误选
+    // (e.g. .card-status-text.first() 命中 head 而非卡内长文案)。
+    const health = providerHealth(p);
+    return (
+      <div className="abnormal-body abnormal-body--no-data" data-testid="abnormal-body">
+        <div className={`abnormal-status-detail text-${health}`} data-testid="abnormal-status-detail">
+          {STATUS_DETAIL[p.status] ? t(STATUS_DETAIL[p.status] as Parameters<typeof t>[0]) : p.status}
+        </div>
+        {p.status === "auth_expired" && p.setup_hint ? (
+          <div className="setup-hint" data-testid="setup-hint">
+            {/* lamp 单独在 setup_hint 行(引导感更强), task body 明示 auth_expired 的 lamp + setup_hint 授权引导保留 */}
+            <span className="lamp" data-lamp="auth_expired" title={t("card.lampAuthTitle")} aria-label={t("card.lampAuthAria")}>
+              ●
+            </span>
+            <span className="setup-hint-text">⚑ {p.setup_hint}</span>
+            {/* t_66b67453 契约4: 一键复制授权命令(反引号内完整原文), 免手抄易错 */}
+            <HintCopyButton hint={p.setup_hint} />
+            {/* t_fb8c44d8: command 通道一键授权 — 自动开浏览器 + 粘贴 code 回喂, 消灭开终端 */}
+            <OneClickAuth hint={p.setup_hint} providerId={p.provider_id} onRefresh={onRefresh} />
+          </div>
+        ) : null}
+        <div className="card-error-note">
+          {t("card.lastUpdate", { ago: agoText(p.fetched_at) })}
+          {p.alerts.length > 0 ? ` — ${p.alerts.map((a) => a.message).join("; ")}` : ""}
+          {p.error_message && p.error_message !== p.alerts.map((a) => a.message).join("; ") ? ` · ${p.error_message}` : ""}
+        </div>
+      </div>
+    );
+  }
 
 /**
  * Provider 卡片。
@@ -425,6 +464,8 @@ export function ProviderCard({
         )}
       </div>
       {p.status === "ok" ? <Template p={p} /> : <AbnormalBody p={p} onRefresh={onRefresh} />}
+      {/* 异常卡形态分两态由 AbnormalBody 内部决定(有旧数据 → 正常模板 + 时效标注; 无旧数据 → 整卡文字),
+          此处不再做条件分支(t_5d8c3c81 只读缓存语义: 失败时保留旧 metrics)。 */}
     </section>
   );
 }

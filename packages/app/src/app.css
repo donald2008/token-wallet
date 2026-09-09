@@ -584,6 +584,9 @@ body {
 .text-warn { color: var(--warn-fg); }
 .text-bad { color: var(--bad-fg); }
 .text-unknown { color: var(--unknown-fg); }
+/* t_5d8c3c81: 错误原因行专用色 —— 与 status badge 的 text-bad 同色但语义独立,
+ * 表达「这里是一段错误原因文字」而非「整卡健康度=bad」(卡健康度可能因 metric 仍 ok 而为 ok)。 */
+.text-error { color: var(--bad-fg); font-weight: 500; }
 
 .card-error-note {
   font-size: 12px;
@@ -596,6 +599,24 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+/* t_5d8c3c81 只读缓存: 异常卡有旧数据时 — 渲染正常模板(进度条/余额) + 数据时效标注 + 错误原因行。
+ * abnormal-body--stale-data = 模板之下追加两行(stale-fetched-note + abnormal-body-error-reason)。
+ * 模板顶部间距与其它形态对齐(8px = var(--space-4)=4px * 2? 实测 var(--space-8) 看起来更稳)。 */
+.abnormal-body--stale-data {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.abnormal-body-stale-note {
+  font-size: 11px;
+  color: var(--fg-dim);
+  margin-top: 2px;
+}
+.abnormal-body-error-reason {
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 /* auth_expired 亮黄灯(§2.1): 自绘圆点, 填充 --warn(D-016), 带光晕提示待处理 */

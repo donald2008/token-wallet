@@ -101,6 +101,8 @@ const zh = {
     lampAuthTitle: "登录态失效, 亮黄灯",
     lampAuthAria: "auth_expired 黄灯",
     statusDot: "状态: {label}",
+    /* t_5d8c3c81 只读缓存语义: 异常卡有旧数据时, 标注数据时效让用户知道不是最新值 */
+    staleFetchedAgo: "当前数据为 {ago} 采集(非最新)",
   },
   ago: {
     now: "刚刚",
@@ -427,6 +429,8 @@ const en: Dict = {
     lampAuthTitle: "Session expired (yellow)",
     lampAuthAria: "auth_expired yellow",
     statusDot: "Status: {label}",
+    /* t_5d8c3c81: data freshness note shown on abnormal cards with stale-but-rendered data */
+    staleFetchedAgo: "Data last fetched {ago} (stale)",
   },
   ago: {
     now: "just now",
