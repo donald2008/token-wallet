@@ -37,6 +37,10 @@ import { AddProviderWizard } from "./components/AddProviderWizard";
 import { QuotaGallery } from "./components/QuotaGallery";
 import { LocalAgentSection } from "./components/LocalAgentSection";
 import { FilterIcons, DEFAULT_FILTER, matchesFilter, type FilterSel } from "./components/FilterChips";
+import { AgentCard, AgentCardEmpty } from "./components/AgentCard";
+import { AgentDashboardC } from "./components/AgentDashboardC";
+import { mcpUsageSummary, type McpQueryResult } from "./mcpQuery";
+import type { UsageSummaryOutput } from "./mcpQueryTypes";
 import type { InstanceConfig } from "./instances/schema";
 import { getSharedKeyring, getSharedStore, loadPersistedInstances, useInstances, usePersistError } from "./instances/store";
 import { useDismissibleError } from "./instances/useDismissibleError";
@@ -108,8 +112,9 @@ function AppShell() {
   const [sortConfig, setSortConfig] = useState<SortConfig>(DEFAULT_SORT_CONFIG);
   // P1(t_6484ecc6): 主页过滤 chips 选中态(单选, 默认「全部」= 现状零变化; 重启回「全部」)
   const [filter, setFilter] = useState<FilterSel>(DEFAULT_FILTER);
-  // 页内导航仅留给首开向导 + 方案页(D-021 一次性引导 view="add"; theme-glass 实验 view="quota")
-  const [view, setView] = useState<"panel" | "add" | "quota">("panel");
+  // 页内导航仅留给首开向导 + 方案页(D-021 一次性引导 view="add"; theme-glass 实验 view="quota";
+  // t_9255cb63: view="agent-dashboard" = 主页 Agent 卡详情(大屏方案 C))
+  const [view, setView] = useState<"panel" | "add" | "quota" | "agent-dashboard">("panel");
   // D-038: 设置弹窗(纯偏好) 与 添加向导弹窗(侧栏 ＋) 是两个独立模态
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -117,6 +122,29 @@ function AppShell() {
   const instances = useInstances();
   const { engine, output } = useRealEngine(instances);
   const hasInstances = instances.length > 0;
+
+  // t_9255cb63: 拉 daemon usage_summary(group_by=["agent"]) — 主页 Agent 卡 + 大屏方案 C 数据源。
+  // 启动拉一次 + 每 30s 刷新;daemon 不可达时 mcpSummary.result.ok=false → 主页 Agent 卡区显式空态,
+  // 不静默吞成 0(任务卡边界硬要求)。
+  const [mcpSummary, setMcpSummary] = useState<McpQueryResult<UsageSummaryOutput>>({
+    ok: false,
+    reason: "unavailable",
+  });
+  useEffect(() => {
+    let alive = true;
+    let timer: number | null = null;
+    const tick = async () => {
+      const r = await mcpUsageSummary({ group_by: ["agent"] });
+      if (!alive) return;
+      setMcpSummary(r);
+    };
+    void tick();
+    timer = window.setInterval(() => void tick(), 30_000);
+    return () => {
+      alive = false;
+      if (timer !== null) window.clearInterval(timer);
+    };
+  }, []);
 
   // 首开判定(§10, P0-7 接真): Rust get_bootstrap 读 settings.json consent;
   // 并行加载 instances.yaml → 预填内存 store(面板重启后实例仍在)
@@ -358,6 +386,44 @@ function AppShell() {
     );
   }
 
+  // t_9255cb63: 大屏方案 C — 主页 Agent 卡点 [详情→] 触发。需要 usage_summary 真数据,
+  // daemon 未连时降级提示(不静默吞成 0, 任务卡边界)。
+  if (view === "agent-dashboard") {
+    if (mcpSummary.ok) {
+      return (
+        <div className="panel">
+          <AgentDashboardC
+            summary={mcpSummary.data}
+            generatedAt={mcpSummary.generatedAt}
+            onBack={() => setView("panel")}
+          />
+        </div>
+      );
+    }
+    // daemon 未连接空态: 用 AgentCardEmpty 复用样式保持视觉一致
+    const reasonText =
+      mcpSummary.reason === "unauthorized"
+        ? "鉴权失败,请检查 daemon API Key"
+        : mcpSummary.reason === "protocol_error"
+          ? "daemon 协议错误"
+          : "daemon 未连接,请先启动 daemon";
+    return (
+      <div className="panel">
+        <div className="agent-dashboard-c-empty" data-testid="agent-dashboard-c-empty">
+          <AgentCardEmpty reason={reasonText} />
+          <button
+            type="button"
+            className="agent-dashboard-c-back"
+            onClick={() => setView("panel")}
+            data-testid="agent-dashboard-c-empty-back"
+          >
+            ← 返回
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="panel">
       {/* 标题栏独占第一行(全宽, t_66b67453 契约1 语义保留) */}
@@ -417,6 +483,53 @@ function AppShell() {
             </main>
           )}
           <LocalAgentSection />
+          {/* t_9255cb63: 主页 Agent 卡区 — 来自 daemon usage_summary(group_by=["agent"]),
+             与 ProviderCard 同构(.card/.card-head 共享), 数据源是 MCP daemon, 非 mock。
+             daemon 不可达/401/协议错 → 显式 AgentCardEmpty(不静默吞成 0)。 */}
+          {providers !== null && providers.length > 0 && (
+            <section className="agent-card-section" data-testid="agent-card-section">
+              <header className="agent-card-section-head">
+                <span className="agent-card-section-title">Agent 用量</span>
+                {mcpSummary.ok && (
+                  <span className="agent-card-section-meta" data-testid="agent-card-section-meta">
+                    数据 {mcpSummary.generatedAt}
+                  </span>
+                )}
+              </header>
+              <div className="agent-card-list" data-testid="agent-card-list">
+                {mcpSummary.ok ? (
+                  mcpSummary.data.rows.map((row) => {
+                    const activity: "active" | "idle" | "no_report_today" =
+                      row.calls === 0
+                        ? "no_report_today"
+                        : row.by_status.completed === 0
+                          ? "idle"
+                          : "active";
+                    return (
+                      <AgentCard
+                        key={row.group}
+                        agentId={row.group}
+                        row={row}
+                        activity={activity}
+                        generatedAt={mcpSummary.generatedAt}
+                        onOpenDetail={() => setView("agent-dashboard")}
+                      />
+                    );
+                  })
+                ) : (
+                  <AgentCardEmpty
+                    reason={
+                      mcpSummary.reason === "unauthorized"
+                        ? "鉴权失败,请检查 daemon API Key"
+                        : mcpSummary.reason === "protocol_error"
+                          ? "daemon 协议错误"
+                          : "daemon 未连接,请先启动 daemon"
+                    }
+                  />
+                )}
+              </div>
+            </section>
+          )}
           {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}
         </div>
       </div>

@@ -255,6 +255,29 @@ const ipcMocks: Record<string, IpcHandler> = {
     }
     return { agents: [], reason: "daemon_not_running" };
   },
+  // ---- t_9255cb63: MCP daemon 读数据桥 2 通道 mock ----
+  // 读 localStorage token-wallet.mock.mcp.usage(由 seedAgentUsage 注入),
+  // 缺省 {ok:false, reason:"unreachable"} — 浏览器 dev 模式无 daemon 时降级显式空态。
+  mcp_usage_summary: (_args?: Record<string, unknown>) => {
+    let s: { ok: boolean; reason?: string; data?: unknown } = { ok: false, reason: "unreachable" };
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.mcp.usage");
+      if (raw) s = JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return s.ok && s.data ? { ok: true, data: s.data } : { ok: false, reason: s.reason ?? "unreachable" };
+  },
+  mcp_usage_report_echo: () => {
+    let s: { ok: boolean; reason?: string; data?: unknown } = { ok: false, reason: "unreachable" };
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.mcp.usage.echo");
+      if (raw) s = JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return s.ok && s.data ? { ok: true, data: s.data } : { ok: false, reason: s.reason ?? "unreachable" };
+  },
   // ---- D-046: updater 三通道 + 事件桥(localStorage token-wallet.mock.updater 存状态;
   // 测试用 seedUpdaterState() 注入目标态, 覆盖四态渲染断言) ----
   updater_check: () => {
@@ -762,4 +785,18 @@ export async function seedMcpState(
   await page.evaluate((s) => {
     localStorage.setItem("token-wallet.mock.mcp", JSON.stringify(s));
   }, state);
+}
+
+/**
+ * t_9255cb63: 注入 daemon usage_summary 返回数据(主页 Agent 卡 + 大屏方案 C 数据源)。
+ * ok=false → daemon 不可达空态; ok=true + data → 真数据。
+ * 用 page.reload() 后 mock 重新挂载生效。
+ */
+export async function seedAgentUsage(
+  page: import("@playwright/test").Page,
+  payload: { ok: boolean; reason?: string; data?: unknown },
+): Promise<void> {
+  await page.evaluate((p) => {
+    localStorage.setItem("token-wallet.mock.mcp.usage", JSON.stringify(p));
+  }, payload);
 }

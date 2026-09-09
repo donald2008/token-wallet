@@ -2,14 +2,19 @@
  * MCP daemon IPC 桥注册(D-048, t_4bd214de):
  * 把 mcp-env/mcp-daemon/mcp-autostart 三个纯逻辑模块挂到 ipcMain.handle。
  *
- * 9 通道: mcp_probe / mcp_start / mcp_stop / mcp_restart / mcp_get_config / mcp_gen_key /
- *         mcp_set_autostart / mcp_get_autostart / mcp_get_guide
+ * 11 通道: mcp_probe / mcp_start / mcp_stop / mcp_restart / mcp_get_config / mcp_gen_key /
+ *         mcp_set_autostart / mcp_get_autostart / mcp_get_guide /
+ *         mcp_usage_summary / mcp_usage_report_echo(t_9255cb63)
  *  (round-2 增 mcp_restart 编排 stop+start, 让 key regen 后 daemon 真实重启用上新 key)
+ *  (t_9255cb63 增 usage_summary + usage_report_echo 读数据桥 — 主页 Agent 卡 + 大屏方案 C 数据源)
  *
  * 默认 shim:
  * - SpawnShim: 默认实现 spawn/killTree/wait(走 node:child_process + signal)
  * - PathShim: 默认实现 resolveDaemonPath(resources/token-wallet-mcp[.exe])
  * - HttpShim: 默认实现 fetch + AbortController(POST /mcp initialize, 卡体钉死不裸 TCP)
+ * - QueryHttpShim: 默认实现 fetch + AbortController(POST /mcp tools/call, Bearer 鉴权);
+ *   与 mcp-daemon 用的 HttpShim 是**不同形态**(一个做 initialize 握手, 一个做 streamable-http 调用),
+ *   故独立成 QueryHttpShim 接口避免耦合。
  * - AppShim: 注入 electron app 的 setLoginItemSettings/getLoginItemSettings;
  *   真运行时由 main.ts 注入 {setLoginItemSettings, getLoginItemSettings}; 单测注入 mock。
  */
@@ -28,6 +33,16 @@ import {
   start as startFn,
   stop as stopFn,
 } from "./mcp-daemon";
+import {
+  callMcpToolFromEnv,
+  defaultHttpShim as defaultQueryHttpShim,
+  McpCallError,
+  type HttpShim as QueryHttpShim,
+  type UsageReportEchoInput,
+  type UsageReportEchoOutput,
+  type UsageSummaryInput,
+  type UsageSummaryOutput,
+} from "./mcp-query";
 import { loadMcpEnv, regenerateKey } from "./mcp-env";
 import { readMcpAutostart, resolveOsAutostart, writeMcpAutostart } from "./mcp-autostart";
 import type { StoragePaths } from "./paths";
@@ -48,6 +63,8 @@ export interface McpIpcDeps {
   spawn?: SpawnShim;
   paths?: PathShim;
   http?: HttpShim;
+  /** query 桥 shim — 注入便于 vitest mock http 失败/超时;默认 defaultQueryHttpShim */
+  queryHttp?: QueryHttpShim;
 }
 
 /** 默认 fetch 实现: POST /mcp initialize + AbortController 超时, 返回 { status } */
@@ -81,6 +98,7 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
   const spawn = deps.spawn ?? defaultSpawnShim();
   const paths = deps.paths ?? defaultPathShim();
   const http = deps.http ?? defaultHttpShim();
+  const queryHttp = deps.queryHttp ?? defaultQueryHttpShim();
   const app = deps.app;
   const configDir = (): string => deps.storagePathsFn().configDir;
 
@@ -270,6 +288,54 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
       return { agents: [], reason: "fetch_failed" as const };
     }
   });
+
+  // ---- 通道: mcp_usage_summary(t_9255cb63, D-048 后续)----
+  // 调 daemon `usage_summary` 工具(主页 Agent 卡 + 大屏方案 C 数据源)。
+  // daemon 不可达 / 401 / 协议错 → 抛 McpCallError 由 renderer 归类降级。
+  // 注: 不做 probe 预检 — daemon 未跑时直接 fast-fail,UI 走"daemon 未连接"空态。
+  ipcMain.handle(
+    "mcp_usage_summary",
+    async (
+      _event,
+      input: UsageSummaryInput,
+    ): Promise<{ ok: true; data: UsageSummaryOutput } | { ok: false; reason: string }> => {
+      try {
+        const r = await callMcpToolFromEnv<UsageSummaryOutput>(
+          configDir(),
+          { name: "usage_summary", arguments: (input ?? {}) as Record<string, unknown> },
+          queryHttp,
+          { timeoutMs: 5000 },
+        );
+        return { ok: true, data: r.parsed };
+      } catch (e) {
+        if (e instanceof McpCallError) return { ok: false, reason: e.kind };
+        return { ok: false, reason: "protocol_error" };
+      }
+    },
+  );
+
+  // ---- 通道: mcp_usage_report_echo(t_9255cb63, D-048 后续)----
+  // 调 daemon `usage_report_echo` 工具(明细对账,大屏方案 C 右下象限数据源)。
+  ipcMain.handle(
+    "mcp_usage_report_echo",
+    async (
+      _event,
+      input: UsageReportEchoInput,
+    ): Promise<{ ok: true; data: UsageReportEchoOutput } | { ok: false; reason: string }> => {
+      try {
+        const r = await callMcpToolFromEnv<UsageReportEchoOutput>(
+          configDir(),
+          { name: "usage_report_echo", arguments: (input ?? {}) as Record<string, unknown> },
+          queryHttp,
+          { timeoutMs: 5000 },
+        );
+        return { ok: true, data: r.parsed };
+      } catch (e) {
+        if (e instanceof McpCallError) return { ok: false, reason: e.kind };
+        return { ok: false, reason: "protocol_error" };
+      }
+    },
+  );
 }
 
 function safeGetLoginItem(app: AppShim): boolean {
