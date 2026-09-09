@@ -2199,3 +2199,192 @@ body {
   color: var(--fg-dim);
 }
 
+
+/* ===== D-048 / t_4bd214de: 设置页 MCP 服务区块(纯增量, 不动既有) ===== */
+.mcp-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+  margin-top: var(--space-8, 8px);
+}
+.mcp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12, 12px);
+  flex-wrap: wrap;
+}
+.mcp-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--fg-dim, #999);
+}
+.mcp-status-dot[data-status="running"] {
+  background: var(--ok, #22c55e);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok, #22c55e) 25%, transparent);
+}
+.mcp-status-dot[data-status="stopped"] {
+  background: var(--fg-dim, #999);
+}
+.mcp-status-dot[data-status="not_installed"] {
+  background: var(--bad, #ef4444);
+}
+.mcp-status-dot[data-status="loading"] {
+  background: var(--fg-dim, #999);
+  opacity: 0.5;
+}
+.mcp-status-label {
+  font-weight: 600;
+}
+.mcp-subtitle {
+  color: var(--fg-dim, #666);
+  font-size: var(--font-12, 12px);
+}
+.mcp-actions {
+  gap: var(--space-8, 8px);
+}
+.mcp-actions .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.mcp-autostart-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4, 4px);
+}
+.mcp-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8, 8px);
+  margin: 0;
+}
+.mcp-info-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: var(--space-8, 8px);
+  align-items: center;
+}
+.mcp-info-row dt {
+  color: var(--fg-dim, #666);
+  font-size: var(--font-12, 12px);
+}
+.mcp-info-row dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8, 8px);
+  min-width: 0;
+}
+.mcp-info-row code {
+  font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+  font-size: var(--font-12, 12px);
+  color: var(--fg, #222);
+  word-break: break-all;
+}
+:root[data-theme="dark"] .mcp-info-row code,
+:root[data-theme="dark-glass"] .mcp-info-row code {
+  color: var(--fg, #eee);
+}
+.mcp-key-row {
+  flex-wrap: wrap;
+}
+.mcp-confirm {
+  border: 1px solid var(--warn, #f59e0b);
+  border-radius: var(--radius-8, 8px);
+  padding: var(--space-12, 12px);
+  background: color-mix(in srgb, var(--warn, #f59e0b) 10%, transparent);
+}
+.mcp-confirm-body h4 {
+  margin: 0 0 var(--space-8, 8px) 0;
+  font-size: var(--font-14, 14px);
+}
+.mcp-confirm-body p {
+  margin: 0 0 var(--space-8, 8px) 0;
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim, #666);
+}
+.mcp-confirm-actions {
+  display: flex;
+  gap: var(--space-8, 8px);
+}
+.mcp-hint {
+  color: var(--warn, #f59e0b);
+  font-size: var(--font-12, 12px);
+  margin: 0;
+}
+.mcp-error {
+  color: var(--bad, #ef4444);
+  font-size: var(--font-12, 12px);
+  margin: 0;
+}
+
+/* ===== D-048: Agent 引导弹窗(portal to body, Q4 决议 B) ===== */
+.mcp-guide-overlay {
+  position: fixed;
+  inset: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  border-radius: var(--radius-16, 16px);
+}
+:root[data-theme="dark-glass"] .mcp-guide-overlay,
+:root[data-theme="light-glass"] .mcp-guide-overlay {
+  -webkit-backdrop-filter: var(--card-blur, blur(32px));
+  backdrop-filter: var(--card-blur, blur(32px));
+}
+.mcp-guide-modal {
+  background: var(--bg-elev, #fff);
+  border-radius: var(--radius-12, 12px);
+  width: min(720px, 90vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+:root[data-theme="dark"] .mcp-guide-modal,
+:root[data-theme="dark-glass"] .mcp-guide-modal {
+  background: var(--bg-elev, #1f2937);
+}
+.mcp-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-12, 12px) var(--space-16, 16px);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.mcp-guide-head h3 {
+  margin: 0;
+  font-size: var(--font-16, 16px);
+}
+.mcp-guide-body {
+  padding: var(--space-16, 16px);
+  overflow-y: auto;
+  font-size: var(--font-12, 12px);
+}
+.mcp-guide-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16, 16px);
+}
+.mcp-guide-item {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius-8, 8px);
+  padding: var(--space-12, 12px);
+}
+.mcp-guide-item h4 {
+  margin: 0 0 var(--space-8, 8px) 0;
+}
+.mcp-guide-item pre {
+  background: var(--bg, #f3f4f6);
+  padding: var(--space-8, 8px);
+  border-radius: var(--radius-4, 4px);
+  overflow-x: auto;
+  font-size: var(--font-12, 12px);
+  margin: var(--space-4, 4px) 0 0 0;
+}
