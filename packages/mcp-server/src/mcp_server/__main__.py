@@ -1,35 +1,39 @@
 """daemon 入口 — 端口 9131, streamable-http, 端点 /mcp (spec §2/§5)。
 
-env 配置:
-  TOKEN_WALLET_MCP_KEY  必填, Bearer 一把 key (Consul 注入); 不豁免 loopback
-  TOKEN_WALLET_DB_PATH  缺省 <dataDir>/token-wallet.db (dataDir 缺省 ~/.local/share/token-wallet)
+配置 (独立产品形态): mcp.env (~/.config/token-wallet/mcp.env, app 生成管理,
+daemon 读取) + 进程 env 覆盖 + 代码缺省, 见 config.py:
+  TOKEN_WALLET_MCP_KEY  必填; 不豁免 loopback
+  TOKEN_WALLET_DB_PATH  缺省 ~/.local/share/token-wallet/token-wallet.db
   TOKEN_WALLET_PORT     缺省 9131
-  TOKEN_WALLET_HOST     缺省 0.0.0.0
+  TOKEN_WALLET_HOST     缺省 127.0.0.1 (独立产品本机优先)
   USAGE_TTL_DAYS        缺省 90 (§4.3)
+引导接口: MCP 工具 get_onboarding_guide / HTTP GET /guide (JSON+HTML 双视图)。
 """
 from __future__ import annotations
 
-import os
 import sys
 import threading
-from pathlib import Path
 
 from fastmcp import FastMCP
 from starlette.middleware import Middleware
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.routing import Route
 
+from . import onboarding
 from .auth import BearerAuthMiddleware
+from .config import DEFAULT_HOST, DEFAULT_PORT, resolve_config
 from .storage import EventStorage
 from .tools_query import EchoEngine, SummaryEngine
 from .tools_report import report_usage as report_usage_impl
 
 
-def _data_dir() -> Path:
-    if xdg := os.environ.get("XDG_DATA_HOME"):
-        return Path(xdg) / "token-wallet"
-    return Path.home() / ".local" / "share" / "token-wallet"
-
-
-def build_server(*, db_path: str, ttl_days: int) -> FastMCP:
+def build_server(
+    *,
+    db_path: str,
+    ttl_days: int,
+    endpoint: str = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/mcp",
+) -> FastMCP:
     storage = EventStorage(db_path)
     summary_engine = SummaryEngine(storage.conn, lock=storage._lock)
     echo_engine = EchoEngine(storage)
@@ -104,6 +108,16 @@ def build_server(*, db_path: str, ttl_days: int) -> FastMCP:
         )
         return echo_engine.echo(q).model_dump()
 
+    @mcp.tool
+    def get_onboarding_guide() -> dict:
+        """agent 接入引导 (唯一入口): 返回 endpoint + server_version + agents 列表。
+
+        agents 每条 = {id, name, plugin_url, docs_url, configure, verify};
+        plugin_url/docs_url 可为 null (待适配器实现后补)。
+        HTTP 同源视图: GET /guide (Accept: application/json | text/html)。
+        """
+        return onboarding.onboarding_guide(endpoint)
+
     # TTL 维护: 后台线程每日 03:37 本地时区执行 (先聚合后删, §4.3)
     from . import maintenance
 
@@ -143,6 +157,95 @@ def build_server(*, db_path: str, ttl_days: int) -> FastMCP:
     return mcp
 
 
+# ---------------------------------------------------------------- /guide ----
+
+def _render_guide_html(guide: dict) -> str:
+    """同一数据源的简单 HTML 步骤页 (浏览器人看), 不引前端框架。"""
+    agents_html: list[str] = []
+    for a in guide["agents"]:
+        plugin = (
+            f'<a href="{a["plugin_url"]}">{a["plugin_url"]}</a>'
+            if a["plugin_url"]
+            else "<em>null</em>"
+        )
+        docs = (
+            f'<a href="{a["docs_url"]}">{a["docs_url"]}</a>'
+            if a["docs_url"]
+            else "<em>null</em>"
+        )
+        agents_html.append(
+            "<tr>"
+            f'<td>{a["id"]}</td>'
+            f'<td>{a["name"]}</td>'
+            f"<td>{plugin}</td>"
+            f"<td>{docs}</td>"
+            f"<td>{a['configure']}</td>"
+            f"<td>{a['verify']}</td>"
+            "</tr>"
+        )
+    return f"""<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>token-wallet MCP — agent 接入引导</title>
+<style>
+body {{ font-family: system-ui, sans-serif; margin: 2rem; color: #222; }}
+code, .endpoint {{ background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }}
+.endpoint {{ font-size: 1.1em; }}
+table {{ border-collapse: collapse; margin-top: 1rem; width: 100%; }}
+th, td {{ border: 1px solid #ddd; padding: 6px 10px; text-align: left; vertical-align: top; }}
+th {{ background: #f8f8f8; }}
+</style>
+</head>
+<body>
+<h1>token-wallet MCP — agent 接入引导</h1>
+<p>endpoint: <span class="endpoint">{guide["endpoint"]}</span></p>
+<p>server_version: <code>{guide["server_version"]}</code></p>
+<h2>接入步骤</h2>
+<ol>
+<li>从 mcp.env (~/.config/token-wallet/mcp.env) 取 TOKEN_WALLET_MCP_KEY</li>
+<li>按下方对应 agent 行的 configure 说明配置 endpoint + key</li>
+<li>按 verify 说明验证上报是否收到 (MCP 工具 <code>usage_summary</code>)</li>
+</ol>
+<h2>agents</h2>
+<table>
+<tr><th>id</th><th>name</th><th>plugin_url</th><th>docs_url</th><th>configure</th><th>verify</th></tr>
+{''.join(agents_html)}
+</table>
+</body>
+</html>"""
+
+
+async def guide_endpoint(request: Request) -> Response:
+    """GET /guide — 与 get_onboarding_guide 工具同一数据源。
+
+    Accept: text/html → HTML 步骤页; 其余 (application/json) → JSON。
+    """
+    endpoint = f"http://{request.app.state.guide_host}:{request.app.state.guide_port}/mcp"
+    guide = onboarding.onboarding_guide(endpoint)
+    if "text/html" in request.headers.get("accept", ""):
+        return HTMLResponse(_render_guide_html(guide))
+    return JSONResponse(guide)
+
+
+def build_http_app(
+    *, key: str, host: str, port: int, db_path: str, ttl_days: int
+):
+    """http_app + /guide 路由 (guide 在 BearerAuth 中间件之外, 引导数据无密钥)。"""
+    endpoint = f"http://{host}:{port}/mcp"
+    mcp = build_server(db_path=db_path, ttl_days=ttl_days, endpoint=endpoint)
+    app = mcp.http_app(
+        path="/mcp",
+        middleware=[Middleware(BearerAuthMiddleware, key=key)],
+    )
+    app.state.guide_host = host
+    app.state.guide_port = port
+    app.router.routes.append(
+        Route("/guide", endpoint=guide_endpoint, methods=["GET"])
+    )
+    return app
+
+
 def run_maintenance_once(*, db_path: str, ttl_days: int) -> dict:
     """CLI 手动触发维护 (验收用): python -c 'from mcp_server.__main__ import run_maintenance_once; ...'。"""
     storage = EventStorage(db_path)
@@ -153,23 +256,15 @@ def run_maintenance_once(*, db_path: str, ttl_days: int) -> dict:
 
 
 def main() -> None:
-    key = os.environ.get("TOKEN_WALLET_MCP_KEY")
-    if not key:
-        print(
-            "fatal: TOKEN_WALLET_MCP_KEY not set (Consul ai-hermes/security/providers/token-wallet-mcp-key)",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    cfg = resolve_config()
+    key = str(cfg["key"])
+    db_path = str(cfg["db_path"])
+    ttl_days = int(cfg["ttl_days"])  # type: ignore[arg-type]
+    host = str(cfg["host"])
+    port = int(cfg["port"])  # type: ignore[arg-type]
 
-    db_path = os.environ.get("TOKEN_WALLET_DB_PATH") or str(_data_dir() / "token-wallet.db")
-    ttl_days = int(os.environ.get("USAGE_TTL_DAYS", "90"))
-    host = os.environ.get("TOKEN_WALLET_HOST", "0.0.0.0")
-    port = int(os.environ.get("TOKEN_WALLET_PORT", "9131"))
-
-    mcp = build_server(db_path=db_path, ttl_days=ttl_days)
-    app = mcp.http_app(
-        path="/mcp",
-        middleware=[Middleware(BearerAuthMiddleware, key=key)],
+    app = build_http_app(
+        key=key, host=host, port=port, db_path=db_path, ttl_days=ttl_days
     )
     print(f"[token-wallet-mcp] serving on {host}:{port}/mcp, db={db_path}, ttl={ttl_days}d", flush=True)
     import uvicorn
