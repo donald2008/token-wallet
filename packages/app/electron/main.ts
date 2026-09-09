@@ -36,6 +36,7 @@ import {
 } from "./auth-session";
 import { authDefFor } from "./auth-defs";
 import { AppUpdaterController } from "./updater";
+import { registerMcpIpc } from "./mcp-ipc";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
@@ -418,6 +419,22 @@ function registerIpc(): void {
   ipcMain.handle("updater_download", () => appUpdater.download());
   ipcMain.handle("updater_install", () => {
     appUpdater.install();
+  });
+
+  // ---- D-048: MCP daemon 托管 7 通道(t_4bd214de) ----
+  // 主进程持有 daemon 真实生命周期: probe / start / stop / config / key / autostart / guide
+  // 全部 shim 在 mcp-daemon.ts 注入便于测试, 真运行时用 defaultSpawnShim/defaultPathShim
+  // + 简易 fetch 实现 defaultHttpShim(POST /mcp initialize, 卡体钉死不裸 TCP)
+  registerMcpIpc({
+    isPackaged: app.isPackaged,
+    appRoot: app.getAppPath(),
+    platform: process.platform,
+    storagePathsFn: () => storagePaths(),
+    settingsFilePathFn: () => settingsFilePath(),
+    app: {
+      setLoginItemSettings: (opts: { openAtLogin: boolean }) => app.setLoginItemSettings(opts),
+      getLoginItemSettings: () => app.getLoginItemSettings(),
+    },
   });
 }
 
