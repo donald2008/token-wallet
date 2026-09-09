@@ -77,3 +77,26 @@ verdict: changes_requested  # 1 BLOCKING + 1 错字（round-3 自身引入，同
 
 1. [docs/RELEASE.md:37 step2] **「随后用 PUT .../releases/<release_id> 把 attachment URL 写入 release assets 列表」为编造步骤，与实证流程矛盾**。round-2 WARNING 只要求端点对齐 skill 实证流程（删旧 DELETE → 传新 POST attach_files → 匿名 curl 双校验）；round-3 把主端点改对（POST attach_files ✓）后，却又在同一句追加了一段 skill 从未执行、五次真版（v0.2.4~v0.2.8）从未需要的 PUT 绑定步骤。实证反证就在本文档 step3：POST 之后**直接匿名 curl 就能拉到新版本**——附件在 POST attach_files 即已绑定 release，无需任何 PUT；Gitee PUT/PATCH /releases/<id> 更新的是 release 元数据（tag/title/body），不接受 attachment URL 写入 assets 列表。要求：删除「随后用 PUT ... 写入 release assets 列表（…绑定由 release asset API 完成…）」整句，step2 到「每次返回 201 + attachment URL」为止，与 skill 五次实跑流程一字对齐（这正是本卡发版手册「防误导」的存在意义）。
 2. 同句错字「Ditee 三件套绑定」→ 随整句删除即消；若保留任何表述须写 Gitee。
+
+---
+
+# Round-4 人工终审意见（追加）
+
+reviewer: njbx02 (default 老大人工终审, run 862, contract lens)
+verdict: approved  # round-3 单 BLOCKING 修复到位，全轮意见收敛
+
+## 复验范围
+
+- git 状态: origin/master = d780513 (ls-remote 一致), diff a8e2643..d780513 = 1 file +1/-1 全 docs, 零 packages/ 越界 ✓
+- Round-3 BLOCKING 修复核验: RELEASE.md:37 step2 编造 PUT 绑定整句（含「Ditee」错字）已删，step2 止于「每次返回 201 + attachment URL（即绑 release，POST 后可直接进 step3 匿名 curl 双校验）」——与 token-wallet skill 五次实跑流程（v0.2.4~v0.2.8: 删旧 DELETE → 传新 POST attach_files → 匿名 curl 双校验）一字对齐，无任何 PUT 绑定残留 ✓
+- 残留扫描（内容文档，不含本审查档案）: `置即存` / `ai-hemes` / `更更新源` / `Ditee` / `PUT.*attachment` 全 0 命中（残留仅存于 docs/reviews/ 审查档案引用，属档案性保留）✓
+- Round-1/2/3 全部意见回归（契约保持）: 内网 IP 公共文档 0 残留 ✓; 失实「已知遗留」段已删 ✓; 渠道拓扑 gitee stable 主渠道 + 8889 标注内部开发通道 ✓; D-054 在位 ✓; D-053 停即存 ✓; ai-hermes ×2 ✓; 更新源 ✓
+- 原始验收（contract lens 最终确认）: README/README.en v0.2.8 现状（无旧 UI 描述残留，旧 UI 关键词 0 命中; v0.2.6 仅存于「从 v0.2.6 升级」FAQ 属正当引用）✓; 操作步骤可跟做（USER_GUIDE 8 节/火山 SSO 自助恢复路径齐全）✓; 三主题截图真实存在（panel-dark/light/glass.png）✓; commit+push+ls-remote ✓
+
+## 判定
+
+Round-1/2/3 全部 changes_requested 意见收敛，worker round-4 修复为单点手术式删句、无越界扩写，且 round-3 已自陈「编造修复」根因反思与纪律升级。docs-only 卡内容正确性验收通过。
+
+## 备注
+
+- 本次审核未改任何实现文件（reviewer 角色分离），仅追加本审查档案
