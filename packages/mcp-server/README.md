@@ -13,7 +13,7 @@ providers ──> core(采集/归一化/缓存) ──> StorageBackend ──> M
 
 桌面 app 关闭不影响数据采集与 Agent 查询。
 
-**唯一数据访问面(D-048)**: agent hook 上报 LLM 消耗、app 展示、agent 自查
+**唯一数据访问面(D-055)**: agent hook 上报 LLM 消耗、app 展示、agent 自查
 全走 MCP 工具; SQLite(`<dataDir>/token-wallet.db`)是 daemon 私有实现细节,
 其他组件禁止直查库。协议权威源 = [`docs/mcp-protocol.md`](../../docs/mcp-protocol.md)。
 

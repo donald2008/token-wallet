@@ -4,7 +4,10 @@
 //
 // t_034a6e81 Bug1 修: OneClickAuth done 态点击 = onRefresh(不再走 onStart) 的真流程断言
 // —— vi.mock 替换 ipc 的 commandAuthStart/Finish, 走完 callback 模式(浏览器授权自动收 code)
-// 让 stage 推进 idle→starting→waiting→done, 再 fireEvent click 已授权按钮断言 onRefresh 被调。
+// 让用户端推进 idle→starting→waiting→done, 再 fireEvent click 已授权按钮断言 onRefresh 被调。
+//
+// t_5d8c3c81 只读缓存语义: 失败卡分两态(有旧数据=正常模板+时效标注 / 无旧数据=整卡文字)。
+// 本文件既有 cases 仍走"无旧数据形态"(metrics=[]), 头卡片 statusBadge 已被 head 承担(abnormal-body 内不再重复)。
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { act } from "react";
@@ -87,6 +90,16 @@ function click(el: Element | null): void {
   });
 }
 
+// t_5d8d8c81 round-2: 「单行徽章」守卫改为**文本级**, 不再依赖 class 名 —
+// round-1 教训: 只数 .card-status-text class 时, 无旧数据 error 卡的 abnormal-status-detail
+// 行(渲染「采集失败」长文案)未在守卫内 = 字面重复但断言假绿。文本级守卫
+// (全卡叶节点 textContent 恰含目标 badge 文案 1 次)与 class 无关, 改名/换结构仍生效。
+function countBadgeText(card: HTMLElement, badge: string): number {
+  return Array.from(card.querySelectorAll<HTMLElement>("*"))
+    .filter((el) => el.children.length === 0)
+    .filter((el) => (el.textContent ?? "").trim() === badge).length;
+}
+
 describe("ProviderCard 徽章: 文案表达原因, 颜色不动", () => {
   const cases: [string, ProviderSnapshot, string, HealthLevel][] = [
     ["ok+充足", snap("ok", [windowMetric(100, 1200)]), "健康", "ok"],
@@ -104,7 +117,8 @@ describe("ProviderCard 徽章: 文案表达原因, 颜色不动", () => {
       // 颜色不变: data-health 与 text-* class 仍由 providerHealth 决定
       expect(card.getAttribute("data-health")).toBe(health);
       expect(health).toBe(providerHealth(p));
-      const badgeEl = card.querySelector<HTMLElement>(".card-status-text")!;
+      // t_5d8c3c81: 徽章在 card-head(data-testid="card-status-badge")
+      const badgeEl = card.querySelector<HTMLElement>('[data-testid="card-status-badge"]')!;
       expect(badgeEl.className).toContain(`text-${health}`);
       // 文案表达原因(单一真相源 statusBadge)
       expect(badgeEl.textContent).toBe(badge);
@@ -112,6 +126,9 @@ describe("ProviderCard 徽章: 文案表达原因, 颜色不动", () => {
       // 误导文案不得再出现
       expect(badgeEl.textContent).not.toBe("过期");
       if (p.status !== "ok") expect(badgeEl.textContent).not.toBe("未知");
+      // round-2: 文本级守卫 — 全卡叶节点中目标 badge 文案恰出现 1 次。
+      // 防止 AbnormalBody 内任何位置(无论 class 名)再渲染字面相同的徽章文字。
+      expect(countBadgeText(card, badge)).toBe(1);
     });
   }
 });
@@ -521,5 +538,194 @@ describe("t_ee76442e: 火山 SETUP_HINT 一键授权链路(--no-browser 不干�
     expect(commandAuthStartImpl).toHaveBeenCalledWith("arkcli");
     // 设备码模式: finishMode=code 已传入, 等待用户粘贴 code 回喂 → stage=waiting
     expect(card.querySelector('[data-testid="oneclick-auth-panel"]')).toBeTruthy();
+  });
+});
+
+// ---- t_5d8c3c81: 采集失败只读缓存语义(用户 9/9 拍板) ----
+// 失败卡分两态:
+//   - 有旧数据(metrics 非空): 正常模板(BarsTemplate 等)+ 数据时效标注 + 错误原因(text-error)
+//   - 无旧数据(metrics 空): 整卡文字形态 + setup_hint + lastUpdate; 状态徽章仅由 head 承担
+// 状态徽章文字严禁在卡内出现两次(原 bug: head + AbnormalBody 各一次 → 截图右上两行)
+describe("t_5d8c3c81: 采集失败只读缓存语义", () => {
+  // 通用 factory: error 快照带 metrics = 「有旧数据」; 不带 metrics = 「无旧数据」
+  function okSnap(status: ProviderStatus, fetchedAtSec: number, metrics: Metric[] = []): ProviderSnapshot {
+    return {
+      provider_id: "kimi-code",
+      display_name: "Kimi-Code #1",
+      plan_type: "window",
+      fetched_at: fetchedAtSec,
+      status,
+      metrics,
+      alerts: [],
+      logo: "kimi",
+    };
+  }
+
+  it("error + 无旧数据(metrics=[]) → 整卡文字形态(无 template 渲染)", () => {
+    const card = renderCard(okSnap("error", NOW - 60, []));
+    // head 徽章红「采集失败」
+    const headBadge = card.querySelector<HTMLElement>('[data-testid="card-status-badge"]')!;
+    expect(headBadge.textContent).toBe("采集失败");
+    // 整卡文字形态: abnormal-body 容器带 --no-data modifier(模板未渲染)
+    const abnormalBody = card.querySelector<HTMLElement>('[data-testid="abnormal-body"]')!;
+    expect(abnormalBody.classList.contains("abnormal-body--no-data")).toBe(true);
+    // 模板(进度条 .bar-row / 余额数字)未渲染 —— 无假数据原则
+    expect(card.querySelectorAll(".bar-row").length).toBe(0);
+    // logo 仍显示(BrandLogo platform=p.logo="kimi" 有品牌 key)
+    expect(card.querySelector(".brand-block")).toBeTruthy();
+    // data-health 由 status=error → providerHealth 决定 = bad
+    expect(card.getAttribute("data-health")).toBe("bad");
+  });
+
+  it("error + 有旧数据(metrics 非空) → 正常模板 + 数据时效标注 + 错误原因", () => {
+    const errSnap: ProviderSnapshot = {
+      ...okSnap("error", NOW - 600, [windowMetric(960, 1200)]),
+      error_message: "网络超时",
+      alerts: [{ level: "critical", message: "网络超时", code: "adapter_threw" }],
+    };
+    const card = renderCard(errSnap);
+    // head 徽章红「采集失败」
+    const headBadge = card.querySelector<HTMLElement>('[data-testid="card-status-badge"]')!;
+    expect(headBadge.textContent).toBe("采集失败");
+    // abnormal-body 走 --stale-data 形态(模板渲染)
+    const abnormalBody = card.querySelector<HTMLElement>('[data-testid="abnormal-body"]')!;
+    expect(abnormalBody.classList.contains("abnormal-body--stale-data")).toBe(true);
+    // 模板渲染了: 至少 1 个 .bar-row(QuotaMeter micro 形态)
+    expect(card.querySelectorAll(".bar-row").length).toBeGreaterThanOrEqual(1);
+    // 数据时效标注存在 + 文案正确(i18n card.staleFetchedAgo = "当前数据为 {ago} 采集(非最新)")
+    const note = card.querySelector<HTMLElement>('[data-testid="stale-fetched-note"]')!;
+    expect(note).toBeTruthy();
+    // agoText(600 秒前) = "10 分钟前"
+    expect(note.textContent).toBe("当前数据为 10 分钟前 采集(非最新)");
+    // 错误原因行: data-testid + text-error class
+    const reason = card.querySelector<HTMLElement>('[data-testid="abnormal-error-reason"]')!;
+    expect(reason).toBeTruthy();
+    expect(reason.textContent).toBe("网络超时");
+    expect(reason.classList.contains("text-error")).toBe(true);
+  });
+
+  it("error + 有旧数据但 error_message 缺 → 错误原因行不渲染", () => {
+    const errSnap = okSnap("error", NOW - 600, [windowMetric(960, 1200)]);
+    const card = renderCard(errSnap);
+    expect(card.querySelector('[data-testid="abnormal-error-reason"]')).toBeNull();
+    // 数据时效标注仍存在
+    expect(card.querySelector('[data-testid="stale-fetched-note"]')).toBeTruthy();
+  });
+
+  it("status=ok 卡 → abnormal-body 不渲染(走 Template 分支, 形态不变)", () => {
+    const card = renderCard(okSnap("ok", NOW, [windowMetric(100, 1200)]));
+    expect(card.querySelector('[data-testid="abnormal-body"]')).toBeNull();
+    // head 徽章绿「健康」
+    const headBadge = card.querySelector<HTMLElement>('[data-testid="card-status-badge"]')!;
+    expect(headBadge.textContent).toBe("健康");
+  });
+
+  it("auth_expired + 有旧数据 + setup_hint 存在 → 模板渲染 + 时效标注 + setup_hint 一键授权区", () => {
+    const authSnap: ProviderSnapshot = {
+      ...okSnap("auth_expired", NOW - 300, [windowMetric(960, 1200)]),
+      setup_hint: "请运行 `bl auth login --console` 重新授权",
+    };
+    const card = renderCard(authSnap);
+    // head 徽章黄「待授权」
+    expect(card.querySelector<HTMLElement>('[data-testid="card-status-badge"]')!.textContent).toBe("待授权");
+    // 有旧数据 → 模板渲染
+    expect(card.querySelectorAll(".bar-row").length).toBeGreaterThanOrEqual(1);
+    // 时效标注存在
+    expect(card.querySelector('[data-testid="stale-fetched-note"]')).toBeTruthy();
+    // round-2: stale-data auth_expired 现在也补 setup_hint 引导(command 通道 bl/arkcli 重授权入口)
+    expect(card.querySelector('[data-testid="setup-hint"]')).toBeTruthy();
+    expect(card.querySelector(".lamp[data-lamp=\"auth_expired\"]")).toBeTruthy();
+    // 文本级守卫: 全卡「待授权」叶节点恰 1 次(head 徽章唯一)
+    expect(countBadgeText(card, "待授权")).toBe(1);
+  });
+
+  it("auth_expired + 无旧数据 + setup_hint 存在 → 整卡文字形态, lamp + setup_hint 引导保留", () => {
+    const authSnap: ProviderSnapshot = {
+      ...okSnap("auth_expired", NOW - 60),
+      setup_hint: "请运行 `bl auth login --console` 重新授权",
+    };
+    const card = renderCard(authSnap);
+    // head 徽章黄「待授权」
+    expect(card.querySelector<HTMLElement>('[data-testid="card-status-badge"]')!.textContent).toBe("待授权");
+    // abnormal-body 整卡文字形态
+    const abnormalBody = card.querySelector<HTMLElement>('[data-testid="abnormal-body"]')!;
+    expect(abnormalBody.classList.contains("abnormal-body--no-data")).toBe(true);
+    // setup_hint 引导区存在
+    expect(card.querySelector('[data-testid="setup-hint"]')).toBeTruthy();
+    // lamp 灯存在
+    expect(card.querySelector(".lamp[data-lamp=\"auth_expired\"]")).toBeTruthy();
+    // 模板未渲染
+    expect(card.querySelectorAll(".bar-row").length).toBe(0);
+    // round-2: 文本级守卫 — 全卡叶节点中「待授权」恰 1 次(head 徽章唯一)
+    expect(countBadgeText(card, "待授权")).toBe(1);
+  });
+
+  it("unsupported / stale 异常卡 + 无旧数据 → 整卡文字形态(head 徽章 + lastUpdate + error 提示)", () => {
+    const unsupportedCard = renderCard(okSnap("unsupported", NOW - 60));
+    expect(unsupportedCard.querySelector<HTMLElement>('[data-testid="card-status-badge"]')!.textContent).toBe("未接入");
+    expect(unsupportedCard.querySelectorAll(".bar-row").length).toBe(0);
+    // round-2: 文本级守卫
+    expect(countBadgeText(unsupportedCard, "未接入")).toBe(1);
+
+    const staleCard = renderCard(okSnap("stale", NOW - 86400 * 3)); // 3 天前
+    expect(staleCard.querySelector<HTMLElement>('[data-testid="card-status-badge"]')!.textContent).toBe("已陈旧");
+    expect(countBadgeText(staleCard, "已陈旧")).toBe(1);
+  });
+
+  it("错误状态字徽章(head.card-status-badge)在所有异常态里恰好 1 次(原 bug 修复)", () => {
+    // 四种异常态 × 全卡叶节点中目标 badge 文案恰 1 次(textContent 守卫, 与 class 名无关)
+    const cases: Array<{ status: ProviderStatus; badge: string }> = [
+      { status: "error", badge: "采集失败" },
+      { status: "auth_expired", badge: "待授权" },
+      { status: "stale", badge: "已陈旧" },
+      { status: "unsupported", badge: "未接入" },
+    ];
+    for (const { status, badge } of cases) {
+      const card = renderCard(okSnap(status, NOW - 60));
+      const headBadge = card.querySelector<HTMLElement>('[data-testid="card-status-badge"]')!;
+      expect(headBadge.textContent).toBe(badge);
+      // 全卡只 1 个相同文字的徽章(textContent 守卫, 与 class 无关)
+      expect(countBadgeText(card, badge)).toBe(1);
+    }
+  });
+
+  it("Logo 在 error 卡上仍显示(BrandLogo platform=p.logo, 不退 provider_id)", () => {
+    // 无 logo 字段的旧快照: 品牌块仍渲染(provider_id 退而求其次, 不空)
+    const snapNoLogo: ProviderSnapshot = {
+      provider_id: "kimi-code",
+      display_name: "Kimi-Code #1",
+      plan_type: "window",
+      fetched_at: NOW - 60,
+      status: "error",
+      metrics: [],
+      alerts: [],
+      // logo 字段缺(模拟 errorSnapshot 旧行为: 不带 logo)
+    };
+    const cardNoLogo = renderCard(snapNoLogo);
+    expect(cardNoLogo.querySelector(".brand-block")).toBeTruthy();
+
+    // 有 logo 字段的快照: 品牌块按 logo 渲染(BrandLogo platform="kimi")
+    const snapWithLogo: ProviderSnapshot = { ...snapNoLogo, logo: "kimi" };
+    const cardWithLogo = renderCard(snapWithLogo);
+    expect(cardWithLogo.querySelector(".brand-block")).toBeTruthy();
+  });
+
+  // round-2 反向对照: 验证文本级守卫(countBadgeText)真咬住缺陷 —
+  // 手工构造一个会让无旧数据 error 卡字面出现 2 次「采集失败」的快照,
+  // 守卫必须确定性变红; 修复后(本卡 round-2)错误不再渲染 abnormal-status-detail 行,
+  // 守卫恢复通过。证实断言不是空转。
+  it("round-2 反向对照: 无旧数据 error 卡全卡叶节点中「采集失败」恰 1 次", () => {
+    const card = renderCard(okSnap("error", NOW - 60, []));
+    // 修复后路径: abnormal-status-detail 行被守卫 showStatusDetail=false 跳过,
+    // 仅 head card-status-badge 渲染「采集失败」, countBadgeText === 1。
+    expect(countBadgeText(card, "采集失败")).toBe(1);
+    // 同时验证反例触发: 手动制造一个重复文案元素后, 守卫确定性变红。
+    // (用 DOM API 注入一个相同文案的兄弟节点, countBadgeText 应跳到 2)
+    const dup = document.createElement("div");
+    dup.textContent = "采集失败";
+    card.appendChild(dup);
+    expect(countBadgeText(card, "采集失败")).toBe(2);
+    dup.remove();
+    expect(countBadgeText(card, "采集失败")).toBe(1);
   });
 });

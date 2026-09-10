@@ -23,6 +23,19 @@ const ipcMocks = vi.hoisted(() => ({
   updaterInstall: vi.fn(),
   // Phase B: 语言持久化(设置页切换时回写, 真壳 settings.json / 浏览器 localStorage)
   setLangPersisted: vi.fn(),
+  // D-055 / t_4bd214de: MCP daemon 桥 mock(供 SettingsView 嵌入的 McpServicePanel 调用)
+  mcpProbe: vi.fn(),
+  mcpStart: vi.fn(),
+  mcpStop: vi.fn(),
+  mcpGetConfig: vi.fn(),
+  mcpGenKey: vi.fn(),
+  mcpGetAutostart: vi.fn(),
+  mcpSetAutostart: vi.fn(),
+  mcpGetGuide: vi.fn(),
+  maskMcpKey: (key: string): string => {
+    if (key.length <= 12) return "•".repeat(key.length);
+    return `${key.slice(0, 4)}-••••-••••-••••-${key.slice(-4)}`;
+  },
 }));
 
 vi.mock("../ipc", () => ipcMocks);
@@ -52,6 +65,18 @@ beforeEach(() => {
   ipcMocks.getLaunchAtLogin.mockResolvedValue(false);
   ipcMocks.updaterCheck.mockResolvedValue({ status: "up-to-date" });
   ipcMocks.updaterDownload.mockResolvedValue({ status: "downloading", percent: 0 });
+  // D-055 / t_4bd214de: MCP 默认 happy path mock, 各 it 单独覆盖
+  ipcMocks.mcpProbe.mockResolvedValue({ alive: true, installed: true });
+  ipcMocks.mcpGetConfig.mockResolvedValue({
+    TOKEN_WALLET_MCP_KEY: "0123456789abcdef0123456789abcdef",
+    TOKEN_WALLET_PORT: 9131,
+    TOKEN_WALLET_HOST: "127.0.0.1",
+    TOKEN_WALLET_DB_PATH: "/data/tw.db",
+    USAGE_TTL_DAYS: 90,
+    mcpEnvPath: "/cfg/mcp.env",
+    installed: true,
+  });
+  ipcMocks.mcpGetAutostart.mockResolvedValue({ mcpAutostart: true, osAutostart: true });
 });
 
 afterEach(() => {
@@ -420,5 +445,27 @@ describe("玻璃态 settings-modal backdrop-filter 兜底(B3-2, t_c20d4d11 round
     for (const rule of modalRule!) {
       expect(rule, "modal 兜底规则不应引用 --glass-alpha").not.toContain("--glass-alpha");
     }
+  });
+});
+
+describe("MCP 服务区块(D-055 / t_4bd214de)", () => {
+  it("mcp-sec 区块存在 + 嵌入 McpServicePanel", async () => {
+    const view = await renderSettings();
+    const sec = view.querySelector('[data-testid="mcp-sec"]');
+    expect(sec).toBeTruthy();
+    const panel = sec?.querySelector('[data-testid="mcp-panel"]');
+    expect(panel, "McpServicePanel 必须嵌入 mcp-sec 内").toBeTruthy();
+  });
+
+  it("mcp 区块包含状态点 + 启停按钮 + 自启 toggle + key 行 + 引导入口", async () => {
+    const view = await renderSettings();
+    const panel = view.querySelector('[data-testid="mcp-panel"]');
+    expect(panel?.querySelector('[data-testid="mcp-status"]')).toBeTruthy();
+    expect(panel?.querySelector('[data-testid="mcp-start"]')).toBeTruthy();
+    expect(panel?.querySelector('[data-testid="mcp-stop"]')).toBeTruthy();
+    expect(panel?.querySelector('[data-testid="mcp-autostart"]')).toBeTruthy();
+    expect(panel?.querySelector('[data-testid="mcp-endpoint"]')).toBeTruthy();
+    expect(panel?.querySelector('[data-testid="mcp-key-masked"]')).toBeTruthy();
+    expect(panel?.querySelector('[data-testid="mcp-open-guide"]')).toBeTruthy();
   });
 });

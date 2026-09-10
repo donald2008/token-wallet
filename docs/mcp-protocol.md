@@ -5,7 +5,7 @@
 | 状态 | **权威源**（本文档即协议，实现卡照此落地） |
 | 版本 | v1（`schema_version: 1`） |
 | 日期 | 2026-09-06 |
-| 决策记录 | D-048（docs/DECISIONS.md） |
+| 决策记录 | D-055（docs/DECISIONS.md） |
 | 上游分支 | `feat/theme-glass`，本文在 `docs/mcp-protocol` 分支 |
 | 下游实现卡 | daemon 实现卡（Python fastmcp）/ hook 插件卡（TS zod）/ App 展示卡（后置） |
 | 覆盖关系 | 本文 supersede DESIGN.md §8 中「计划工具(P3): quota_status / quota_history / agent_usage」的早期工具面清单；quota 两工具转为二期（§2.4） |

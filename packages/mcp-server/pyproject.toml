@@ -1,7 +1,7 @@
 [project]
 name = "token-wallet-mcp-server"
 version = "0.2.8"
-description = "token-wallet MCP data-plane daemon — fastmcp streamable-http :9131 (D-048)"
+description = "token-wallet MCP data-plane daemon — fastmcp streamable-http :9131 (D-055)"
 requires-python = ">=3.11"
 dependencies = [
   "fastmcp>=2.0",

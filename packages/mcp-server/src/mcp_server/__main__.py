@@ -41,7 +41,7 @@ def build_server(
     mcp = FastMCP(
         "token-wallet-mcp",
         instructions=(
-            "token-wallet usage data-plane (D-048). report_usage=写, "
+            "token-wallet usage data-plane (D-055). report_usage=写, "
             "usage_summary=读聚合, usage_report_echo=读原文。协议权威源: docs/mcp-protocol.md"
         ),
     )

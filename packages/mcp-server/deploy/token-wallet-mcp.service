@@ -9,7 +9,7 @@
 #   不要把 key 写进本 unit 文件。
 
 [Unit]
-Description=token-wallet MCP data-plane daemon (D-048, :9131)
+Description=token-wallet MCP data-plane daemon (D-055, :9131)
 After=network-online.target
 Wants=network-online.target
 

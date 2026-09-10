@@ -446,3 +446,141 @@ export async function updaterInstall(): Promise<void> {
   const viaHost = hostInvoke<void>("updater_install");
   if (viaHost) await viaHost;
 }
+
+// ---------------- D-055 / t_4bd214de: MCP daemon 桥(renderer 端 wrapper) ----------------
+
+/**
+ * 探测 daemon 状态 + 是否已安装 resources/ 二元结果。
+ * 真壳走 ipcMain.handle "mcp_probe", 主进程持有真实 http fetch;
+ * 浏览器降级 → 返 {alive:false, reason:"unreachable", installed:false}(单测可注入)。
+ */
+export interface McpProbeResult {
+  alive: boolean;
+  /** true = 200; false 原因: unreachable / handshake_failed / timeout */
+  reason?: string;
+  /** false = 没找到 resources/token-wallet-mcp(.exe), UI 提示构建链未产出 */
+  installed: boolean;
+}
+
+export async function mcpProbe(): Promise<McpProbeResult> {
+  const viaHost = await hostInvoke<McpProbeResult>("mcp_probe");
+  if (viaHost) return viaHost;
+  return { alive: false, reason: "unreachable", installed: false };
+}
+
+/** 启动 daemon(已 detached + polling-to-green), 返 {started, pid?, reason?} */
+export interface McpStartResult {
+  started: boolean;
+  pid?: number;
+  reason?: "not_installed" | "timeout";
+}
+
+export async function mcpStart(): Promise<McpStartResult> {
+  const viaHost = await hostInvoke<McpStartResult>("mcp_start");
+  return viaHost ?? { started: false, reason: "not_installed" };
+}
+
+/** 停止 daemon: 有 pid 走真停, 无 pid 走主进程 module 级缓存 lastStartedPid(自动回退, t_4bd214de round-2 BLOCKING-1) */
+export async function mcpStop(pid?: number): Promise<{ stopped: boolean; reason?: string }> {
+  const viaHost = await hostInvoke<{ stopped: boolean; reason?: string }>(
+    "mcp_stop",
+    pid ? { pid } : undefined,
+  );
+  return viaHost ?? { stopped: false, reason: "unavailable" };
+}
+
+/** 重启 daemon(stop + start 编排, 用于 key regen 后真实生效): t_4bd214de round-2 BLOCKING-1 */
+export interface McpRestartResult {
+  restarted: boolean;
+  started: boolean;
+  pid?: number;
+  reason?: string;
+}
+
+export async function mcpRestart(): Promise<McpRestartResult> {
+  const viaHost = await hostInvoke<McpRestartResult>("mcp_restart");
+  return viaHost ?? { restarted: false, started: false, reason: "unavailable" };
+}
+
+/** 读 mcp.env 全部键位 + installed 状态(明文 key 经 IPC 内部, UI 用 maskKey 处理) */
+export interface McpConfigView {
+  TOKEN_WALLET_MCP_KEY: string;
+  TOKEN_WALLET_PORT: number;
+  TOKEN_WALLET_HOST: string;
+  TOKEN_WALLET_DB_PATH: string;
+  USAGE_TTL_DAYS: number;
+  mcpEnvPath: string;
+  installed: boolean;
+}
+
+export async function mcpGetConfig(): Promise<McpConfigView> {
+  const viaHost = await hostInvoke<McpConfigView>("mcp_get_config");
+  if (viaHost) return viaHost;
+  // 浏览器降级(单测/纯 dev): 返回同结构, key 为占位 32 hex, installed=false
+  return {
+    TOKEN_WALLET_MCP_KEY: "0".repeat(32),
+    TOKEN_WALLET_PORT: 9131,
+    TOKEN_WALLET_HOST: "127.0.0.1",
+    TOKEN_WALLET_DB_PATH: "~/.local/share/token-wallet/token-wallet.db",
+    USAGE_TTL_DAYS: 90,
+    mcpEnvPath: "(browser-preview)",
+    installed: false,
+  };
+}
+
+/** 生成新 32hex key + atomic 写 mcp.env + (可选) 自动重启 */
+export interface McpGenKeyResult {
+  key: string;
+  /** 后端未持有旧 pid, 重启由 renderer 编排 stop + start; 此字段仅供提示 */
+  daemonWasRunning: boolean;
+}
+
+export async function mcpGenKey(): Promise<McpGenKeyResult> {
+  const viaHost = await hostInvoke<McpGenKeyResult>("mcp_gen_key");
+  if (viaHost) return viaHost;
+  return { key: "0".repeat(32), daemonWasRunning: false };
+}
+
+/** 设置 MCP 开机自启(Q1 联动 OS autostart) */
+export interface McpAutostartView {
+  mcpAutostart: boolean;
+  osAutostart: boolean;
+}
+
+export async function mcpGetAutostart(): Promise<McpAutostartView> {
+  const viaHost = await hostInvoke<McpAutostartView>("mcp_get_autostart");
+  if (viaHost) return viaHost;
+  return { mcpAutostart: true, osAutostart: false };
+}
+
+export async function mcpSetAutostart(enabled: boolean): Promise<McpAutostartView> {
+  const viaHost = await hostInvoke<McpAutostartView>("mcp_set_autostart", { enabled });
+  return viaHost ?? { mcpAutostart: enabled, osAutostart: false };
+}
+
+/** 拉取 daemon GET /guide, daemon 未跑 → 空 agents + reason */
+export interface McpAgentStep {
+  id: string;
+  name: string;
+  plugin_url?: string;
+  docs_url?: string;
+  configure?: string;
+  verify?: string;
+}
+
+export interface McpGuideResult {
+  agents: McpAgentStep[];
+  reason?: "daemon_not_running" | "fetch_failed";
+}
+
+export async function mcpGetGuide(): Promise<McpGuideResult> {
+  const viaHost = await hostInvoke<McpGuideResult>("mcp_get_guide");
+  if (viaHost) return viaHost;
+  return { agents: [], reason: "daemon_not_running" };
+}
+
+/** UI 遮罩(纯客户端, 4-••••-••••-••••-末4; 短串全遮) */
+export function maskMcpKey(key: string): string {
+  if (key.length <= 12) return "•".repeat(key.length);
+  return `${key.slice(0, 4)}-••••-••••-••••-${key.slice(-4)}`;
+}
