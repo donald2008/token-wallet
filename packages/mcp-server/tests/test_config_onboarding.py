@@ -109,6 +109,16 @@ class TestResolveConfig:
         assert cfg["port"] == 9200
         assert cfg["key"] == "fromenv"
 
+    def test_db_path_tilde_expanded_from_process_env(self, tmp_path, monkeypatch, clean_env):
+        # app 托管 spawn 恒走 env 传 DB_PATH(~ 形态): env 来源同样要展开,
+        # 否则 Windows 字面 ~ 目录打不开库 (t_da2fd1f1 实修)
+        p = tmp_path / "mcp.env"
+        p.write_text("TOKEN_WALLET_MCP_KEY=k1\n", encoding="utf-8")
+        monkeypatch.setenv("TOKEN_WALLET_MCP_ENV_PATH", str(p))
+        monkeypatch.setenv("TOKEN_WALLET_DB_PATH", "~/.local/share/token-wallet/token-wallet.db")
+        cfg = config_mod.resolve_config()
+        assert cfg["db_path"] == str(Path.home() / ".local/share/token-wallet/token-wallet.db")
+
     def test_fatal_exit_when_no_key_anywhere(self, tmp_path, monkeypatch, clean_env):
         p = tmp_path / "mcp.env"
         p.write_text("TOKEN_WALLET_PORT=9131\n", encoding="utf-8")

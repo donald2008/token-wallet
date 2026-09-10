@@ -82,9 +82,13 @@ def resolve_config(
         )
         sys.exit(1)
 
+    # db_path 的 ~ / $VAR 展开对 env 来源同样生效: app 托管 spawn 恒走 env 传
+    # DB_PATH(~ 形态, app DEFAULT_MCP_ENV 缺省), Windows 上字面 ~ 目录会打不开库。
+    db_path = os.path.expandvars(os.path.expanduser(str(pick("TOKEN_WALLET_DB_PATH", str(_default_db_path())))))
+
     return {
         "key": str(key),
-        "db_path": str(pick("TOKEN_WALLET_DB_PATH", str(_default_db_path()))),
+        "db_path": db_path,
         "ttl_days": int(pick("USAGE_TTL_DAYS", DEFAULT_TTL_DAYS)),
         "host": str(pick("TOKEN_WALLET_HOST", DEFAULT_HOST)),
         "port": int(pick("TOKEN_WALLET_PORT", DEFAULT_PORT)),
