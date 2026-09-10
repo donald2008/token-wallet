@@ -216,12 +216,32 @@ th {{ background: #f8f8f8; }}
 </html>"""
 
 
+def _display_host(host: str) -> str:
+    """通配 bind(0.0.0.0/::)不是可访问地址 — /guide 展示时解析局域网 IPv4 (t_da2fd1f1 U6)。
+
+    app 侧 mcp-ipc/mcp-address 已同款处理(daemon 侧兜底: 直连 /guide 的场景)。
+    """
+    if host.strip("[]").lower() not in ("0.0.0.0", "::", "0:0:0:0:0:0:0:0"):
+        return host
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))  # 不实际发包, 仅取路由源地址
+            return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+
+
 async def guide_endpoint(request: Request) -> Response:
     """GET /guide — 与 get_onboarding_guide 工具同一数据源。
 
     Accept: text/html → HTML 步骤页; 其余 (application/json) → JSON。
     """
-    endpoint = f"http://{request.app.state.guide_host}:{request.app.state.guide_port}/mcp"
+    endpoint = (
+        f"http://{_display_host(request.app.state.guide_host)}:"
+        f"{request.app.state.guide_port}/mcp"
+    )
     guide = onboarding.onboarding_guide(endpoint)
     if "text/html" in request.headers.get("accept", ""):
         return HTMLResponse(_render_guide_html(guide))

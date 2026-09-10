@@ -43,6 +43,7 @@ import {
   type UsageSummaryInput,
   type UsageSummaryOutput,
 } from "./mcp-query";
+import { connectHost, displayHost } from "./mcp-address";
 import { loadMcpEnv, regenerateKey } from "./mcp-env";
 import { readMcpAutostart, resolveOsAutostart, writeMcpAutostart } from "./mcp-autostart";
 import type { StoragePaths } from "./paths";
@@ -107,7 +108,9 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
     const installed = isInstalledFn(paths, deps.platform, deps.isPackaged, deps.appRoot);
     if (!installed) return { alive: false, reason: "unreachable", installed: false };
     const cfg = loadMcpEnv(configDir());
-    const r = await probeFn({ host: cfg.TOKEN_WALLET_HOST, port: cfg.TOKEN_WALLET_PORT }, http);
+    // t_da2fd1f1 U6: HOST 是 bind 地址 — 通配(0.0.0.0/::)不能作 connect 目标(Windows 挂起超时),
+    // 连接侧统一归一 127.0.0.1(通配 bind 必含 loopback)
+    const r = await probeFn({ host: connectHost(cfg.TOKEN_WALLET_HOST), port: cfg.TOKEN_WALLET_PORT }, http);
     return { ...r, installed: true };
   });
 
@@ -116,11 +119,13 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
     const cfg = loadMcpEnv(configDir());
     return startFn(
       {
+        // U6: start 里 spawn env 的 HOST 保留 cfg 原值(bind 语义), 但就绪 probe 走归一 connect 地址
         host: cfg.TOKEN_WALLET_HOST,
         port: cfg.TOKEN_WALLET_PORT,
         key: cfg.TOKEN_WALLET_MCP_KEY,
         dbPath: cfg.TOKEN_WALLET_DB_PATH,
         ttlDays: cfg.USAGE_TTL_DAYS,
+        connectAddress: connectHost(cfg.TOKEN_WALLET_HOST),
       },
       spawn,
       http,
@@ -141,7 +146,7 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
       const pid = Number(payload?.pid ?? 0) || getLastStartedPid() || 0;
       if (!pid) {
         const r = await probeFn(
-          { host: cfg.TOKEN_WALLET_HOST, port: cfg.TOKEN_WALLET_PORT },
+          { host: connectHost(cfg.TOKEN_WALLET_HOST), port: cfg.TOKEN_WALLET_PORT },
           http,
         );
         if (!r.alive) return { stopped: true };
@@ -152,7 +157,7 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
         pid,
         spawn,
         http,
-        { host: cfg.TOKEN_WALLET_HOST, port: cfg.TOKEN_WALLET_PORT },
+        { host: connectHost(cfg.TOKEN_WALLET_HOST), port: cfg.TOKEN_WALLET_PORT },
         deps.platform,
       );
     },
@@ -174,7 +179,7 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
           pid,
           spawn,
           http,
-          { host: cfg.TOKEN_WALLET_HOST, port: cfg.TOKEN_WALLET_PORT },
+          { host: connectHost(cfg.TOKEN_WALLET_HOST), port: cfg.TOKEN_WALLET_PORT },
           deps.platform,
         );
         stoppedOk = r.stopped;
@@ -188,6 +193,7 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
           key: cfg.TOKEN_WALLET_MCP_KEY,
           dbPath: cfg.TOKEN_WALLET_DB_PATH,
           ttlDays: cfg.USAGE_TTL_DAYS,
+          connectAddress: connectHost(cfg.TOKEN_WALLET_HOST),
         },
         spawn,
         http,
@@ -215,6 +221,8 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
       TOKEN_WALLET_HOST: cfg.TOKEN_WALLET_HOST,
       TOKEN_WALLET_DB_PATH: cfg.TOKEN_WALLET_DB_PATH,
       USAGE_TTL_DAYS: cfg.USAGE_TTL_DAYS,
+      // U6: 通配 bind 时 UI 展示局域网 IPv4(bind 0.0.0.0 不是可访问地址)
+      displayEndpoint: `http://${displayHost(cfg.TOKEN_WALLET_HOST)}:${cfg.TOKEN_WALLET_PORT}/mcp`,
       mcpEnvPath: path.join(configDir(), "mcp.env"),
       installed: isInstalledFn(paths, deps.platform, deps.isPackaged, deps.appRoot),
     };
@@ -227,7 +235,7 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
     const cfg = loadMcpEnv(configDir());
     const newKey = regenerateKey(configDir());
     const probeResult = await probeFn(
-      { host: cfg.TOKEN_WALLET_HOST, port: cfg.TOKEN_WALLET_PORT },
+      { host: connectHost(cfg.TOKEN_WALLET_HOST), port: cfg.TOKEN_WALLET_PORT },
       http,
     );
     return { key: newKey, daemonWasRunning: probeResult.alive };
@@ -268,7 +276,7 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
   ipcMain.handle("mcp_get_guide", async () => {
     const cfg = loadMcpEnv(configDir());
     const probeR = await probeFn(
-      { host: cfg.TOKEN_WALLET_HOST, port: cfg.TOKEN_WALLET_PORT },
+      { host: connectHost(cfg.TOKEN_WALLET_HOST), port: cfg.TOKEN_WALLET_PORT },
       http,
     );
     if (!probeR.alive) return { agents: [], reason: "daemon_not_running" as const };
@@ -276,7 +284,7 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 3000);
       try {
-        const url = `http://${cfg.TOKEN_WALLET_HOST}:${cfg.TOKEN_WALLET_PORT}/guide`;
+        const url = `http://${connectHost(cfg.TOKEN_WALLET_HOST)}:${cfg.TOKEN_WALLET_PORT}/guide`;
         const resp = await fetch(url, { signal: ctrl.signal });
         if (!resp.ok) return { agents: [], reason: "fetch_failed" as const };
         const data = (await resp.json()) as { agents?: unknown };

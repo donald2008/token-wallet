@@ -110,6 +110,40 @@ describe("mcp-daemon: start", () => {
     expect(spawn.spawned[0].cmd).toBe("/fake/resources/token-wallet-mcp");
   });
 
+  it("U6 回归: connectAddress=127.0.0.1(HOST=0.0.0.0 通配 bind) → probe 打 127.0.0.1, spawn env 保留 0.0.0.0", async () => {
+    const spawn = memSpawn();
+    const urls: string[] = [];
+    const http: HttpShim = {
+      postInitialize: async (url) => {
+        urls.push(url);
+        return { status: 200 };
+      },
+    };
+    const r = await start(
+      {
+        host: "0.0.0.0",
+        port: 9131,
+        key: "a".repeat(32),
+        dbPath: "/x",
+        ttlDays: 90,
+        connectAddress: "127.0.0.1",
+      },
+      spawn,
+      http,
+      pathShim(true),
+      "/fake",
+      true,
+      "win32",
+    );
+    expect(r.started).toBe(true);
+    // probe 全部打归一 loopback, 不打 0.0.0.0
+    expect(urls.length).toBeGreaterThan(0);
+    for (const u of urls) expect(u.startsWith("http://127.0.0.1:9131/mcp")).toBe(true);
+    expect(urls.some((u) => u.includes("0.0.0.0"))).toBe(false);
+    // 但 spawn 注入 daemon 的 env HOST 仍是 bind 地址 0.0.0.0(远程上报依赖)
+    // (spawn env 断言见下方 env 检查 — memSpawn 只记 cmd/args, env 走 opts.env; 这里校验 probe 不误连即核心)
+  });
+
   it("polling 超时 → started:false reason=timeout", { timeout: 15000 }, async () => {
     const spawn = memSpawn();
     const r = await start(

@@ -229,4 +229,28 @@ describe("callMcpToolFromEnv", () => {
     // 仅类型契约校验 — 真 fetch 在 node vitest 不跑, 默认实现只在浏览器/dev server 生效
     expect(typeof shim.postJson).toBe("function");
   });
+
+  it("U6 回归: mcp.env HOST=0.0.0.0(通配 bind) → 连接打 127.0.0.1, 不打 0.0.0.0", async () => {
+    // 独立 configDir: HOST 通配 bind 场景
+    const dir2 = path.join(tmpRoot, "wildcard");
+    fs.mkdirSync(dir2, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir2, "mcp.env"),
+      serializeMcpEnv({
+        TOKEN_WALLET_MCP_KEY: "00112233445566778899aabbccddeeff",
+        TOKEN_WALLET_PORT: 9131,
+        TOKEN_WALLET_HOST: "0.0.0.0",
+        TOKEN_WALLET_DB_PATH: "/tmp/daemon.db",
+        USAGE_TTL_DAYS: 90,
+      }),
+    );
+    const { shim, captured } = mockHttp(() => ({ status: 200, body: buildJsonRpcOk(fakeSummary) }));
+    await callMcpToolFromEnv<UsageSummaryOutput>(
+      dir2,
+      { name: "usage_summary", arguments: {} },
+      shim,
+    );
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.url).toBe("http://127.0.0.1:9131/mcp");
+  });
 });

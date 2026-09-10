@@ -155,8 +155,11 @@ export function McpServicePanel({ onGuideOpen }: Props) {
     return t("set.mcpStatusProbe");
   };
 
+  // t_da2fd1f1 U6: 显示地址由主进程解析 — 通配 bind(0.0.0.0/::)展示局域网 IPv4,
+  // 否则原样(127.0.0.1 等维持现状); browser 降级时兜底 127.0.0.1
   const endpoint = config
-    ? `http://${config.TOKEN_WALLET_HOST}:${config.TOKEN_WALLET_PORT}/mcp`
+    ? (config.displayEndpoint ??
+      `http://${config.TOKEN_WALLET_HOST}:${config.TOKEN_WALLET_PORT}/mcp`)
     : "http://127.0.0.1:9131/mcp";
 
   return (

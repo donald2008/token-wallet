@@ -509,6 +509,8 @@ export interface McpConfigView {
   TOKEN_WALLET_HOST: string;
   TOKEN_WALLET_DB_PATH: string;
   USAGE_TTL_DAYS: number;
+  /** U6: UI 展示用 endpoint — HOST=通配 bind 时已解析为局域网 IPv4 */
+  displayEndpoint?: string;
   mcpEnvPath: string;
   installed: boolean;
 }
@@ -523,6 +525,7 @@ export async function mcpGetConfig(): Promise<McpConfigView> {
     TOKEN_WALLET_HOST: "127.0.0.1",
     TOKEN_WALLET_DB_PATH: "~/.local/share/token-wallet/token-wallet.db",
     USAGE_TTL_DAYS: 90,
+    displayEndpoint: "http://127.0.0.1:9131/mcp",
     mcpEnvPath: "(browser-preview)",
     installed: false,
   };

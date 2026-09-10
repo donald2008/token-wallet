@@ -17,6 +17,7 @@
  * 纯逻辑零 electron 依赖 — http 行为经 HttpShim 注入,便于 node vitest 单测
  * (mock 200/401/网络失败)。所有副作用都走 shim。
  */
+import { connectHost } from "./mcp-address";
 import { loadMcpEnv } from "./mcp-env";
 
 export type {
@@ -184,7 +185,8 @@ export async function callMcpToolFromEnv<T>(
 ): Promise<McpCallToolResult<T>> {
   const cfg = loadMcpEnv(configDir);
   return callMcpTool<T>(
-    { host: cfg.TOKEN_WALLET_HOST, port: cfg.TOKEN_WALLET_PORT, key: cfg.TOKEN_WALLET_MCP_KEY },
+    // U6: HOST=bind 地址, 通配(0.0.0.0/::)不能作 connect 目标 → 归一 loopback
+    { host: connectHost(cfg.TOKEN_WALLET_HOST), port: cfg.TOKEN_WALLET_PORT, key: cfg.TOKEN_WALLET_MCP_KEY },
     input,
     http,
     opts,

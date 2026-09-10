@@ -138,7 +138,15 @@ export async function probe(
 
 /** spawn detached + polling health 至绿(超时返回 alive:false reason=timeout) */
 export async function start(
-  cfg: { host: string; port: number; key: string; dbPath: string; ttlDays: number },
+  cfg: {
+    host: string;
+    port: number;
+    key: string;
+    dbPath: string;
+    ttlDays: number;
+    /** 就绪 probe 的连接地址(U6): HOST=通配 bind 时传 127.0.0.1; 缺省归一 host 本身 */
+    connectAddress?: string;
+  },
   spawn: SpawnShim,
   http: HttpShim,
   paths: PathShim,
@@ -167,10 +175,11 @@ export async function start(
   child.unref();
   const pid = child.pid;
 
-  // polling health
+  // polling health — probe 打归一 connect 地址(通配 bind 的 0.0.0.0 不能作 connect 目标, U6)
+  const probeHost = cfg.connectAddress ?? cfg.host;
   const deadline = Date.now() + DEFAULT_START_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const r = await probe({ host: cfg.host, port: cfg.port }, http, DEFAULT_PROBE_TIMEOUT_MS);
+    const r = await probe({ host: probeHost, port: cfg.port }, http, DEFAULT_PROBE_TIMEOUT_MS);
     if (r.alive) {
       lastStartedPid = pid; // 缓存最新成功 pid, 用于 stop 无 pid 路径(BLOCKING-1)
       return { started: true, pid };
