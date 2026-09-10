@@ -78,9 +78,14 @@ TOKEN_WALLET_HOST=127.0.0.1
     expect(p.TOKEN_WALLET_HOST).toBe("127.0.0.1");
   });
 
-  it("parse 拒绝非 32 hex 的 key", () => {
+  it("parse 拒绝非 hex 长度越界的 key", () => {
     const text = "TOKEN_WALLET_MCP_KEY=tooshort\n";
     expect(parseMcpEnv(text).TOKEN_WALLET_MCP_KEY).toBeUndefined();
+  });
+
+  it("parse 收 64 hex key (openssl rand -hex 32 兼容, t_da2fd1f1)", () => {
+    const text = "TOKEN_WALLET_MCP_KEY=" + "ab".repeat(32) + "\n";
+    expect(parseMcpEnv(text).TOKEN_WALLET_MCP_KEY).toBe("ab".repeat(32));
   });
 
   it("parse 拒绝非法端口", () => {

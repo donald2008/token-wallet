@@ -58,7 +58,7 @@ export function parseMcpEnv(text: string): Partial<McpEnvConfig> {
     if (key) out[key] = val;
   }
   const result: Partial<McpEnvConfig> = {};
-  if (typeof out.TOKEN_WALLET_MCP_KEY === "string" && /^[0-9a-f]{32}$/i.test(out.TOKEN_WALLET_MCP_KEY)) {
+  if (typeof out.TOKEN_WALLET_MCP_KEY === "string" && /^[0-9a-f]{32,64}$/i.test(out.TOKEN_WALLET_MCP_KEY)) {
     result.TOKEN_WALLET_MCP_KEY = out.TOKEN_WALLET_MCP_KEY;
   }
   if (typeof out.TOKEN_WALLET_PORT === "string") {
