@@ -81,9 +81,16 @@ def kind_from_platform(platform: str) -> str:
 
 
 def raise_if_envelope_error(result: Any) -> None:
-    """MCP 信封级 tool error(空批/超100条/顶层多字段)以 isError 文本返回不抛异常;
-    不检查会被当成功 → 整批静默丢失(违反 spec §2.1 语义6 整批重发)。"""
-    if getattr(result, "isError", False):
+    """MCP 信封级 tool error(空批/超100条/顶层多字段)以 is_error 文本返回不抛异常;
+    不检查会被当成功 → 整批静默丢失(违反 spec §2.1 语义6 整批重发)。
+
+    真模型字段 = CallToolResult.is_error (mcp pydantic v2 实测);
+    兼容 stub 的 isError 形态。两者都缺席视为 False。
+    """
+    is_err = getattr(result, "is_error", None)
+    if is_err is None:
+        is_err = getattr(result, "isError", False)
+    if is_err:
         text = "".join(getattr(c, "text", "") for c in (getattr(result, "content", None) or []))
         raise RuntimeError(f"report_usage envelope error: {text[:500]}")
 
