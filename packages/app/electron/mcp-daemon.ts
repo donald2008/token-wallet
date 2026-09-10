@@ -29,8 +29,9 @@ export interface HttpShim {
   /**
    * 实际请求 MCP initialize。返回 {status} 或 throw 表示网络错/超时。
    * 卡体钉死 POST /mcp initialize → 200 即活, 其他/抛错 = 不活。
+   * key: Bearer 鉴权头 — daemon 全额鉴权不豁免 loopback(含 initialize), 无 key 401 (t_da2fd1f1 U6b)。
    */
-  postInitialize: (url: string, timeoutMs: number) => Promise<{ status: number }>;
+  postInitialize: (url: string, timeoutMs: number, key?: string) => Promise<{ status: number }>;
 }
 
 export interface PathShim {
@@ -42,6 +43,8 @@ export interface PathShim {
 export interface ProbeOptions {
   host: string;
   port: number;
+  /** Bearer key — daemon 鉴权面不豁免 initialize, 无 key 401 (t_da2fd1f1 U6b) */
+  key?: string;
   /** 探测超时(ms), 默认 1500 */
   timeoutMs?: number;
 }
@@ -128,7 +131,7 @@ export async function probe(
   const url = `http://${opts.host}:${opts.port}/mcp`;
   const start = Date.now();
   try {
-    const res = await http.postInitialize(url, timeoutMs);
+    const res = await http.postInitialize(url, timeoutMs, opts.key);
     if (res.status === 200) return { alive: true, latencyMs: Date.now() - start };
     return { alive: false, reason: "handshake_failed" };
   } catch {
@@ -179,7 +182,7 @@ export async function start(
   const probeHost = cfg.connectAddress ?? cfg.host;
   const deadline = Date.now() + DEFAULT_START_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const r = await probe({ host: probeHost, port: cfg.port }, http, DEFAULT_PROBE_TIMEOUT_MS);
+    const r = await probe({ host: probeHost, port: cfg.port, key: cfg.key }, http, DEFAULT_PROBE_TIMEOUT_MS);
     if (r.alive) {
       lastStartedPid = pid; // 缓存最新成功 pid, 用于 stop 无 pid 路径(BLOCKING-1)
       return { started: true, pid };
@@ -202,14 +205,14 @@ export async function stop(
   pid: number,
   spawn: SpawnShim,
   http: HttpShim,
-  cfg: { host: string; port: number },
+  cfg: { host: string; port: number; key?: string },
   platform: NodeJS.Platform = process.platform,
 ): Promise<{ stopped: boolean; reason?: string }> {
   const isWin = platform === "win32";
   // 先 SIGTERM/taskkill, 然后等 1.5s, 再 probe 确认真死
   await spawn.killTree(pid, isWin ? "TASKKILL" : "SIGTERM");
   await spawn.wait(1500);
-  const r = await probe({ host: cfg.host, port: cfg.port }, http, DEFAULT_PROBE_TIMEOUT_MS);
+  const r = await probe({ host: cfg.host, port: cfg.port, key: cfg.key }, http, DEFAULT_PROBE_TIMEOUT_MS);
   if (!r.alive) {
     if (lastStartedPid === pid) lastStartedPid = undefined; // 真停成功, 清缓存(BLOCKING-1)
     return { stopped: true };
@@ -217,7 +220,7 @@ export async function stop(
   // 还没死 → 强杀兜底
   await spawn.killTree(pid, isWin ? "TASKKILL" : "SIGKILL");
   await spawn.wait(500);
-  const r2 = await probe({ host: cfg.host, port: cfg.port }, http, DEFAULT_PROBE_TIMEOUT_MS);
+  const r2 = await probe({ host: cfg.host, port: cfg.port, key: cfg.key }, http, DEFAULT_PROBE_TIMEOUT_MS);
   if (!r2.alive) {
     if (lastStartedPid === pid) lastStartedPid = undefined; // 强杀成功, 清缓存
     return { stopped: true };
