@@ -9,7 +9,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AgentCard, AgentCardEmpty } from "./AgentCard";
+import { AgentCard, AgentCardEmpty, formatTokens } from "./AgentCard";
 import type { SummaryRow } from "../mcpQueryTypes";
 
 const baseRow = (over: Partial<SummaryRow> = {}): SummaryRow => ({
@@ -161,6 +161,33 @@ describe("AgentCard", () => {
     const meta = c.querySelector('[data-testid="agent-meta"]');
     expect(meta?.textContent).toMatch(/calls\s*100/);
     expect(meta?.textContent).toMatch(/2026-09-09T12:00:00\+08:00/);
+  });
+});
+
+describe("formatTokens 边界(t_f26c5fb8: K/M 简写分支已删, 一律 Intl.NumberFormat 千分位全数字)", () => {
+  it.each([
+    [0, "0"], // 下界: 零不显示 0.0K
+    [999, "999"], // 千位以下: 无分隔符
+    [1000, "1,000"], // 千位边界: 首个分隔符, 不是 1K
+    [4474000, "4,474,000"], // 任务卡样例: 9 位完整数字, 不是 4.5M
+    [1455000000, "1,455,000,000"], // 十亿级: 极大值仍完整展开
+    [-42, "-42"], // 负数(异常数据)不炸, 忠实展示
+  ])("formatTokens(%i) → %s", (input, expected) => {
+    expect(formatTokens(input)).toBe(expected);
+  });
+
+  it("任意 ≥1000 值不含 K/M 简写后缀(负向断言)", () => {
+    for (const n of [1000, 1500, 999999, 1000000, 4474000, 1000000000]) {
+      expect(formatTokens(n)).not.toMatch(/\d+(\.\d+)?[KM]\b/);
+    }
+  });
+
+  it("agent-tokens 行 title 保留完整数字(悬停兜底,勿删)", () => {
+    const { container: c } = mount(
+      <AgentCard agentId="x" row={baseRow()} activity="active" generatedAt="" onOpenDetail={() => {}} />,
+    );
+    const tokens = c.querySelector('[data-testid="agent-tokens"]');
+    expect(tokens?.getAttribute("title")).toBe("64,000 tokens");
   });
 });
 
