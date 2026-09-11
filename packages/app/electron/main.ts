@@ -23,6 +23,7 @@
  * 通道用于 key regen 后真实停启 daemon(BLOCKING-1 修复)。
  */
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from "electron";
+import type { IpcMainInvokeEvent } from "electron";
 import { autoUpdater } from "electron-updater";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -106,8 +107,9 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 /** 托盘菜单"退出"置位后才允许真退出; 否则关闭按钮=隐藏到托盘(D-003) */
 let allowQuit = false;
-/** t_4b7984d9 C: Agent 用量详情大屏独立窗口(900×600, frame:false transparent), 复用主窗口
- *  preload + preload 同形态(只走 invoke / on 桥)。singleton: 已开则聚焦不重开。 */
+/** t_185002af: Agent 用量详情大屏独立窗口单例。D-024 家族观感(frame:false +
+ *  transparent:true, .panel 悬浮圆角卡片同源), URL 携带 ?view=agent-dashboard&standalone=1。
+ *  singleton: 已开则聚焦不重开。 */
 let agentDashboardWindow: BrowserWindow | null = null;
 
 function showMainWindow(): void {
@@ -201,22 +203,22 @@ function createWindow(): void {
   }
 }
 
-/** t_4b7984d9 C round-2 P1 fix: 打开 Agent 用量详情大屏独立窗口(900×600, 系统边框先交付)。
- *  URL 携带 ?view=agent-dashboard query param, 渲染层 App.tsx 启动 useEffect 据此 setView。
- *  singleton: 已开则聚焦不重开。
- *  设计取舍: 任务拍板"撞无边框/拖拽/主题问题, 最小可用优先(带系统边框先交付, 标注后续美化)",
- *  故采用 frame:true + transparent:false 默认配置, 窗口自带最小化/最大化/关闭按钮。
- *  后续若需 D-024 家族无边框透明观感再迭代, 但当前卡先保证用户能关窗。 */
+/** t_185002af: 大屏详情独立窗口升级 D-024 家族观感 — frame:false + transparent:true +
+ *  thickFrame:false, 与主窗同源(.panel 悬浮圆角卡片, body 透明)。round-1 曾以同组合真壳
+ *  开窗验证过可行性; round-2 暂回系统边框是「最小可用优先」的过渡态, 本卡完成回切。
+ *  拖拽/最小化/关闭由渲染层窗口 chrome(.dash-chrome) 承担: 拖拽走 -webkit-app-region:drag,
+ *  最小化/关闭走既有 win_minimize / win_close IPC(main 进程按 sender 分流到本窗口,
+ *  通道名逐字保全零新增)。URL 携带 ?view=agent-dashboard&standalone=1 双参数,
+ *  渲染层 App.tsx 据此进 dashboard 视图 + 挂独立窗 chrome(返回键语义=关窗)。 */
 function createAgentDashboardWindow(): void {
   if (agentDashboardWindow && !agentDashboardWindow.isDestroyed()) {
     agentDashboardWindow.show();
     agentDashboardWindow.focus();
     return;
   }
-  // t_4b7984d9 round-4 ②: 真壳显示不全修复 — 高度 600→640(原高度含 27px 系统标题栏 + 边框,
-  // 实际内容区仅 ~570px;AgentDashboardC 容器 min-height:600px + 多象限内容超出 ⇒ 底部明细截断)。
-  // useContentSize:true 让 width/height 描述内容区(不含 chrome),Electron 自动加标题栏
-  // autoHideMenuBar 去掉菜单栏横条占高
+  // t_4b7984d9 round-4 ②: 高度 640(原 600 内容区仅 ~570 底部截断), useContentSize 让
+  // width/height 描述内容区; autoHideMenuBar 去掉菜单栏横条占高。无边框窗本无菜单/标题栏,
+  // 保留这三项配置对 frame:false 无副作用, 后续若回退系统边框仍是正确形态。
   agentDashboardWindow = new BrowserWindow({
     width: 900,
     height: 640,
@@ -226,7 +228,10 @@ function createAgentDashboardWindow(): void {
     minWidth: 600,
     minHeight: 480,
     maximizable: true,
-    // t_4b7984d9 round-2 P1 fix: 删 frame:false / transparent:true / thickFrame:false — 走系统边框。
+    // t_185002af: D-024 家族无边框透明观感(与主窗 createWindow 同源组合)。
+    frame: false,
+    transparent: true,
+    thickFrame: false,
     title: "token-wallet · Agent 用量详情",
     parent: mainWindow ?? undefined, // 隶属主窗口, 主窗最小化/隐藏不影响 dashboard
     webPreferences: {
@@ -272,10 +277,11 @@ function createAgentDashboardWindow(): void {
   if (isDev) {
     const url = new URL(process.env.ELECTRON_RENDERER_URL as string);
     url.searchParams.set("view", "agent-dashboard");
+    url.searchParams.set("standalone", "1");
     void agentDashboardWindow.loadURL(url.toString());
   } else {
     void agentDashboardWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"), {
-      search: "?view=agent-dashboard",
+      search: "?view=agent-dashboard&standalone=1",
     });
   }
 }
@@ -354,12 +360,22 @@ function registerIpc(): void {
     tray.setToolTip(String(payload?.tooltip ?? "token-wallet"));
   });
 
-  // 窗口控制: HTML TitleBar 的 min/close(E1 新增)
-  ipcMain.handle("win_minimize", () => {
-    mainWindow?.minimize();
+  // 窗口控制: HTML TitleBar 的 min/close(E1 新增)。
+  // t_185002af: sender-aware — 调用方窗口自己受效(主窗 TitleBar / dashboard 独立窗
+  // .dash-chrome 都走这两个通道, channel 名逐字保全零新增)。无 sender(异常)回退主窗,
+  // 保持旧行为兼容。
+  ipcMain.handle("win_minimize", (event: IpcMainInvokeEvent) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+    win?.minimize();
   });
-  ipcMain.handle("win_close", () => {
-    mainWindow?.hide(); // 关闭 = 隐藏到托盘(D-003)
+  ipcMain.handle("win_close", (event: IpcMainInvokeEvent) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+    if (!win) return;
+    if (win === mainWindow) {
+      win.hide(); // 主窗关闭 = 隐藏到托盘(D-003)
+    } else {
+      win.close(); // 其他窗(dashboard 独立窗)关闭 = 直接销毁(不挂托盘)
+    }
   });
 
   // 窗口置顶开关(P1): 用户可切换, 默认关; 切换即 RMW 落 settings.json(重启不丢)。

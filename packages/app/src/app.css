@@ -2679,6 +2679,38 @@ body {
   box-sizing: border-box;
   overflow-y: auto;
 }
+
+/* ---- t_185002af: 独立大屏窗口自绘 chrome(无边框窗拖拽条 + 最小化/关闭) ----
+ * 仅 standalone(主进程开的 900×640 无边框透明窗)渲染此条; 主窗内嵌/e2e/浏览器不渲染。
+ * 拖拽区=整条(.dash-chrome), 按钮经 .btn no-drag 排除 — 与主窗 .titlebar 同语法。
+ * 32px 高(var(--space-32))+ 1px 下缘, 与主窗标题栏同族克制观感(D-024 家族)。 */
+.dash-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap, 8px);
+  height: var(--space-32, 32px);
+  padding: 0 var(--space-12, 12px);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  flex: 0 0 auto;
+  /* 无边框窗: 整条可拖拽, 交互控件经 .btn 排除 */
+  -webkit-app-region: drag;
+}
+.dash-chrome .btn {
+  -webkit-app-region: no-drag;
+}
+.dash-chrome-title {
+  font-size: var(--font-12, 12px);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.dash-chrome .spacer {
+  flex: 1;
+  min-width: 0;
+}
 .agent-dashboard-c-head {
   display: flex;
   align-items: center;

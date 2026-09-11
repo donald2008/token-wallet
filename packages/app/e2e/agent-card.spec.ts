@@ -8,7 +8,7 @@
  * - 大屏断连空态 + 返回按钮
  */
 import { expect, expect as pwExpect } from "@playwright/test";
-import { test, seedAgentUsage } from "./fixtures";
+import { test, seedAgentUsage, getCapturedInvokes } from "./fixtures";
 
 const fakeSummary = {
   window: {
@@ -431,4 +431,62 @@ test("P0 query param 自动跳转: ?view=agent-dashboard → 直入 AgentDashboa
   await pwExpect(
     page.getByRole("button", { name: /返回|back|主页/i }),
   ).toBeVisible({ timeout: 5000 });
+});
+
+/** t_185002af 门禁 1: standalone=1 → 大屏直入 + 自绘窗口 chrome 渲染。
+ *  主进程 createAgentDashboardWindow 载入 ?view=agent-dashboard&standalone=1,
+ *  App.tsx 读 standalone 进 dashboard 视图并挂 .dash-chrome(无边框窗拖拽条 +
+ *  最小化/关闭钮); 主窗内嵌/e2e 路径无 standalone, chrome 不渲染。 */
+test("t_185002af standalone: 直入大屏 + dash-chrome 渲染 + 主窗路径不渲染 chrome", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  await seedAgentUsage(page, { ok: true, data: fakeSummary });
+  // 等同 main.ts 独立窗口 loadFile({search:"?view=agent-dashboard&standalone=1"})
+  await page.goto("?view=agent-dashboard&standalone=1");
+  // 大屏直入
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  // 自绘窗口 chrome 三件套在位
+  await pwExpect(page.getByTestId("dash-chrome")).toBeVisible();
+  await pwExpect(page.getByTestId("dash-chrome-min")).toBeVisible();
+  await pwExpect(page.getByTestId("dash-chrome-close")).toBeVisible();
+  // 反向: 同页签去 standalone 回主页路径, chrome 不渲染(主窗内嵌形态不受影响)
+  await page.goto("?view=agent-dashboard");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  await pwExpect(page.getByTestId("dash-chrome")).toHaveCount(0);
+});
+
+/** t_185002af 门禁 2: 独立窗返回键语义 = 关窗(win_close), 主窗路径 = 切页视图。
+ *  无边框独立窗没有系统关闭钮, 「← 返回」必须走 win_close(主进程 sender-aware
+ *  销毁 dashboard 窗); 非 standalone 保持 setView 回主页原语义(e2e 全量依赖)。 */
+test("t_185002af 返回键语义分流: standalone→win_close, 主窗→切页视图", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  await seedAgentUsage(page, { ok: true, data: fakeSummary });
+
+  // standalone: 大屏「← 返回」→ invoke win_close(关窗), 页面不切回主页视图
+  await page.goto("?view=agent-dashboard&standalone=1");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  await page.getByTestId("agent-dashboard-c-back").click();
+  const invokes = await getCapturedInvokes(page);
+  expect(
+    invokes.some((c) => c.cmd === "win_close"),
+    "standalone 返回键必须触发 win_close(关窗语义)",
+  ).toBe(true);
+
+  // 非 standalone(主窗内嵌/e2e 默认): 「← 返回」→ 回主页(视图切换语义不变)
+  await page.goto("?view=agent-dashboard");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  await page.getByTestId("agent-dashboard-c-back").click();
+  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
+  const invokes2 = await getCapturedInvokes(page);
+  expect(
+    invokes2.some((c) => c.cmd === "win_close"),
+    "主窗路径返回键不得触发 win_close(应走视图切换)",
+  ).toBe(false);
 });

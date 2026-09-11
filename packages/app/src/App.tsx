@@ -11,8 +11,10 @@ import {
   persistConsent,
   setSortConfig as persistSortConfig,
   updateTrayStatus,
+  winClose,
   winGetAlwaysOnTop,
   winSetAlwaysOnTop,
+  winMinimize,
 } from "./ipc";
 import { selectPanelProviders } from "./panelProviders";
 import type { ScenarioId } from "./mockData";
@@ -119,6 +121,10 @@ function AppShell() {
   // t_4b7984d9 round-2 P0 fix: 独立窗口 query param 自动跳转。 main.ts createAgentDashboardWindow
   // 在 loadURL/loadFile 写入 ?view=agent-dashboard, 渲染层启动读 window.location.search 据此 setView。
   // 浏览器路径(主窗 / e2e)无此 param, view 保持初始 panel 不受影响。
+  // t_185002af: standalone=1 = 主进程开的无边框独立窗(D-024 家族观感)。独立窗没有系统
+  // 标题栏, 渲染层自绘窗口 chrome(dash-chrome: 拖拽条 + ◨/✕); 返回键语义=关窗(win_close
+  // 主进程 sender-aware 按 sender 销毁 dashboard 窗)。主窗与 e2e/浏览器路径恒 false。
+  const [standalone, setStandalone] = useState(false);
   useEffect(() => {
     try {
       const sp = new URLSearchParams(window.location.search);
@@ -126,6 +132,7 @@ function AppShell() {
       if (v === "agent-dashboard" || v === "add" || v === "quota" || v === "panel") {
         setView(v);
       }
+      if (sp.get("standalone") === "1") setStandalone(true);
     } catch {
       // 解析失败 fallback 初始 panel, 不阻塞渲染
     }
@@ -370,6 +377,18 @@ function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [settingsOpen, addOpen, closeSettings, closeAddModal]);
 
+  // t_185002af: 大屏返回键语义分流(standalone=关窗, 否则=切页视图)。
+  // ⚠️ 必须挂在所有早退 return 之前(Rules of Hooks) — consent/向导/方案页分支
+  // 都会提前 return, hook 若在其后首次渲染(未 consent)不会被调用, 下次渲染钩子数
+  // 变化直接崩整个 App(e2e 全量红的第一现场)。
+  const dashboardBack = useCallback(() => {
+    if (standalone) {
+      void winClose();
+      return;
+    }
+    setView("panel");
+  }, [standalone]);
+
   if (!bootstrap) {
     return (
       <div className="panel">
@@ -418,14 +437,44 @@ function AppShell() {
 
   // t_9255cb63: 大屏方案 C — 主页 Agent 卡点 [详情→] 触发。需要 usage_summary 真数据,
   // daemon 未连时降级提示(不静默吞成 0, 任务卡边界)。
+  // t_185002af: standalone=true 时本视图跑在主进程开的无边框独立窗里(900×640),
+  // 返回键语义 = 关窗(win_close, main 进程 sender-aware 销毁本窗); 非 standalone
+  // (主窗内嵌 / e2e / 浏览器)维持 setView 切页视图原语义(dashboardBack 定义在上方
+  // 早退 return 之前, Rules of Hooks)。窗口 chrome 条只在 standalone 挂载。
   if (view === "agent-dashboard") {
     if (mcpSummary.ok) {
       return (
         <div className="panel">
+          {standalone && (
+            <div className="dash-chrome" data-testid="dash-chrome">
+              <span className="dash-chrome-title">Agent 用量详情</span>
+              <span className="spacer" />
+              <button
+                type="button"
+                className="btn btn-icon"
+                data-testid="dash-chrome-min"
+                title="最小化"
+                aria-label="最小化"
+                onClick={() => void winMinimize()}
+              >
+                🗕
+              </button>
+              <button
+                type="button"
+                className="btn btn-icon"
+                data-testid="dash-chrome-close"
+                title="关闭"
+                aria-label="关闭"
+                onClick={() => void winClose()}
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <AgentDashboardC
             summary={mcpSummary.data}
             generatedAt={mcpSummary.generatedAt}
-            onBack={() => setView("panel")}
+            onBack={dashboardBack}
           />
         </div>
       );
@@ -444,7 +493,7 @@ function AppShell() {
           <button
             type="button"
             className="agent-dashboard-c-back"
-            onClick={() => setView("panel")}
+            onClick={dashboardBack}
             data-testid="agent-dashboard-c-empty-back"
           >
             ← 返回
