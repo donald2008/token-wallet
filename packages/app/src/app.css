@@ -2541,11 +2541,20 @@ body {
   flex: 0 0 auto;
 }
 .agent-card-body {
+  /* t_4b7984d9 round-3 (老大 njbx02 亲测 BLOCKING):
+   * row1 = tokens(1fr 整行宽,大数字 32px 不溢出);
+   * row2 = cost | detail(并排,detail 留在卡片右端);
+   * row3 = meta(全宽)。
+   * 旧版 1fr|auto|auto 三列等高布局在 360px 窗口 + 9 位数字(4,474,000)时
+   * 1fr 被 tokens min-content(~168px) 撑大,挤压 cost + detail 顶出右边 +32px。
+   * 行 1 整行吃满 280px(360 − 24 section − 32 card − 24 gap) 后,
+   * 32px 大数字视觉冲击力保留(用户拍板「4,474,000 比 4.5M 震撼」)。*/
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto;
   grid-template-areas:
-    "tokens cost detail"
-    "meta   meta  meta";
+    "tokens tokens"
+    "cost   detail"
+    "meta   meta";
   align-items: end;
   gap: var(--space-12, 12px);
   row-gap: var(--space-8, 8px);
@@ -2556,10 +2565,15 @@ body {
   align-items: baseline;
   gap: var(--space-4, 4px);
   font-variant-numeric: tabular-nums;
+  /* min-width:0 让 tokens 行不溢出(默认 grid item min-width:auto 会保留 min-content,
+   * 即便父级给 1fr,内部数字 nowrap 仍可能撑出;显式 0 让 flex 子换行/截断由 nowrap 把控) */
+  min-width: 0;
 }
 .agent-tokens-number {
-  /* t_4b7984d9 B: 9 位全数字(4,474,000)+「tokens」unit 在 360px 卡片内禁止截断/换行;
-   * tabular-nums 等宽数字防抖动 + clamp(28px ~ 32px)自适应卡片宽度, 6 位内显大 9 位显小不溢出 */
+  /* t_4b7984d9 round-3 B 修复: tokens 占整行 1fr(280px) 后,32px 字号 9 位数字 ~ 122px + unit
+   * 「tokens」~ 42px + gap 4 = 168px,远 < 280px,零溢出。
+   * clamp 上限保持 32px 留视觉冲击,下限 20px 兜底 < 360px 卡宽场景。
+   * tabular-nums + nowrap 双重保险。*/
   font-size: clamp(20px, 9vw, 32px);
   font-weight: 600;
   line-height: 1.2;

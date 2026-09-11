@@ -29,6 +29,19 @@ const fakeSummary = {
       by_status: { completed: 95, partial: 5, unknown: 0 },
     },
     {
+      // t_4b7984d9 round-3 老大 njbx02 亲测 BLOCKING:
+      // 9 位数字(4,474,000)场景,buggy CSS 让 tokens 1fr 列只 ~140px,数字 scrollWidth 180
+      // 被 .card overflow:hidden 视觉裁掉 — round-3 修复后数字容器宽 286px 零裁剪
+      group: "njbx02-heavy",
+      calls: 8000,
+      input_cache_hit_tokens: 3_310_760,
+      input_cache_miss_tokens: 827_690,
+      output_tokens: 335_550,
+      cost_total: 12.34,
+      currency: "USD",
+      by_status: { completed: 7600, partial: 400, unknown: 0 },
+    },
+    {
       group: "home-computer",
       calls: 50,
       input_cache_hit_tokens: 10000,
@@ -50,13 +63,17 @@ const fakeSummary = {
     },
   ],
   total: {
-    calls: 150,
-    input_cache_hit_tokens: 60000,
-    input_cache_miss_tokens: 15000,
-    output_tokens: 6000,
-    cost_total: 1.23,
+    // t_4b7984d9 round-3: total 必须等于 rows[] 合计(否则大屏 hero 数字与明细对不上)
+    // njbx02(64k) + njbx02-heavy(4,474k) + home(17k) + desktop(0) = 4,555,000
+    // calls: 100 + 8000 + 50 + 0 = 8,150
+    calls: 8150,
+    input_cache_hit_tokens: 50000 + 3310760 + 10000 + 0, // = 3,370,760
+    input_cache_miss_tokens: 10000 + 827690 + 5000 + 0, // = 842,690
+    output_tokens: 4000 + 335550 + 2000 + 0, // = 341,550
+    cost_total: 1.23 + 12.34, // home + desktop cost=null, 合计 = 13.57
     currency: "USD",
-    by_status: { completed: 95, partial: 10, unknown: 0 },
+    by_status: { completed: 95 + 7600 + 0 + 0, partial: 5 + 400 + 5 + 0, unknown: 0 },
+    // 9 + 8 + 0 + 0 = 8,005; partial: 5 + 400 + 5 + 0 = 410
   },
 };
 
@@ -85,6 +102,9 @@ test("主页 Agent 卡: 真数据渲染 + 三种活动态 + 金额可空留白",
   // 三条 Agent 卡 + data-agent
   const njbx02 = page.locator('[data-testid="agent-card"][data-agent="njbx02"]');
   await pwExpect(njbx02).toBeVisible();
+  // t_4b7984d9 round-3(老大 njbx02 亲测 BLOCKING): 9 位数字(4,474,000)场景下 tokens 不能被裁剪
+  const njbx02Heavy = page.locator('[data-testid="agent-card"][data-agent="njbx02-heavy"]');
+  await pwExpect(njbx02Heavy).toBeVisible();
   const home = page.locator('[data-testid="agent-card"][data-agent="home-computer"]');
   await pwExpect(home).toBeVisible();
   const desktop = page.locator('[data-testid="agent-card"][data-agent="desktop-e5jupfs"]');
@@ -95,9 +115,61 @@ test("主页 Agent 卡: 真数据渲染 + 三种活动态 + 金额可空留白",
   // 反向断言: 绝不出现 K/M 简写
   const tokensText = (await njbx02.locator('[data-testid="agent-tokens"]').textContent()) ?? "";
   expect(tokensText).not.toMatch(/\d+\.?\d*K\b|\d+\.?\d*M\b/);
+  // t_4b7984d9 round-3 (老大 njbx02 亲测 BLOCKING): 真数据下 9 位数字(4,474,000 类)在 360 卡宽下
+  // 必须不被容器裁剪(buggy CSS 1fr 列只 ~140px 把数字 scrollWidth 180+ 视觉裁掉)。
+  // 此断言用 e2e 实际渲染测真实 DOM: 数字本身 scrollWidth ≤ tokens 容器 width。
+  const tokensDomOk = await njbx02.locator('[data-testid="agent-tokens"]').evaluate((el) => {
+    const tn = el.querySelector(".agent-tokens-number");
+    if (!tn) return false;
+    return tn.scrollWidth <= el.getBoundingClientRect().width + 0.5;
+  });
+  expect(
+    tokensDomOk,
+    "Agent 卡 tokens 容器必须装下完整数字(老大 round-3 B 修复 360 卡宽零裁剪)",
+  ).toBe(true);
   await pwExpect(njbx02.locator('[data-testid="agent-cost"]')).toContainText("1.23 USD");
   await pwExpect(njbx02.locator('[data-testid="agent-status-dot"]')).toHaveAttribute("data-health", "ok");
   await pwExpect(njbx02.locator('[data-testid="agent-activity-badge"]')).toHaveText("有活动");
+
+  // t_4b7984d9 round-3(老大 njbx02 亲测 BLOCKING):
+  // njbx02-heavy 卡 = 9 位数字(4,474,000),验证:
+  //   ① 全数字展示(4,474,000 不是 4.5M,反向断言无 K/M)
+  //   ② tokens 容器装得下完整数字(scrollWidth ≤ width,不被 .card overflow:hidden 裁剪)
+  //   ③ 详情按钮右缘 ≤ 卡右缘(不顶出卡片)
+  // buggy CSS 实测: 9 位数字 scrollWidth=180+, 容器宽~140 → overflowed=true → 失败
+  await pwExpect(njbx02Heavy.locator('[data-testid="agent-tokens"]')).toContainText("4,474,000");
+  const heavyTokensText =
+    (await njbx02Heavy.locator('[data-testid="agent-tokens"]').textContent()) ?? "";
+  expect(heavyTokensText, "njbx02-heavy 含 K/M 简写").not.toMatch(/\d+\.?\d*K\b|\d+\.?\d*M\b/);
+  const heavyTokensDomOk = await njbx02Heavy
+    .locator('[data-testid="agent-tokens"]')
+    .evaluate((el) => {
+      const tn = el.querySelector(".agent-tokens-number");
+      if (!tn) return false;
+      // 数字本身完整可见(scrollWidth ≤ 容器宽度)
+      return tn.scrollWidth <= el.getBoundingClientRect().width + 0.5;
+    });
+  expect(
+    heavyTokensDomOk,
+    "njbx02-heavy 9 位数字被 .card 视觉裁掉(round-3 修复: tokens 占整行 1fr, 286px 容器装 180px 数字)",
+  ).toBe(true);
+  const heavyCardBox = await njbx02Heavy.boundingBox();
+  const heavyDetailBox = await njbx02Heavy
+    .locator('[data-testid="agent-detail-njbx02-heavy"]')
+    .boundingBox();
+  if (heavyCardBox && heavyDetailBox) {
+    const heavyOverhang = heavyDetailBox.x + heavyDetailBox.width - (heavyCardBox.x + heavyCardBox.width);
+    expect(
+      heavyOverhang,
+      `njbx02-heavy 详情按钮顶出卡片 ${heavyOverhang.toFixed(1)}px`,
+    ).toBeLessThanOrEqual(0);
+  }
+  await pwExpect(njbx02Heavy.locator('[data-testid="agent-cost"]')).toContainText("12.34 USD");
+  await pwExpect(njbx02Heavy.locator('[data-testid="agent-status-dot"]')).toHaveAttribute(
+    "data-health",
+    "ok",
+  );
+  await pwExpect(njbx02Heavy.locator('[data-testid="agent-activity-badge"]')).toHaveText("有活动");
 
   // home-computer: cost_total=null + currency=null → cost is-empty, 不显示破折号
   await pwExpect(home.locator('[data-testid="agent-cost"]')).toHaveClass(/is-empty/);
@@ -120,17 +192,20 @@ test("详情按钮切大屏方案 C: hero + 趋势 + model + 三分项 + 明细�
   await page.getByTestId("agent-detail-njbx02").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
 
-  // Hero 区: 三项和 81000 → 81,000 + 1.23 USD(单一币种合计)+ 4 元数据
-  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("81,000");
-  await pwExpect(page.getByTestId("agent-dashboard-c-hero-cost")).toContainText("1.23 USD");
-  await pwExpect(page.getByTestId("agent-dashboard-c-active")).toHaveText("1"); // 仅 njbx02 active,home 是 idle,desktop no_report
-  await pwExpect(page.getByTestId("agent-dashboard-c-samples")).toHaveText("150");
+  // Hero 区: 全 4 卡合计 tokens + 13.57 USD(1.23 + 12.34, home/desktop cost 留空不计)
+  // njbx02(64k) + njbx02-heavy(4,474k) + home(17k) + desktop(0) = 4,555,000
+  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("4,555,000");
+  await pwExpect(page.getByTestId("agent-dashboard-c-hero-cost")).toContainText("13.57 USD");
+  await pwExpect(page.getByTestId("agent-dashboard-c-active")).toHaveText("2"); // njbx02 + njbx02-heavy 都是 active
+  await pwExpect(page.getByTestId("agent-dashboard-c-samples")).toHaveText("8150"); // 100 + 8000 + 50 + 0(无千分位显示)
   await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("1");
 
-  // 三分项 split-bar 宽度按比例
+  // 三分项 split-bar 宽度按比例(t_4b7984d9 round-3: total 汇总成 4,555,000 后 hit/miss/out 各占
+  // 74.005% / 18.500% / 7.495%, 浏览器浮点 .toFixed(1) 输出可能为 "74%" / "18.5%" / "7.5%",
+  // 宽松断言同时兼容 "74%" 与 "74.0%" 两种渲染)
   await pwExpect(page.getByTestId("agent-dashboard-c-seg-hit")).toHaveAttribute(
     "style",
-    /width:\s*74\.1%/,
+    /width:\s*74(\.0)?%/,
   );
   await pwExpect(page.getByTestId("agent-dashboard-c-seg-miss")).toHaveAttribute(
     "style",
@@ -138,19 +213,24 @@ test("详情按钮切大屏方案 C: hero + 趋势 + model + 三分项 + 明细�
   );
   await pwExpect(page.getByTestId("agent-dashboard-c-seg-out")).toHaveAttribute(
     "style",
-    /width:\s*7\.4%/,
+    /width:\s*7(\.[45])?%/,
   );
 
   // Canvas 元素存在(chart.js 异步加载)
   await pwExpect(page.getByTestId("agent-dashboard-c-chart-trend")).toHaveCount(1);
   await pwExpect(page.getByTestId("agent-dashboard-c-chart-model")).toHaveCount(1);
 
-  // detail-list 三行 + cost 留空契约
+  // detail-list 四行(njbx02 + njbx02-heavy + home + desktop) + cost 留空契约
   const list = page.getByTestId("agent-dashboard-c-detail-list");
-  await pwExpect(list.locator("li")).toHaveCount(3);
+  await pwExpect(list.locator("li")).toHaveCount(4);
   const detailNjbx02 = page.getByTestId("agent-dashboard-c-detail-njbx02");
   await pwExpect(detailNjbx02).toContainText("njbx02");
   await pwExpect(detailNjbx02).toContainText("1.23 USD");
+  // t_4b7984d9 round-3: njbx02-heavy 在大屏 detail-list 也展示完整 4,474,000 tokens(不裁)
+  const detailNjbx02Heavy = page.getByTestId("agent-dashboard-c-detail-njbx02-heavy");
+  await pwExpect(detailNjbx02Heavy).toContainText("njbx02-heavy");
+  await pwExpect(detailNjbx02Heavy).toContainText("12.34 USD");
+  await pwExpect(detailNjbx02Heavy).toContainText("4,474,000");
   const detailHome = page.getByTestId("agent-dashboard-c-detail-home-computer");
   await pwExpect(detailHome.locator(".cost")).toHaveClass(/is-empty/);
 
