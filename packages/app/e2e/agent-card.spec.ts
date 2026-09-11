@@ -7,7 +7,7 @@
  * - daemon 断连空态(浏览器无桥 / mock reason=unreachable → AgentCardEmpty)
  * - 大屏断连空态 + 返回按钮
  */
-import { expect as pwExpect } from "@playwright/test";
+import { expect, expect as pwExpect } from "@playwright/test";
 import { test, seedAgentUsage } from "./fixtures";
 
 const fakeSummary = {
@@ -227,4 +227,61 @@ test("daemon 鉴权失败(401): 主页 Agent 卡区 reason 文案「鉴权失败
 
   await pwExpect(page.getByTestId("agent-card-empty")).toBeVisible();
   await pwExpect(page.getByTestId("agent-empty-reason")).toContainText("鉴权失败");
+});
+
+/** t_12bdc277 round-2: Agent 卡区解绑 providers 门禁
+ * 零 provider 实例 + mcpSummary.ok → agent-card-section 仍可见且含 AgentCard
+ * (此前因 providers.length === 0 门禁, 主页根本看不到 Agent 区)。
+ */
+test("零 provider 实例 + daemon ok: Agent 卡区仍可见 + 渲染 AgentCard", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  // 不 seed instances → 零 provider 实例
+  // seedAgentUsage 注入真数据摘要
+  await seedAgentUsage(page, { ok: true, data: fakeSummary });
+  await page.reload();
+
+  // 关键断言: agent-card-section 必须可见(此前会被 providers.length > 0 门禁掉)
+  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible({ timeout: 5000 });
+  // AgentCard 实际渲染(至少 1 张)
+  await pwExpect(page.locator('[data-testid="agent-card"]').first()).toBeVisible();
+});
+
+/** t_12bdc277 round-2: 零实例 + daemon 不可达 → AgentCardEmpty 显式 reason
+ * (取代旧版「整段 agent 区消失 + 用户以为 daemon 没装」误导)
+ */
+test("零 provider 实例 + daemon unreachable: AgentCardEmpty 显式 reason, 区不消失", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  // 不 seed instances + seed unreachable reason
+  await seedAgentUsage(page, { ok: false, reason: "unreachable" });
+  await page.reload();
+
+  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible({ timeout: 5000 });
+  await pwExpect(page.getByTestId("agent-card-empty")).toBeVisible();
+  await pwExpect(page.getByTestId("agent-empty-reason")).toContainText("daemon 未连接");
+});
+
+/** t_12bdc277 round-2: LocalAgentSection 占位文案中性化
+ * 展开折叠区, 文案应是中性占位(「本地 agent 用量接入即将推出」),
+ * 不得渲染看似真实的错误状态(如「daemon 未连接」)
+ */
+test("LocalAgentSection 占位文案中性化, 不含 daemon 错误状态", async ({ hostPage, page }) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  // 展开折叠区
+  await page.getByTestId("local-agent-toggle").click();
+  await pwExpect(page.getByTestId("local-agent-body")).toBeVisible();
+  const bodyText = await page.getByTestId("local-agent-body").textContent();
+  expect(bodyText).toBeTruthy();
+  // 中性占位断言: 不得含真实错误文案
+  expect(bodyText).not.toMatch(/daemon\s*未连接|请先启动\s*daemon/i);
+  // 占位特征: 含「即将推出」或「coming soon」
+  expect(bodyText).toMatch(/即将推出|coming\s*soon/i);
 });

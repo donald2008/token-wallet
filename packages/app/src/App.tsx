@@ -485,8 +485,12 @@ function AppShell() {
           <LocalAgentSection />
           {/* t_9255cb63: 主页 Agent 卡区 — 来自 daemon usage_summary(group_by=["agent"]),
              与 ProviderCard 同构(.card/.card-head 共享), 数据源是 MCP daemon, 非 mock。
-             daemon 不可达/401/协议错 → 显式 AgentCardEmpty(不静默吞成 0)。 */}
-          {providers !== null && providers.length > 0 && (
+             daemon 不可达/401/协议错 → 显式 AgentCardEmpty(不静默吞成 0)。
+             t_12bdc277 round-2 修复: 解绑 providers 门禁 — 零 provider 实例下, Agent 区也应可见
+             (数据源是 daemon, 与 provider 实例数无因果)。仅 providers===null(引擎加载中)
+             不渲染, 避免半初始化闪态。其余一律渲染: mcpSummary.ok → AgentCard 列表;
+             !ok → AgentCardEmpty 按 reason 显式提示。同 D-036「选得到即采得到」精神。 */}
+          {providers !== null && (
             <section className="agent-card-section" data-testid="agent-card-section">
               <header className="agent-card-section-head">
                 <span className="agent-card-section-title">Agent 用量</span>
