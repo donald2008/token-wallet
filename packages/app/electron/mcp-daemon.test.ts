@@ -8,6 +8,7 @@ import {
   getLastStartedPid,
   type HttpShim,
   isInstalled,
+  isSameProcessTree,
   parseDaemonBuildId,
   parseListenerPids,
   probe,
@@ -576,5 +577,63 @@ describe("t_1b396e2f: build_id 比对", () => {
     const r = await checkDaemonVersion({ host: "127.0.0.1", port: 9131 }, null, http);
     expect(r.checked).toBe(false);
     expect(r.reason).toBe("no_shim");
+  });
+});
+
+describe("t_1b396e2f: isSameProcessTree (launcher 链幂等)", () => {
+  const treeDiscovery = (parentMap: Record<number, number>): SpawnShimDiscovery => ({
+    execFile: (_cmd, args) => {
+      // win32 path: ["-NoProfile","-Command","(Get-CimInstance ... ProcessId=N).ParentProcessId"]
+      const line = args[args.length - 1];
+      const m = line.match(/ProcessId=(\d+)/)!;
+      const pid = Number(m[1]);
+      if (!(pid in parentMap)) throw new Error("no such pid");
+      return String(parentMap[pid]);
+    },
+  });
+
+  it("owner 是 cached 的 child(launcher→serve) → true", () => {
+    const d = treeDiscovery({ 31648: 22288 });
+    expect(isSameProcessTree(22288, 31648, d, "win32")).toBe(true);
+  });
+  it("owner === cached → true", () => {
+    const d = treeDiscovery({});
+    expect(isSameProcessTree(22288, 22288, d, "win32")).toBe(true);
+  });
+  it("异树 → false", () => {
+    const d = treeDiscovery({ 6360: 4 });
+    expect(isSameProcessTree(22288, 6360, d, "win32")).toBe(false);
+  });
+  it("查询失败(命令抛错) → 保守 false", () => {
+    const d: SpawnShimDiscovery = { execFile: () => { throw new Error("blocked"); } };
+    expect(isSameProcessTree(22288, 31648, d, "win32")).toBe(false);
+  });
+  it("posix: /proc 祖先链", () => {
+    const d: SpawnShimDiscovery = { execFile: (_c, args) => {
+      const cmd = args[1];
+      const pid = Number(cmd.match(/\/proc\/(\d+)\/stat/)![1]);
+      return pid === 30060 ? "25888" : "1";
+    } };
+    expect(isSameProcessTree(25888, 30060, d, "linux")).toBe(true);
+  });
+  it("start 幂等: owner=缓存的 serve child → started:true 不 spawn", async () => {
+    const spawn = memSpawn();
+    const cfg = { host: "127.0.0.1", port: 9131, key: "x".repeat(32), dbPath: "/x.db", ttlDays: 90 };
+    // 第一次 start: pre-probe 死 → spawn → 活 → 缓存 99999
+    let calls = 0;
+    const httpFirst: HttpShim = { postInitialize: async () => { calls++; return calls === 1 ? Promise.reject(new Error("not yet")) : { status: 200 }; } };
+    const dNone: SpawnShimDiscovery = { execFile: () => "" };
+    await start(cfg, spawn, httpFirst, pathShim(true), "/app", true, "win32", dNone);
+    expect(getLastStartedPid()).toBe(99999);
+    // 第二次 start: pre-probe 活, owner=31648 是缓存 99999 的 child(treeDiscovery) → 幂等
+    const dOwner: SpawnShimDiscovery = { execFile: (_c, args) => {
+      const line = args[args.length - 1];
+      if (line.includes("Win32_Process")) return "99999";
+      return "  TCP    0.0.0.0:9131    0.0.0.0:0    LISTENING    31648\r\n";
+    } };
+    const second = await start(cfg, spawn, httpShim(true), pathShim(true), "/app", true, "win32", dOwner);
+    expect(second.started).toBe(true);
+    expect(second.pid).toBe(99999);
+    expect(spawn.spawned).toHaveLength(1);
   });
 });

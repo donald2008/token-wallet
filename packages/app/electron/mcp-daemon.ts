@@ -123,6 +123,49 @@ export function discoverPidByPort(
   return tryCmd("lsof", ["-ti", `tcp:${port}`, "-s", "TCP:LISTEN"]) ?? tryCmd("ss", ["-lptnH"]);
 }
 
+/**
+ * t_1b396e2f 真机实证补丁: Windows 上 spawn 的是 launcher wrapper(onefile bootloader),
+ * 真正 serve/占端口的是它的 child → 缓存 pid(wrapper) ≠ 端口 owner(serve child) 是**同一进程树**。
+ * 判定: owner 的祖先链上出现 expectPid(或反之) → 同树。
+ * 实现: 沿 ParentProcessId 向上最多 5 跳(避免环/超深); Windows 用 PowerShell CIM, POSIX 读 /proc。
+ * 查询失败(命令不可用等) → 返 false(保守, 调用方按异树处理)。
+ */
+export function isSameProcessTree(
+  expectPid: number,
+  ownerPid: number,
+  discovery: SpawnShimDiscovery,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  if (!expectPid || !ownerPid || expectPid === ownerPid) return expectPid === ownerPid && expectPid > 0;
+  const ancestorOf = (pid: number): number | null => {
+    try {
+      if (platform === "win32") {
+        const out = discovery.execFile(
+          "powershell.exe",
+          ["-NoProfile", "-Command", `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").ParentProcessId`],
+          DISCOVERY_TIMEOUT_MS,
+        );
+        const v = Number(out.trim());
+        return Number.isFinite(v) && v > 0 ? v : null;
+      }
+      const out = discovery.execFile("sh", ["-c", `awk '{print $4}' /proc/${pid}/stat`], DISCOVERY_TIMEOUT_MS);
+      const v = Number(out.trim());
+      return Number.isFinite(v) && v > 0 ? v : null;
+    } catch {
+      return null;
+    }
+  };
+  // 向上走 owner 的祖先链找 expectPid
+  let cur = ownerPid;
+  for (let i = 0; i < 5; i++) {
+    const parent = ancestorOf(cur);
+    if (parent === null) return false;
+    if (parent === expectPid) return true;
+    cur = parent;
+  }
+  return false;
+}
+
 export interface ProbeOptions {
   host: string;
   port: number;
@@ -255,11 +298,11 @@ export async function start(
     if (pre.alive) {
       const cached = getLastStartedPid() ?? 0;
       const owner = discoverPidByPort(cfg.port, discovery, platform);
-      if (!owner || owner !== cached) {
-        return { started: false, reason: "port_in_use" as const, pid: owner ?? undefined };
+      // owner===缓存 → 幂等; owner 是缓存的 serve child(launcher 链) → 同样幂等 (t_1b396e2f 真机实证)
+      if (owner && (owner === cached || (cached > 0 && isSameProcessTree(cached, owner, discovery, platform)))) {
+        return { started: true, pid: cached };
       }
-      // owner === cached: 就是我们自己启动的 daemon(上次 start 成功后再 start) → 视为幂等成功
-      return { started: true, pid: cached };
+      return { started: false, reason: "port_in_use" as const, pid: owner ?? undefined };
     }
   }
 

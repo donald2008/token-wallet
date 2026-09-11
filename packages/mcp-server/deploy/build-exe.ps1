@@ -26,7 +26,7 @@ Write-Host "repo: $repoRoot"
 $gitShort = "nogit"
 try { $gitShort = (git -C $repoRoot rev-parse --short HEAD).Trim() } catch { }
 if ([string]::IsNullOrWhiteSpace($gitShort)) { $gitShort = "nogit" }
-$buildId = "$gitShort-$(Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss')"
+$buildId = "$gitShort-" + (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmss")
 
 # ---- 依赖自检 (fastmcp/pydantic/pyinstaller/tzdata) ----
 # 注: 不能用 PowerShell 的 2>$null 重定向 native stderr — PS 5.1 会转 error record
@@ -50,6 +50,9 @@ try {
     # ---- onefile 构建 (console 模式: daemon 日志走 stdout) ----
     # hidden imports: fastmcp 经 importlib 动态加载 provider/工具模块, PyInstaller 静态
     # 分析扫不到 -> 全量收 fastmcp 子包; mcp 卡 server 品牌/版本; zoneinfo 需 tzdata。
+    # PS 5.1: PyInstaller stderr 会以 NativeCommandError 形式触发 ErrorActionPreference=Stop
+    # 误杀构建 (实踩) — 本段临时降为 Continue, stderr 由 PyInstaller 自打, 判定只看 $LASTEXITCODE
+    $ErrorActionPreference = "Continue"
     python -m PyInstaller `
         --onefile `
         --console `
@@ -105,22 +108,38 @@ try {
         --hidden-import tzdata `
         --collect-all tzdata `
         (Join-Path $mcpPkg "deploy\exe-entry.py")
+    $ErrorActionPreference = "Stop"
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed (exit $LASTEXITCODE)" }
 
-    # ---- 产物校验 ----
+     # ---- 产物校验 ----
     if (-not (Test-Path $outExe)) { throw "exe not produced at $outExe" }
 
     # ---- t_1b396e2f: build_id 附着 (PyInstaller 之后追加, 每次构建必变) ----
     $marker = "# TW_MCP_BUILD_ID=$buildId`n"
     $tailLen = $marker.Length
-    if ($outExe.Length -gt $tailLen) {
-        $tail = Get-Content -AsByteStream -Path $outExe -Tail $tailLen
-        $tailText = [System.Text.Encoding]::ASCII.GetString($tail)
-        if ($tailText -ne $marker) {
-            Add-Content -Path $outExe -Value $marker -Encoding Ascii
+    # PS 5.1 无 -AsByteStream → FileStream 手工附着; Append 模式 Seek 受限 → 先读尾判断, 再 Append 写
+    $tailLen = $marker.Length
+    $tailText = ""
+    if ((Get-Item $outExe).Length -ge $tailLen) {
+        $readFs = [System.IO.File]::OpenRead($outExe)
+        try {
+            [void]$readFs.Seek(-$tailLen, 'End')
+            $tailBuf = New-Object byte[] $tailLen
+            [void]$readFs.Read($tailBuf, 0, $tailLen)
+            $tailText = [System.Text.Encoding]::ASCII.GetString($tailBuf)
+        } finally { $readFs.Close() }
+    }
+    if ($tailText -ne $marker) {
+        # 已附着旧 build_id → 截掉旧标记段; 全新 → 直接追加
+        $allText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($outExe))
+        $idx = $allText.LastIndexOf("# TW_MCP_BUILD_ID=")
+        if ($idx -ge 0) {
+            $fs = [System.IO.File]::Open($outExe, 'Open', 'ReadWrite')
+            try { $fs.SetLength($idx) } finally { $fs.Close() }
         }
-    } else {
-        Add-Content -Path $outExe -Value $marker -Encoding Ascii
+        $stamp = [System.Text.Encoding]::ASCII.GetBytes($marker)
+        $fs = [System.IO.File]::Open($outExe, 'Append', 'Write')
+        try { $fs.Write($stamp, 0, $stamp.Length) } finally { $fs.Close() }
     }
     $allText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($outExe))
     if (-not $allText.Contains("TW_MCP_BUILD_ID=$buildId")) { throw "build_id stamp verification failed: $buildId" }
