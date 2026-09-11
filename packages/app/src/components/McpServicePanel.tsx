@@ -16,6 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 import { t } from "../i18n";
 import {
   maskMcpKey,
+  mcpCheckVersion,
   mcpGenKey,
   mcpGetAutostart,
   mcpGetConfig,
@@ -25,6 +26,7 @@ import {
   mcpStart,
   mcpStop,
   type McpConfigView,
+  type McpDaemonVersionView,
 } from "../ipc";
 
 type Status = "loading" | "running" | "stopped" | "not_installed";
@@ -45,6 +47,8 @@ export function McpServicePanel({ onGuideOpen }: Props) {
   const [confirmGenKey, setConfirmGenKey] = useState(false);
   // 重生成 key 后短时提示
   const [genKeyHint, setGenKeyHint] = useState<false | "manual" | "auto" | "failed">(false);
+  // t_1b396e2f: daemon 与本机 exe 版本不一致(get_config 已并入比对结果)
+  const [staleVersion, setStaleVersion] = useState<McpDaemonVersionView | null>(null);
 
   const probe = useCallback(async () => {
     // ⚠️ 不要无条件 setError(null): 操作流的错误(start/stop/genKey 失败)会被下次 probe 抹掉
@@ -52,6 +56,14 @@ export function McpServicePanel({ onGuideOpen }: Props) {
     const [r, c, a] = await Promise.all([mcpProbe(), mcpGetConfig(), mcpGetAutostart()]);
     setConfig(c);
     setAutostart(a.mcpAutostart);
+    // t_1b396e2f: get_config 已并入 build_id 比对 — daemon 陈旧(含 daemon 侧无字段而本机 exe 有)
+    // 或因 restart 收敛后单点复查结果不一致时更新
+    if (c.daemonVersion?.stale) {
+      const recheck = await mcpCheckVersion();
+      setStaleVersion(recheck.stale ? recheck : null);
+    } else {
+      setStaleVersion(null);
+    }
     if (!r.installed) setStatus("not_installed");
     else if (r.alive) setStatus("running");
     else setStatus("stopped");
@@ -81,13 +93,28 @@ export function McpServicePanel({ onGuideOpen }: Props) {
     setBusy("stop");
     setError(null);
     try {
-      // t_4bd214de round-2 BLOCKING-1: 不传 pid — 主进程 mcp-daemon module 级
-      // lastStartedPid 缓存兜底(详见 mcp-daemon.ts), 无缓存 + probe 仍活 → 返 pid_required
-      // 错误显式提示用户(详情见下面 catch 分支)。
+      // t_1b396e2f: 不传 pid — 主进程 lastStartedPid 快路径 + **端口归属反查**兜底(netstat/ss),
+      // app 重启后缓存丢失也能真停; 只有反查都失败(权限/命令异常)才显式报 discovery_failed。
       const r = await mcpStop();
       if (!r.stopped) {
-        // stop 失败必须可见, 不许静默吞(BLOCKING-1 修复兜底)
+        // stop 失败必须可见, 不许静默吞
         setError(t("set.mcpErrorGeneric", { msg: r.reason ?? "stop_failed" }));
+      }
+      await probe();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // t_1b396e2f: 陈旧 daemon 一键收敛 — restart 编排已改为先真停(端口反查)后起
+  const onConverge = async () => {
+    if (busy) return;
+    setBusy("start");
+    setError(null);
+    try {
+      const r = await mcpRestart();
+      if (!r.started) {
+        setError(t("set.mcpErrorGeneric", { msg: r.reason ?? "restart_failed" }));
       }
       await probe();
     } finally {
@@ -200,6 +227,26 @@ export function McpServicePanel({ onGuideOpen }: Props) {
           {t("set.mcpAgentOpenGuide")}
         </button>
       </div>
+
+      {staleVersion && status === "running" && (
+        <div className="mcp-confirm" data-testid="mcp-stale-warning">
+          <div className="mcp-confirm-body">
+            <h4>{t("set.mcpStaleTitle")}</h4>
+            <p>{t("set.mcpStaleBody")}</p>
+            <div className="mcp-confirm-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                data-testid="mcp-stale-restart"
+                disabled={busy !== null}
+                onClick={() => void onConverge()}
+              >
+                {busy === "start" ? t("set.mcpRestarting") : t("set.mcpStaleRestartAction")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mcp-row mcp-autostart-row">
         <label className="check-row">

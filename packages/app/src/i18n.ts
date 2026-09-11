@@ -308,6 +308,9 @@ const zh = {
     mcpAgentGuideFailed: "获取接入步骤失败。",
     mcpAgentGuideStep: "步骤",
     mcpErrorGeneric: "操作失败: {msg}",
+    mcpStaleTitle: "daemon 版本陈旧",
+    mcpStaleBody: "正在运行的 MCP daemon 与本机安装的版本不一致(可能是升级后残留的旧进程)。建议重启 daemon 以加载新版本。",
+    mcpStaleRestartAction: "一键重启",
   },
   updater: {
     unavailable: "更新功能仅安装版可用",
@@ -637,6 +640,10 @@ const en: Dict = {
     mcpAgentGuideFailed: "Failed to fetch setup steps.",
     mcpAgentGuideStep: "Step",
     mcpErrorGeneric: "Operation failed: {msg}",
+    mcpStaleTitle: "daemon is outdated",
+    mcpStaleBody:
+      "The running MCP daemon does not match the installed version (likely a leftover process from before an upgrade). Restart the daemon to load the new version.",
+    mcpStaleRestartAction: "Restart now",
   },
   updater: {
     unavailable: "Updates are only available in the installed build",

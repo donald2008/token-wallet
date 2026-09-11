@@ -159,9 +159,11 @@ class TestOnboardingGuide:
         claude-code/opencode 的 plugin_url/docs_url 为 null。"""
         mcp = _build(tmp_path)
         data = _tool_data(mcp, "get_onboarding_guide")
-        assert set(data) == {"endpoint", "server_version", "agents"}
+        # t_1b396e2f 追加 build_id (追加不改义): dev 运行无 frozen exe → None
+        assert set(data) == {"endpoint", "server_version", "agents", "build_id"}
         assert data["endpoint"] == f"http://{HOST}:{PORT}/mcp"
         assert isinstance(data["server_version"], str) and data["server_version"]
+        assert data["build_id"] is None or isinstance(data["build_id"], str)
 
         agents = {a["id"]: a for a in data["agents"]}
         assert set(agents) == {"hermes", "claude-code", "opencode"}
@@ -171,6 +173,19 @@ class TestOnboardingGuide:
         assert agents["claude-code"]["plugin_url"] is None
         assert agents["claude-code"]["docs_url"] is None
         assert agents["opencode"]["plugin_url"] is None
+
+    def test_build_id_env_override(self, tmp_path, monkeypatch):
+        """t_1b396e2f: env TOKEN_WALLET_BUILD_ID 优先 — 版本一致性自报源。"""
+        monkeypatch.setenv("TOKEN_WALLET_BUILD_ID", "testbuild-123")
+        assert onboarding.build_id() == "testbuild-123"
+        mcp = _build(tmp_path)
+        data = _tool_data(mcp, "get_onboarding_guide")
+        assert data["build_id"] == "testbuild-123"
+
+    def test_build_id_dev_is_none(self, monkeypatch):
+        """dev(非 frozen) 无 env → None, app 侧不判陈旧。"""
+        monkeypatch.delenv("TOKEN_WALLET_BUILD_ID", raising=False)
+        assert onboarding.build_id() is None
 
     def test_tool_in_tools_list(self, tmp_path):
         mcp = _build(tmp_path)

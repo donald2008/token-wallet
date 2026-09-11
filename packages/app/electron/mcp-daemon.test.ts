@@ -3,15 +3,24 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_PROBE_TIMEOUT_MS,
   _resetLastStartedPid,
+  checkDaemonVersion,
+  discoverPidByPort,
   getLastStartedPid,
   type HttpShim,
   isInstalled,
+  parseDaemonBuildId,
+  parseListenerPids,
   probe,
+  readLocalBuildId,
   start,
   stop,
   type PathShim,
   type SpawnShim,
+  type SpawnShimDiscovery,
 } from "./mcp-daemon";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 function memSpawn(): SpawnShim & { spawned: Array<{ cmd: string; args: string[] }>; killed: Array<{ pid: number; sig: string }> } {
   const spawned: Array<{ cmd: string; args: string[] }> = [];
@@ -322,5 +331,250 @@ describe("mcp-daemon: lastStartedPid 缓存(t_4bd214de round-2 BLOCKING-1)", () 
     const stopR = await stop(99999, spawn, http, { host: cfg.host, port: cfg.port }, "linux");
     expect(stopR.stopped).toBe(true);
     expect(getLastStartedPid()).toBeUndefined();
+  });
+});
+
+// ==================== t_1b396e2f: 端口归属反查 + 版本一致性 ====================
+
+const WIN_NETSTAT = [
+  "",
+  "  Proto  Local Address          Foreign Address        State           PID",
+  "  TCP    127.0.0.1:9131         0.0.0.0:0              LISTENING       6360",
+  "  TCP    0.0.0.0:91310          0.0.0.0:0              LISTENING       777",
+  "  TCP    [::]:9131              [::]:0                 LISTENING       6360",
+  "  TCP    10.200.1.110:139       0.0.0.0:0              LISTENING       4",
+  "  UDP    127.0.0.1:9131         *:*                                    6360",
+].join("\r\n");
+
+const SS_OUT = [
+  "LISTEN 0      128        0.0.0.0:9131      0.0.0.0:*    users:((\"python\",pid=6360,fd=3))",
+  "LISTEN 0      128           [::]:9131         [::]:*       users:((\"python\",pid=6360,fd=4))",
+].join("\n");
+
+describe("t_1b396e2f: parseListenerPids", () => {
+  it("win32: 精确端口匹配, 排除 :91310 误吞 + UDP 行忽略, IPv4/IPv6 去重", () => {
+    const pids = parseListenerPids(WIN_NETSTAT, 9131, "win32");
+    expect(pids).toEqual([6360]);
+  });
+  it("win32: 无匹配 → 空数组", () => {
+    expect(parseListenerPids(WIN_NETSTAT, 9999, "win32")).toEqual([]);
+  });
+  it("posix ss: pid= 提取, 非 LISTEN 行忽略", () => {
+    const pids = parseListenerPids(SS_OUT, 9131, "linux");
+    expect(pids).toEqual([6360]);
+  });
+});
+
+describe("t_1b396e2f: discoverPidByPort", () => {
+  it("win32: netstat 输出 → 监听者 pid", () => {
+    const d: SpawnShimDiscovery = { execFile: () => WIN_NETSTAT };
+    expect(discoverPidByPort(9131, d, "win32")).toBe(6360);
+  });
+  it("win32: 命令失败 → null(不猜)", () => {
+    const d: SpawnShimDiscovery = { execFile: () => { throw new Error("boom"); } };
+    expect(discoverPidByPort(9131, d, "win32")).toBeNull();
+  });
+  it("posix: lsof 失败退化 ss", () => {
+    const d: SpawnShimDiscovery = { execFile: (cmd) => {
+      if (cmd === "lsof") throw new Error("not installed");
+      return SS_OUT;
+    } };
+    expect(discoverPidByPort(9131, d, "linux")).toBe(6360);
+  });
+});
+
+describe("t_1b396e2f: stop 端口反查兜底", () => {
+  beforeEach(() => _resetLastStartedPid());
+  afterEach(() => _resetLastStartedPid());
+
+  /** 有状态 probe: 前 aliveCount 次 200(活), 之后 reject(死) — 模拟 kill 生效 */
+  const statefulHttp = (aliveCount: number): HttpShim => {
+    let calls = 0;
+    return {
+      postInitialize: async () => {
+        calls++;
+        return calls <= aliveCount ? { status: 200 } : Promise.reject(new Error("dead"));
+      },
+    };
+  };
+
+  it("pid=0(缓存空) + probe 活 + 反查命中 6360 → kill 6360, probe 死 → stopped:true", async () => {
+    const spawn = memSpawn();
+    // stop 内部 probe 序列: r0(判活)=200 → attemptKill 后复核=死 → 共 1 次 200
+    const http = statefulHttp(1);
+    const d: SpawnShimDiscovery = { execFile: () => WIN_NETSTAT };
+    const r = await stop(0, spawn, http, { host: "127.0.0.1", port: 9131 }, "win32", d);
+    expect(r.stopped).toBe(true);
+    // Windows attemptKill: taskkill → probe 死 → 只 1 次 kill
+    expect(spawn.killed).toEqual([{ pid: 6360, sig: "TASKKILL" }]);
+    expect(getLastStartedPid()).toBeUndefined();
+  });
+
+  it("pid_required 终态消失: 活 daemon + 缓存空 + 反查命中 → 真停, 无 reason", async () => {
+    const spawn = memSpawn();
+    const http = statefulHttp(1);
+    const d: SpawnShimDiscovery = { execFile: () => WIN_NETSTAT };
+    const r = await stop(0, spawn, http, { host: "127.0.0.1", port: 9131 }, "win32", d);
+    expect(r.stopped).toBe(true);
+    expect(r.reason).toBeUndefined();
+    expect(spawn.killed).toEqual([{ pid: 6360, sig: "TASKKILL" }]);
+  });
+
+  it("活 daemon + 缓存空 + 反查失败 → discovery_failed 显式上报(不静默)", async () => {
+    const spawn = memSpawn();
+    const http: HttpShim = { postInitialize: async () => ({ status: 200 }) };
+    const d: SpawnShimDiscovery = { execFile: () => { throw new Error("netstat blocked"); } };
+    const r = await stop(0, spawn, http, { host: "127.0.0.1", port: 9131 }, "linux", d);
+    expect(r.stopped).toBe(false);
+    expect(r.reason).toBe("discovery_failed");
+    expect(spawn.killed).toHaveLength(0);
+  });
+
+  it("缓存 pid 停不掉(死 pid 指向他人/自退) + 端口仍被旧 daemon 占 → 反查兜底杀 owner", async () => {
+    const spawn = memSpawn();
+    // probe 永远 200: 快路径杀 12468 两次仍活 → 反查得 6360 → 杀两次仍活 → still_alive
+    const http: HttpShim = { postInitialize: async () => ({ status: 200 }) };
+    const d: SpawnShimDiscovery = { execFile: () => WIN_NETSTAT };
+    const r = await stop(12468, spawn, http, { host: "127.0.0.1", port: 9131 }, "win32", d);
+    expect(r.stopped).toBe(false);
+    expect(r.reason).toBe("still_alive");
+    // Windows: 每 attemptKill 内 taskkill→活→taskkill 共 2 次击杀
+    expect(spawn.killed).toEqual([
+      { pid: 12468, sig: "TASKKILL" },
+      { pid: 12468, sig: "TASKKILL" },
+      { pid: 6360, sig: "TASKKILL" },
+      { pid: 6360, sig: "TASKKILL" },
+    ]);
+  });
+
+  it("pid=0 + probe 不活 → 幂等 stopped:true, 不反查", async () => {
+    const spawn = memSpawn();
+    const http: HttpShim = { postInitialize: async () => Promise.reject(new Error("dead")) };
+    let called = 0;
+    const d: SpawnShimDiscovery = { execFile: () => { called++; return WIN_NETSTAT; } };
+    const r = await stop(0, spawn, http, { host: "127.0.0.1", port: 9131 }, "win32", d);
+    expect(r.stopped).toBe(true);
+    expect(called).toBe(0);
+    expect(spawn.killed).toHaveLength(0);
+  });
+
+  it("无 discovery 注入 + pid=0 + daemon 活 → 保持 pid_required(旧调用方语义)", async () => {
+    const spawn = memSpawn();
+    const http: HttpShim = { postInitialize: async () => ({ status: 200 }) };
+    const r = await stop(0, spawn, http, { host: "127.0.0.1", port: 9131 }, "linux");
+    expect(r.stopped).toBe(false);
+    expect(r.reason).toBe("pid_required");
+  });
+});
+
+describe("t_1b396e2f: start 假绿护栏", () => {
+  beforeEach(() => _resetLastStartedPid());
+  afterEach(() => _resetLastStartedPid());
+
+  it("端口被他人占(probe 活 + owner=6360 ≠ 缓存空) → port_in_use 拒启, 不 spawn", async () => {
+    const spawn = memSpawn();
+    const http = httpShim(true);
+    const d: SpawnShimDiscovery = { execFile: () => WIN_NETSTAT };
+    const cfg = { host: "127.0.0.1", port: 9131, key: "x".repeat(32), dbPath: "/x.db", ttlDays: 90 };
+    const r = await start(cfg, spawn, http, pathShim(true), "/app", true, "win32", d);
+    expect(r.started).toBe(false);
+    expect(r.reason).toBe("port_in_use");
+    expect(r.pid).toBe(6360);
+    expect(spawn.spawned).toHaveLength(0);
+    expect(getLastStartedPid()).toBeUndefined();
+  });
+
+  it("端口被自己占(owner === 缓存 pid) → 幂等 started:true, 不重复 spawn", async () => {
+    const spawn = memSpawn();
+    const cfg = { host: "127.0.0.1", port: 9131, key: "x".repeat(32), dbPath: "/x.db", ttlDays: 90 };
+    // 第一次 start: pre-probe 死(护栏跳过) → spawn → poll 第 2 次起活 → 正常缓存 99999
+    let calls = 0;
+    const httpFirst: HttpShim = {
+      postInitialize: async () => {
+        calls++;
+        return calls === 1 ? Promise.reject(new Error("not yet")) : { status: 200 };
+      },
+    };
+    const dNone: SpawnShimDiscovery = { execFile: () => "  TCP    0.0.0.0:139    0.0.0.0:0    LISTENING    4\r\n" };
+    const first = await start(cfg, spawn, httpFirst, pathShim(true), "/app", true, "win32", dNone);
+    expect(first.started).toBe(true);
+    expect(getLastStartedPid()).toBe(99999);
+    expect(spawn.spawned).toHaveLength(1);
+    // 第二次 start: pre-probe 活 → 反查 owner=99999 === 缓存 → 幂等成功, 不 spawn
+    const dSelf: SpawnShimDiscovery = { execFile: () => "  TCP    0.0.0.0:9131    0.0.0.0:0    LISTENING    99999\r\n" };
+    const second = await start(cfg, spawn, httpShim(true), pathShim(true), "/app", true, "win32", dSelf);
+    expect(second.started).toBe(true);
+    expect(second.pid).toBe(99999);
+    expect(spawn.spawned).toHaveLength(1); // 仍只有第一次 spawn
+  });
+});
+
+describe("t_1b396e2f: build_id 比对", () => {
+  let tmpDir: string;
+  beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tw-buildid-")); });
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  const writeExe = (content: string): string => {
+    const p = path.join(tmpDir, "token-wallet-mcp.exe");
+    fs.writeFileSync(p, Buffer.from(content, "latin1"));
+    return p;
+  };
+
+  it("readLocalBuildId: exe 含标记 → 提取值", () => {
+    const p = writeExe("BINARY\x00DATA# TW_MCP_BUILD_ID=abc123-20260910000000\nTAIL");
+    expect(readLocalBuildId(p)).toBe("abc123-20260910000000");
+  });
+  it("readLocalBuildId: 无标记 → null", () => {
+    const p = writeExe("BINARY\x00DATA no marker");
+    expect(readLocalBuildId(p)).toBeNull();
+  });
+  it("parseDaemonBuildId: /guide JSON 含 build_id → 提取", () => {
+    expect(parseDaemonBuildId('{"endpoint":"x","server_version":"0.2.8","build_id":"v1","agents":[]}')).toBe("v1");
+  });
+  it("parseDaemonBuildId: 旧 daemon 无字段 → null", () => {
+    expect(parseDaemonBuildId('{"endpoint":"x","server_version":"0.2.8","agents":[]}')).toBeNull();
+  });
+  it("checkDaemonVersion: 双侧 id 不一致 → stale:true", async () => {
+    const exe = writeExe("DATA# TW_MCP_BUILD_ID=aaa\n");
+    const http: HttpShim = { postInitialize: async () => ({ status: 200 }), getGuide: async () => ({ status: 200, body: '{"build_id":"bbb"}' }) };
+    const r = await checkDaemonVersion({ host: "127.0.0.1", port: 9131 }, exe, http);
+    expect(r.checked).toBe(true);
+    expect(r.stale).toBe(true);
+    expect(r.daemonBuildId).toBe("bbb");
+    expect(r.localBuildId).toBe("aaa");
+  });
+  it("checkDaemonVersion: 一致 → stale:false", async () => {
+    const exe = writeExe("DATA# TW_MCP_BUILD_ID=same\n");
+    const http: HttpShim = { postInitialize: async () => ({ status: 200 }), getGuide: async () => ({ status: 200, body: '{"build_id":"same"}' }) };
+    const r = await checkDaemonVersion({ host: "127.0.0.1", port: 9131 }, exe, http);
+    expect(r.stale).toBe(false);
+  });
+  it("checkDaemonVersion: daemon 无字段 + 本机有 → stale:true(旧 daemon)", async () => {
+    const exe = writeExe("DATA# TW_MCP_BUILD_ID=aaa\n");
+    const http: HttpShim = { postInitialize: async () => ({ status: 200 }), getGuide: async () => ({ status: 200, body: '{"server_version":"0.1.0"}' }) };
+    const r = await checkDaemonVersion({ host: "127.0.0.1", port: 9131 }, exe, http);
+    expect(r.stale).toBe(true);
+    expect(r.reason).toBe("no_field");
+  });
+  it("checkDaemonVersion: 双侧皆无(旧 exe + 旧 daemon) → 不误报", async () => {
+    const exe = writeExe("no marker here");
+    const http: HttpShim = { postInitialize: async () => ({ status: 200 }), getGuide: async () => ({ status: 200, body: '{"server_version":"0.1.0"}' }) };
+    const r = await checkDaemonVersion({ host: "127.0.0.1", port: 9131 }, exe, http);
+    expect(r.checked).toBe(true);
+    expect(r.stale).toBe(false);
+  });
+  it("checkDaemonVersion: /guide 不可达(daemon 死) → checked:true stale:false(fetch_failed)", async () => {
+    const exe = writeExe("DATA# TW_MCP_BUILD_ID=aaa\n");
+    const http: HttpShim = { postInitialize: async () => ({ status: 200 }), getGuide: async () => { throw new Error("refused"); } };
+    const r = await checkDaemonVersion({ host: "127.0.0.1", port: 9131 }, exe, http);
+    expect(r.checked).toBe(true);
+    expect(r.stale).toBe(false);
+    expect(r.reason).toBe("fetch_failed");
+  });
+  it("checkDaemonVersion: getGuide shim 缺失(旧注入) → checked:false 不提示", async () => {
+    const http: HttpShim = { postInitialize: async () => ({ status: 200 }) };
+    const r = await checkDaemonVersion({ host: "127.0.0.1", port: 9131 }, null, http);
+    expect(r.checked).toBe(false);
+    expect(r.reason).toBe("no_shim");
   });
 });

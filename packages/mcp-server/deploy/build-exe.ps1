@@ -18,6 +18,16 @@ $outDir = Join-Path $repoRoot "packages\app\resources"
 Write-Host "== token-wallet-mcp exe build =="
 Write-Host "repo: $repoRoot"
 
+# ---- t_1b396e2f: build_id 注入 (每次构建必变; 禁硬编码进源码) ----
+# 构建时生成 <git 短hash>-<UTC yyyymmddHHMMss>, 追加标记 TW_MCP_BUILD_ID=<id> 到产物
+# exe 字节流。daemon onboarding.build_id() 从自身 exe 扫描后经 /guide 自报,
+# app 侧与本机 exe 同法扫描比对 → panel 提示「daemon 版本陈旧, 建议重启」。
+# 附着段格式: \n# <json-safe ascii>\n — 不影响 PE 加载(附加数据), 不含 0 字节。
+$gitShort = "nogit"
+try { $gitShort = (git -C $repoRoot rev-parse --short HEAD).Trim() } catch { }
+if ([string]::IsNullOrWhiteSpace($gitShort)) { $gitShort = "nogit" }
+$buildId = "$gitShort-$(Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss')"
+
 # ---- 依赖自检 (fastmcp/pydantic/pyinstaller/tzdata) ----
 # 注: 不能用 PowerShell 的 2>$null 重定向 native stderr — PS 5.1 会转 error record
 # 配合 $ErrorActionPreference=Stop 直接抛异常 (实踩), 走 cmd 层静默。
@@ -99,6 +109,24 @@ try {
 
     # ---- 产物校验 ----
     if (-not (Test-Path $outExe)) { throw "exe not produced at $outExe" }
+
+    # ---- t_1b396e2f: build_id 附着 (PyInstaller 之后追加, 每次构建必变) ----
+    $marker = "# TW_MCP_BUILD_ID=$buildId`n"
+    $tailLen = $marker.Length
+    if ($outExe.Length -gt $tailLen) {
+        $tail = Get-Content -AsByteStream -Path $outExe -Tail $tailLen
+        $tailText = [System.Text.Encoding]::ASCII.GetString($tail)
+        if ($tailText -ne $marker) {
+            Add-Content -Path $outExe -Value $marker -Encoding Ascii
+        }
+    } else {
+        Add-Content -Path $outExe -Value $marker -Encoding Ascii
+    }
+    $allText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($outExe))
+    if (-not $allText.Contains("TW_MCP_BUILD_ID=$buildId")) { throw "build_id stamp verification failed: $buildId" }
+    $allText = $null
+    Write-Host "build_id stamped: $buildId"
+
     $size = (Get-Item $outExe).Length
     Write-Host ("OK: {0}  ({1:N1} MB)" -f $outExe, ($size / 1MB))
     Write-Host "next: 冒烟验证见文件头注释 (需 TOKEN_WALLET_MCP_KEY)"

@@ -502,6 +502,15 @@ export async function mcpRestart(): Promise<McpRestartResult> {
   return viaHost ?? { restarted: false, started: false, reason: "unavailable" };
 }
 
+/** t_1b396e2f 版本一致性: 主进程 build_id 比对结果 */
+export interface McpDaemonVersionView {
+  checked: boolean;
+  reason?: string;
+  daemonBuildId?: string;
+  localBuildId?: string;
+  stale: boolean;
+}
+
 /** 读 mcp.env 全部键位 + installed 状态(明文 key 经 IPC 内部, UI 用 maskKey 处理) */
 export interface McpConfigView {
   TOKEN_WALLET_MCP_KEY: string;
@@ -513,6 +522,8 @@ export interface McpConfigView {
   displayEndpoint?: string;
   mcpEnvPath: string;
   installed: boolean;
+  /** t_1b396e2f: daemon 与本机 exe build_id 比对(browser 降级返回 checked=false) */
+  daemonVersion?: McpDaemonVersionView;
 }
 
 export async function mcpGetConfig(): Promise<McpConfigView> {
@@ -528,7 +539,14 @@ export async function mcpGetConfig(): Promise<McpConfigView> {
     displayEndpoint: "http://127.0.0.1:9131/mcp",
     mcpEnvPath: "(browser-preview)",
     installed: false,
+    daemonVersion: { checked: false, stale: false },
   };
+}
+
+/** t_1b396e2f: 单点复查 daemon 版本一致性(restart 收敛后调用) */
+export async function mcpCheckVersion(): Promise<McpDaemonVersionView> {
+  const viaHost = await hostInvoke<McpDaemonVersionView>("mcp_check_version");
+  return viaHost ?? { checked: false, stale: false };
 }
 
 /** 生成新 32hex key + atomic 写 mcp.env + (可选) 自动重启 */
