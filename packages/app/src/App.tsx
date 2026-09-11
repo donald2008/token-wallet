@@ -242,6 +242,9 @@ function AppShell() {
 
   // P1(t_6484ecc6): 一层 filter(chips 选中态 → 命中子集), 排序仍走 sortProviders 原排序器。
   //   过滤在排序之前(先缩小视角再按配置排), 不改变排序器语义; 默认「全部」= 原 providers 全集。
+  // t_4b7984d9 round-4 ④: 主页 tab 分离(「用量」vs「本地 Agent」), 默认 usage;
+  //   互斥显示避免两个区叠加挤压卡区,LocalAgentSection 组件复用不重写
+  const [mainTab, setMainTab] = useState<"usage" | "local-agent">("usage");
   const filteredProviders = useMemo(
     () => (providers ?? []).filter((p) => matchesFilter(p, filter)),
     [providers, filter],
@@ -470,6 +473,28 @@ function AppShell() {
             // W3: 写盘失败顶部错误条(内存态仍可用, 可关闭; 恢复后同消息再失败会重弹)
             <PersistErrorBar error={visiblePersistError} onDismiss={dismissPersistError} />
           )}
+          {/* t_4b7984d9 round-4 ④: 主页 tab 分离 — 两枚按钮互斥切切换 mainTab 状态,
+             决定下方 agent-card-section(用量)与 LocalAgentSection(本地 Agent)哪个挂载 */}
+          <nav className="main-tabs" data-testid="main-tabs" aria-label="主页视图切换">
+            <button
+              type="button"
+              className={`main-tab${mainTab === "usage" ? " active" : ""}`}
+              data-testid="main-tab-usage"
+              aria-pressed={mainTab === "usage"}
+              onClick={() => setMainTab("usage")}
+            >
+              用量
+            </button>
+            <button
+              type="button"
+              className={`main-tab${mainTab === "local-agent" ? " active" : ""}`}
+              data-testid="main-tab-local-agent"
+              aria-pressed={mainTab === "local-agent"}
+              onClick={() => setMainTab("local-agent")}
+            >
+              本地 Agent
+            </button>
+          </nav>
           {providers === null ? (
             <LoadingState />
           ) : collecting ? (
@@ -509,15 +534,17 @@ function AppShell() {
               )}
             </main>
           )}
-          <LocalAgentSection />
+          {mainTab === "local-agent" && <LocalAgentSection />}
           {/* t_9255cb63: 主页 Agent 卡区 — 来自 daemon usage_summary(group_by=["agent"]),
              与 ProviderCard 同构(.card/.card-head 共享), 数据源是 MCP daemon, 非 mock。
              daemon 不可达/401/协议错 → 显式 AgentCardEmpty(不静默吞成 0)。
              t_12bdc277 round-2 修复: 解绑 providers 门禁 — 零 provider 实例下, Agent 区也应可见
              (数据源是 daemon, 与 provider 实例数无因果)。仅 providers===null(引擎加载中)
-             不渲染, 避免半初始化闪态。其余一律渲染: mcpSummary.ok → AgentCard 列表;
-             !ok → AgentCardEmpty 按 reason 显式提示。同 D-036「选得到即采得到」精神。 */}
-          {providers !== null && (
+             不渲染,避免半初始化闪态。其余一律渲染: mcpSummary.ok → AgentCard 列表;
+             !ok → AgentCardEmpty 按 reason 显式提示。同 D-036「选得到即采得到」精神。
+             t_4b7984d9 round-4 ④: 仅在 mainTab="usage" 时渲染(与 LocalAgentSection 互斥),
+             360 高度预算不再被两区叠加挤压。*/}
+          {mainTab === "usage" && providers !== null && (
             <section className="agent-card-section" data-testid="agent-card-section">
               <header className="agent-card-section-head">
                 <span className="agent-card-section-title">Agent 用量</span>

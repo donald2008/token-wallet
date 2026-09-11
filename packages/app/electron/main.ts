@@ -213,12 +213,18 @@ function createAgentDashboardWindow(): void {
     agentDashboardWindow.focus();
     return;
   }
+  // t_4b7984d9 round-4 ②: 真壳显示不全修复 — 高度 600→640(原高度含 27px 系统标题栏 + 边框,
+  // 实际内容区仅 ~570px;AgentDashboardC 容器 min-height:600px + 多象限内容超出 ⇒ 底部明细截断)。
+  // useContentSize:true 让 width/height 描述内容区(不含 chrome),Electron 自动加标题栏
+  // autoHideMenuBar 去掉菜单栏横条占高
   agentDashboardWindow = new BrowserWindow({
     width: 900,
-    height: 600,
-    // 设计基准 900×600, 内容自适应, 不强制最大化
+    height: 640,
+    useContentSize: true,
+    autoHideMenuBar: true,
+    // 设计基准 900×640, 内容自适应, 不强制最大化
     minWidth: 600,
-    minHeight: 400,
+    minHeight: 480,
     maximizable: true,
     // t_4b7984d9 round-2 P1 fix: 删 frame:false / transparent:true / thickFrame:false — 走系统边框。
     title: "token-wallet · Agent 用量详情",
@@ -234,16 +240,34 @@ function createAgentDashboardWindow(): void {
   agentDashboardWindow.on("closed", () => {
     agentDashboardWindow = null;
   });
-  // 选父窗口居中(900×600 + 主窗口 360×720 → 居中叠加), 视觉层次感
-  if (mainWindow) {
-    const main = mainWindow.getBounds();
+  // t_4b7984d9 round-4 ② 居中修复: 旧版用 mainWindow 居中(main.x + (main.width - 900)/2),
+  // 当主窗 360 宽时 main.width - 900 = -540 ⇒ dashboard 左缘跑到主窗左侧 270px(可能负偏移出屏)。
+  // 正解: 屏幕 workArea 居中(900×640 dashboard 居中于屏幕,与主窗位置无关,层次感清晰)。
+  try {
+    const { screen } = require("electron");
+    const display = screen.getPrimaryDisplay();
+    const wa = display.workArea;
     const dash = agentDashboardWindow.getBounds();
     agentDashboardWindow.setBounds({
-      x: Math.round(main.x + (main.width - dash.width) / 2),
-      y: Math.round(main.y + (main.height - dash.height) / 2),
+      x: Math.round(wa.x + (wa.width - dash.width) / 2),
+      y: Math.round(wa.y + (wa.height - dash.height) / 2),
       width: dash.width,
       height: dash.height,
     });
+  } catch {
+    /* screen 模块不可用时 fallback 主窗居中(老逻辑,但加了 dash.width > main.width 防护) */
+    if (mainWindow) {
+      const main = mainWindow.getBounds();
+      const dash = agentDashboardWindow.getBounds();
+      const dx = Math.max(0, Math.round((main.width - dash.width) / 2));
+      const dy = Math.max(0, Math.round((main.height - dash.height) / 2));
+      agentDashboardWindow.setBounds({
+        x: main.x + dx,
+        y: main.y + dy,
+        width: dash.width,
+        height: dash.height,
+      });
+    }
   }
   if (isDev) {
     const url = new URL(process.env.ELECTRON_RENDERER_URL as string);

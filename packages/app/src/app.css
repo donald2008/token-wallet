@@ -2633,15 +2633,51 @@ body {
   color: var(--fg-dim);
 }
 
+/* ---- t_4b7984d9 round-4 ④: 主页 tab 分离(用量 / 本地 Agent) ----
+ * 两枚 tab 按钮放在 panel-main 顶部、TitleBar 之下,
+ * 互斥渲染: 「用量」= 现 agent-card-section;「本地 Agent」= 现 LocalAgentSection
+ * 选中的 tab 加 .active 类(accent 下边框 + 字体色加亮)
+ */
+.main-tabs {
+  display: flex;
+  gap: var(--space-4, 4px);
+  padding: 0 var(--space-12, 12px);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex: 0 0 auto;
+}
+.main-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-dim);
+  font-size: var(--font-13, 13px);
+  font-weight: 500;
+  padding: var(--space-8, 8px) var(--space-12, 12px);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.main-tab:hover {
+  color: var(--fg);
+}
+.main-tab.active {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+
 /* ---- AgentDashboardC(方案 C 移植) ---- */
 .agent-dashboard-c {
   display: flex;
   flex-direction: column;
   gap: var(--space-12, 12px);
   padding: var(--space-12, 12px);
-  /* 900×600 设计基准, 内部 grid 用 %; 容器不强制固定尺寸(panel 自动撑开) */
+  /* t_4b7984d9 round-4 ②: 设计基准改 900×640(原 600),且容器 height: 100% 跟随内容;
+   * overflow-y: auto 双保险,即使内容超出可视区也能滚动兜底,不再被窗口边缘截断 */
   width: 100%;
+  height: 100%;
   min-height: 600px;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 .agent-dashboard-c-head {
   display: flex;

@@ -368,10 +368,13 @@ test("零 provider 实例 + daemon unreachable + scenario-empty 探针: AgentCar
 /** t_12bdc277 round-2: LocalAgentSection 占位文案中性化
  * 展开折叠区, 文案应是中性占位(「本地 agent 用量接入即将推出」),
  * 不得渲染看似真实的错误状态(如「daemon 未连接」)
+ * t_4b7984d9 round-4 ④: 先切到「本地 Agent」tab(默认 usage tab 下 LocalAgentSection 不挂载)
  */
 test("LocalAgentSection 占位文案中性化, 不含 daemon 错误状态", async ({ hostPage, page }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
+  // 切到「本地 Agent」tab(round-4 ④)
+  await page.getByTestId("main-tab-local-agent").click();
   // 展开折叠区
   await page.getByTestId("local-agent-toggle").click();
   await pwExpect(page.getByTestId("local-agent-body")).toBeVisible();
@@ -381,6 +384,31 @@ test("LocalAgentSection 占位文案中性化, 不含 daemon 错误状态", asyn
   expect(bodyText).not.toMatch(/daemon\s*未连接|请先启动\s*daemon/i);
   // 占位特征: 含「即将推出」或「coming soon」
   expect(bodyText).toMatch(/即将推出|coming\s*soon/i);
+});
+
+/** t_4b7984d9 round-4 ④ 回归门禁: tab 互斥显示
+ * 「用量」tab 默认显示 agent-card-section;点「本地 Agent」切换后,
+ * agent-card-section 消失,local-agent-section 出现;切回「用量」又恢复。
+ * 互斥状态机走通。
+ */
+test("主页 tab 分离: 用量 ↔ 本地 Agent 互斥切换", async ({ hostPage, page }) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  // 默认: 用量 tab 激活, agent-card-section 可见, local-agent-section 不可见
+  await pwExpect(page.getByTestId("main-tab-usage")).toHaveAttribute("aria-pressed", "true");
+  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
+  await pwExpect(page.getByTestId("local-agent-section")).toHaveCount(0);
+  // 切到「本地 Agent」
+  await page.getByTestId("main-tab-local-agent").click();
+  await pwExpect(page.getByTestId("main-tab-local-agent")).toHaveAttribute("aria-pressed", "true");
+  await pwExpect(page.getByTestId("main-tab-usage")).toHaveAttribute("aria-pressed", "false");
+  await pwExpect(page.getByTestId("local-agent-section")).toBeVisible();
+  await pwExpect(page.getByTestId("agent-card-section")).toHaveCount(0);
+  // 切回「用量」
+  await page.getByTestId("main-tab-usage").click();
+  await pwExpect(page.getByTestId("main-tab-usage")).toHaveAttribute("aria-pressed", "true");
+  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
+  await pwExpect(page.getByTestId("local-agent-section")).toHaveCount(0);
 });
 
 /** t_4b7984d9 round-2 P0 修复门禁: 独立窗口 query param 自动跳转。
