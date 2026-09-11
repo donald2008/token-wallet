@@ -626,3 +626,53 @@ for (const theme of ["dark", "light", "dark-glass", "light-glass"] as const) {
     expect(Math.abs(b - g), `theme=${theme} 不得偏蓝(B-G=${Math.abs(b - g)})`).toBeLessThan(24);
   });
 }
+
+/** t_4b7984d9 round-5 ⑤ (comment 1398): tab 互斥必须覆盖 provider 主列表三态分支。
+ *  round-4 ④ 只互斥了 agent-card-section 与 LocalAgentSection, provider 卡列表
+ *  (LoadingState/CollectingState/EmptyState/card-list) 漏在互斥外 —— 用户真机实测
+ *  切「本地 Agent」tab 后「暂无 Provider」空态仍可见。
+ *  360×720 视口锁死(round-3 教训: browser-only 默认 1280 视口下布局缺陷假绿)。 */
+test.describe("t_4b7984d9 round-5 ⑤ tab 互斥收口", () => {
+  test.use({ viewport: { width: 360, height: 720 } });
+
+  test("本地 Agent tab 下 provider 主列表三态全部不可见, 切回用量恢复", async ({
+    hostPage,
+    page,
+  }) => {
+    void hostPage;
+    await page.getByTestId("consent-agree").click();
+    await pwExpect(page.getByTestId("main-tab-usage")).toBeVisible();
+
+    const visible = (id: string) =>
+      page.evaluate((tid) => {
+        const el = document.querySelector<HTMLElement>(`[data-testid="${tid}"]`);
+        return el ? el.offsetParent !== null : false;
+      }, id);
+
+    // 用量 tab(默认): provider 主列表某态可见(空态/列表/采集中随 fixtures 而定)
+    const usageHasList =
+      (await visible("card-list")) ||
+      (await visible("empty-state")) ||
+      (await visible("collecting-state")) ||
+      (await visible("loading-state"));
+    expect(usageHasList, "用量 tab 下 provider 主列表(某态)应可见").toBe(true);
+
+    // 切「本地 Agent」: provider 三态 + agent-card-section 全部不可见
+    await page.getByTestId("main-tab-local-agent").click();
+    await pwExpect(page.getByTestId("local-agent-toggle")).toBeVisible();
+    expect(await visible("card-list"), "card-list 不得在本地 Agent tab 渲染").toBe(false);
+    expect(await visible("empty-state"), "empty-state 不得在本地 Agent tab 渲染").toBe(false);
+    expect(await visible("collecting-state"), "collecting-state 不得在本地 Agent tab 渲染").toBe(false);
+    expect(await visible("loading-state"), "loading-state 不得在本地 Agent tab 渲染").toBe(false);
+    expect(await visible("agent-card-section"), "agent-card-section 不得在本地 Agent tab 渲染").toBe(false);
+
+    // 切回「用量」: 恢复
+    await page.getByTestId("main-tab-usage").click();
+    const backVisible =
+      (await visible("card-list")) ||
+      (await visible("empty-state")) ||
+      (await visible("collecting-state")) ||
+      (await visible("loading-state"));
+    expect(backVisible, "切回用量 tab 后 provider 主列表应恢复").toBe(true);
+  });
+});

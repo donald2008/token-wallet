@@ -544,44 +544,48 @@ function AppShell() {
               本地 Agent
             </button>
           </nav>
-          {providers === null ? (
-            <LoadingState />
-          ) : collecting ? (
-            // P0-8: 已配置实例但快照未到 → "数据采集中", 不显示 EmptyState 误导
-            <CollectingState />
-          ) : providers.length === 0 ? (
-            <EmptyState onAdd={openAddProvider} />
-          ) : (
-            // P1(t_9639078b): 过滤三枚 icon 钮浮在卡片列表右上角 —— 与卡片列表同容器(绝对定位),
-            // 随内容滚动运动(不吸顶), 因此滚动内容不会与钮组重叠(修 v0.1.2 平台 chips 被卡片盖住)。
-            // 过滤后命中为空(如仅剩异常) → 居中「无匹配实例」(钮组仍在, 可点回其他视角)。
-            // t_f7d1beeb 9/7 修订 E: 用户反馈「主页上层的筛选按钮先隐藏, 感觉比较占地方」——
-            // 先隐藏(不删代码), filter state 管线(DEFAULT_FILTER/matchesFilter/filteredProviders)
-            // 全部保留, 后续要恢复时把下方 false 改 true 即可。e2e filter-icons 不再断言可见。
-            <main className="card-list" data-testid="card-list">
-              {false && <FilterIcons value={filter} onChange={setFilter} />}
-              {filteredProviders.length === 0 ? (
-                <NoMatchState />
+          {mainTab === "usage" && (
+            <>
+              {providers === null ? (
+                <LoadingState />
+              ) : collecting ? (
+                // P0-8: 已配置实例但快照未到 → "数据采集中", 不显示 EmptyState 误导
+                <CollectingState />
+              ) : providers.length === 0 ? (
+                <EmptyState onAdd={openAddProvider} />
               ) : (
-                <>
-                  {/* D-039 落点指示线(拖动中显示): 绝对定位在插入边界 */}
-                  {drag && indicatorY !== null && (
-                    <div className="drop-line" data-testid="drop-line" style={{ top: indicatorY }} />
+                // P1(t_9639078b): 过滤三枚 icon 钮浮在卡片列表右上角 —— 与卡片列表同容器(绝对定位),
+                // 随内容滚动运动(不吸顶), 因此滚动内容不会与钮组重叠(修 v0.1.2 平台 chips 被卡片盖住)。
+                // 过滤后命中为空(如仅剩异常) → 居中「无匹配实例」(钮组仍在, 可点回其他视角)。
+                // t_f7d1beeb 9/7 修订 E: 用户反馈「主页上层的筛选按钮先隐藏, 感觉比较占地方」——
+                // 先隐藏(不删代码), filter state 管线(DEFAULT_FILTER/matchesFilter/filteredProviders)
+                // 全部保留, 后续要恢复时把下方 false 改 true 即可。e2e filter-icons 不再断言可见。
+                <main className="card-list" data-testid="card-list">
+                  {false && <FilterIcons value={filter} onChange={setFilter} />}
+                  {filteredProviders.length === 0 ? (
+                    <NoMatchState />
+                  ) : (
+                    <>
+                      {/* D-039 落点指示线(拖动中显示): 绝对定位在插入边界 */}
+                      {drag && indicatorY !== null && (
+                        <div className="drop-line" data-testid="drop-line" style={{ top: indicatorY }} />
+                      )}
+                      {sortedCards.map((p) => (
+                        <ProviderCard
+                          key={p.provider_id}
+                          p={p}
+                          onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
+                          onRefresh={realInstanceIds.has(p.provider_id) ? onRefreshProvider : undefined}
+                          dragHandle={makeHandleProps(p.provider_id)}
+                          dragging={drag?.id === p.provider_id}
+                          dragDy={drag ? drag.dy : 0}
+                        />
+                      ))}
+                    </>
                   )}
-                  {sortedCards.map((p) => (
-                    <ProviderCard
-                      key={p.provider_id}
-                      p={p}
-                      onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
-                      onRefresh={realInstanceIds.has(p.provider_id) ? onRefreshProvider : undefined}
-                      dragHandle={makeHandleProps(p.provider_id)}
-                      dragging={drag?.id === p.provider_id}
-                      dragDy={drag ? drag.dy : 0}
-                    />
-                  ))}
-                </>
+                </main>
               )}
-            </main>
+            </>
           )}
           {mainTab === "local-agent" && <LocalAgentSection />}
           {/* t_9255cb63: 主页 Agent 卡区 — 来自 daemon usage_summary(group_by=["agent"]),
