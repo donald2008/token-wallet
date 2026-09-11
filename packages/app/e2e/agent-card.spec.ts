@@ -229,20 +229,32 @@ test("daemon 鉴权失败(401): 主页 Agent 卡区 reason 文案「鉴权失败
   await pwExpect(page.getByTestId("agent-empty-reason")).toContainText("鉴权失败");
 });
 
-/** t_12bdc277 round-2: Agent 卡区解绑 providers 门禁
- * 零 provider 实例 + mcpSummary.ok → agent-card-section 仍可见且含 AgentCard
- * (此前因 providers.length === 0 门禁, 主页根本看不到 Agent 区)。
+/** t_12bdc277 round-2 + round-3 B1: Agent 卡区解绑 providers 门禁
+ * 关键判别探针(round-3 必加): e2e 跑 vite DEV 构建, panelProviders.ts:21
+ * 在 hasInstances=false + isProd=false 时回退 scenarioProviders(scenario)。
+ * 默认 scenario="mixed" 返 3 张演示卡 → providers.length > 0 恒成立,
+ * 门禁永远命中, 两条用例对「门禁是否被关」零判别力(round-3 老大 njbx02
+ * 已实测: 把 App.tsx 门禁改回修复前 providers.length > 0 && → 9/9 仍全绿)。
+ *
+ * 修复: 点 scenario-empty 让 scenarioProviders 返 [] → providers.length===0
+ * 真抵达断言现场, 门禁判别力激活。同点 scenario-empty + 同门禁 → agent-
+ * card-section 必须可见(否则门禁未关)。反向对照: 临时改源码门禁打回
+ * providers.length > 0 && + 同探针 → 必须红 (验证脚本 docs/reviews/
+ * t_12bdc277-round3.md 步骤 2 已实测)。
  */
-test("零 provider 实例 + daemon ok: Agent 卡区仍可见 + 渲染 AgentCard", async ({
+test("零 provider 实例 + daemon ok: 点 scenario-empty 让 providers 真为 [] → Agent 卡区仍可见 + 渲染 AgentCard", async ({
   hostPage,
   page,
 }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
-  // 不 seed instances → 零 provider 实例
-  // seedAgentUsage 注入真数据摘要
+  // 关键探针: 点 scenario-empty 让 selectPanelProviders 返 [] 而非默认 mixed 演示卡
+  await page.getByTestId("scenario-empty").click();
+  // seedAgentUsage 注入真数据摘要(daemon ok)
   await seedAgentUsage(page, { ok: true, data: fakeSummary });
   await page.reload();
+  // reload 后 scenario 状态保留(dev state)? — React useState 默认丢, 复点一次探针确保 []
+  await page.getByTestId("scenario-empty").click();
 
   // 关键断言: agent-card-section 必须可见(此前会被 providers.length > 0 门禁掉)
   await pwExpect(page.getByTestId("agent-card-section")).toBeVisible({ timeout: 5000 });
@@ -250,18 +262,20 @@ test("零 provider 实例 + daemon ok: Agent 卡区仍可见 + 渲染 AgentCard"
   await pwExpect(page.locator('[data-testid="agent-card"]').first()).toBeVisible();
 });
 
-/** t_12bdc277 round-2: 零实例 + daemon 不可达 → AgentCardEmpty 显式 reason
- * (取代旧版「整段 agent 区消失 + 用户以为 daemon 没装」误导)
+/** t_12bdc277 round-2 + round-3 B1: 零实例 + daemon 不可达 → AgentCardEmpty 显式 reason
+ * 同上: 必须先 scenario-empty 让 providers 真为 [], 否则「零实例」断言未抵达门禁现场。
  */
-test("零 provider 实例 + daemon unreachable: AgentCardEmpty 显式 reason, 区不消失", async ({
+test("零 provider 实例 + daemon unreachable + scenario-empty 探针: AgentCardEmpty 显式 reason, 区不消失", async ({
   hostPage,
   page,
 }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
-  // 不 seed instances + seed unreachable reason
+  // 关键探针: scenario-empty
+  await page.getByTestId("scenario-empty").click();
   await seedAgentUsage(page, { ok: false, reason: "unreachable" });
   await page.reload();
+  await page.getByTestId("scenario-empty").click();
 
   await pwExpect(page.getByTestId("agent-card-section")).toBeVisible({ timeout: 5000 });
   await pwExpect(page.getByTestId("agent-card-empty")).toBeVisible();
