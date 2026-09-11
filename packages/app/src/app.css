@@ -752,9 +752,77 @@ body {
   font-size: 12px;
   color: var(--err-fg);
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-8);
   word-break: break-all;
+}
+
+/* t_12bdc277 P0 L1 (2026-09-11): CLI 缺失引导 — 标题 + 安装命令 + 复制按钮 + 重启提示 */
+.oneclick-auth-cli-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+  width: 100%;
+}
+.oneclick-auth-cli-missing-title {
+  font-weight: 600;
+}
+.oneclick-auth-cli-missing-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+}
+.oneclick-auth-cli-missing-cmd {
+  flex: 1 1 auto;
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Menlo, monospace);
+  background: var(--bg-elev);
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-small);
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.oneclick-auth-cli-missing-note {
+  color: var(--fg-muted, var(--muted));
+  font-size: 12px;
+}
+
+/* t_12bdc277 P0 L2: npm prefix 不在 PATH 时附 PowerShell 修复命令 */
+.oneclick-auth-path-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  width: 100%;
+  border-top: 1px solid var(--border-hairline);
+  padding-top: var(--space-8);
+}
+.oneclick-auth-path-hint-title {
+  font-weight: 600;
+  color: var(--warn-fg, var(--err-fg));
+}
+.oneclick-auth-path-hint-desc {
+  color: var(--fg-muted, var(--muted));
+  font-size: 12px;
+}
+.oneclick-auth-path-hint-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+}
+.oneclick-auth-path-hint-cmd {
+  flex: 1 1 auto;
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Menlo, monospace);
+  background: var(--bg-elev);
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-small);
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 /* ---- 本地 Agent 区(§6.5): 默认折叠占位(P3) ---- */

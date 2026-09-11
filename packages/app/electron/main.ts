@@ -36,8 +36,10 @@ import { runCommandFetch, type CommandRunPayload } from "./command-run";
 import {
   abortAllAuthSessions,
   cancelAuthSession,
+  detectPathHint,
   finishAuthSession,
   startAuthSession,
+  type AuthFailureKind,
 } from "./auth-session";
 import { authDefFor } from "./auth-defs";
 import { AppUpdaterController } from "./updater";
@@ -391,6 +393,8 @@ function registerIpc(): void {
   //   "code"(arkcli): 设备码协议, 浏览器页面显示 code → 用户粘贴 → spawn 新进程 --code 回喂, 解析 ok
   //   "callback"(bl): localhost 自闭环, 浏览器授权后 302 回跳 CLI 自收 code, 等 close(0) 免回喂
   // CLI 名从 renderer 的 setup_hint 提取(ep: arkcli/bl)。返回 finishMode 供 UI 分流渲染。
+  // 2026-09-11 P0 补: catch 时提取 err.kind(CliMissingKind → 引导文案)+ err.pathHint(npm prefix 不在 PATH)。
+  // 这两类信息由 waitForUrl / completeWithCode 写在 throw 的 Error 对象上(见 auth-session.ts)。
   ipcMain.handle(
     "command_auth_start",
     async (_event, payload: { cli?: string } | undefined) => {
@@ -402,14 +406,36 @@ function registerIpc(): void {
         });
         return { ok: true, sessionId, url, finishMode };
       } catch (err) {
-        return { ok: false, message: `授权启动失败: ${String(err)}` };
+        const typed = err as { kind?: AuthFailureKind; message?: string };
+        const baseMsg = typed.message ?? String(err);
+        const result: {
+          ok: false;
+          message: string;
+          kind?: AuthFailureKind;
+          pathHint?: { npmPrefix: string };
+        } = { ok: false, message: baseMsg.startsWith("授权") ? baseMsg : `授权启动失败: ${baseMsg}` };
+        if (typed.kind) result.kind = typed.kind;
+        if (typed.kind === "cli_missing") {
+          // L2 PATH 自检: 命中 npm prefix 不在 PATH 时附 pathHint, renderer 渲染额外引导
+          result.pathHint = await detectPathHint(def.command);
+        }
+        return result;
       }
     },
   );
   ipcMain.handle(
     "command_auth_finish",
-    (_event, payload: { sessionId?: string; code?: string } | undefined) =>
-      finishAuthSession(String(payload?.sessionId ?? ""), String(payload?.code ?? "")),
+    async (_event, payload: { sessionId?: string; code?: string } | undefined) => {
+      const result = await finishAuthSession(
+        String(payload?.sessionId ?? ""),
+        String(payload?.code ?? ""),
+      );
+      // finish 阶段的 cli_missing 也补一次 pathHint(保持 L2 引导一致)
+      if (!result.ok && result.kind === "cli_missing" && result.cli) {
+        result.pathHint = await detectPathHint(result.cli);
+      }
+      return result;
+    },
   );
   // 取消进行中的授权会话(浏览器等待中放弃; bl callback 模式进程保持存活, 必须有取消出口 kill 掉防残留)
   ipcMain.handle("command_auth_cancel", (_event, payload: { sessionId?: string } | undefined) => {

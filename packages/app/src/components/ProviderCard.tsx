@@ -80,6 +80,14 @@ export function extractCliFromHint(hint: string): string {
   return cmd.trim().split(/\s+/)[0] ?? "";
 }
 
+/** t_fb8c44d8 配套: 由 CLI 名 → 安装命令(2026-09-11 真机实证 npm 全局陷阱)。
+ * 当前 command 通道: arkcli / bl。arkcli 官方包名 @volcengine/ark-cli; bl 阿里云官方文档明示
+ * (此处仅 user-visible copy, 实际安装由用户复制命令到 shell 执行, app 不代装)。 */
+const CLI_INSTALL_CMD: Record<string, string> = {
+  arkcli: "npm i -g @volcengine/ark-cli",
+  bl: "npm i -g @alicloud/bl",
+};
+
 function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerId: string; onRefresh?: (id: string) => void }) {
   const [stage, setStage] = useState<"idle" | "starting" | "waiting" | "done" | "error">("idle");
   const [finishMode, setFinishMode] = useState<"code" | "callback" | undefined>(undefined);
@@ -87,6 +95,10 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
   const [code, setCode] = useState("");
   const [url, setUrl] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  // t_12bdc277 P0 L1: cli_missing 错误分类 — 渲染专属安装引导 vs 通用错误
+  const [errorKind, setErrorKind] = useState<"cli_missing" | "exec_error" | undefined>(undefined);
+  // t_12bdc277 P0 L2: npm prefix 不在 PATH 时填充, 渲染额外 PowerShell 修复命令
+  const [pathHint, setPathHint] = useState<{ npmPrefix: string } | undefined>(undefined);
   // 取消/重开时递增, 使 in-flight 的 start/finish promise 回调失效, 防旧结果覆盖新 UI
   const runGen = useRef(0);
   const cli = extractCliFromHint(hint);
@@ -96,12 +108,16 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
     const gen = ++runGen.current;
     setStage("starting");
     setErrorMsg("");
+    setErrorKind(undefined);
+    setPathHint(undefined);
     setCode("");
     setFinishMode(undefined);
     void commandAuthStart(cli).then((res) => {
       if (runGen.current !== gen) return; // 已被取消/重开
       if (!res.ok || !res.sessionId) {
         setErrorMsg(res.message ?? "授权启动失败");
+        setErrorKind(res.kind);
+        setPathHint(res.pathHint);
         setStage("error");
         return;
       }
@@ -118,6 +134,8 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
             setStage("done");
           } else {
             setErrorMsg(fr.message ?? "授权失败");
+            setErrorKind(fr.kind);
+            setPathHint(fr.pathHint);
             setStage("error");
           }
         });
@@ -130,6 +148,8 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
     const gen = runGen.current;
     setStage("starting");
     setErrorMsg("");
+    setErrorKind(undefined);
+    setPathHint(undefined);
     void commandAuthFinish(sessionId, code.trim()).then((res) => {
       if (runGen.current !== gen) return;
       if (res.ok) {
@@ -137,6 +157,8 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
         setCode("");
       } else {
         setErrorMsg(res.message ?? "授权失败");
+        setErrorKind(res.kind);
+        setPathHint(res.pathHint);
         setStage("error");
       }
     });
@@ -240,7 +262,58 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
       ) : null}
       {stage === "error" ? (
         <div className="oneclick-auth-error" data-testid="oneclick-auth-error">
-          {errorMsg}
+          {errorKind === "cli_missing" ? (
+            // t_12bdc277 P0 L1: CLI 缺失 — 专属引导, 不只是「重启试试」
+            <div className="oneclick-auth-cli-missing" data-testid="oneclick-auth-cli-missing">
+              <div className="oneclick-auth-cli-missing-title">
+                {t("card.authCliMissingTitle", { cli })}
+              </div>
+              <div className="oneclick-auth-cli-missing-row">
+                <code className="oneclick-auth-cli-missing-cmd" data-testid="oneclick-auth-cli-missing-cmd">
+                  {t("card.authCliMissingInstall", { cmd: CLI_INSTALL_CMD[cli] ?? `npm i -g ${cli}` })}
+                </code>
+                <button
+                  type="button"
+                  className="btn btn-sm oneclick-auth-cli-missing-copy"
+                  data-testid="oneclick-auth-cli-missing-copy"
+                  onClick={() => {
+                    void copyText(CLI_INSTALL_CMD[cli] ?? `npm i -g ${cli}`);
+                  }}
+                >
+                  {t("card.copy")}
+                </button>
+              </div>
+              <div className="oneclick-auth-cli-missing-note">{t("card.authCliMissingRestart")}</div>
+              {pathHint ? (
+                // t_12bdc277 P0 L2: npm prefix 不在 PATH 时, 附 PowerShell 修复命令
+                <div className="oneclick-auth-path-hint" data-testid="oneclick-auth-path-hint">
+                  <div className="oneclick-auth-path-hint-title">
+                    {t("card.authCliMissingPathHintTitle", { prefix: pathHint.npmPrefix })}
+                  </div>
+                  <div className="oneclick-auth-path-hint-desc">
+                    {t("card.authCliMissingPathHintDesc")}
+                  </div>
+                  <div className="oneclick-auth-path-hint-row">
+                    <code className="oneclick-auth-path-hint-cmd" data-testid="oneclick-auth-path-hint-cmd">
+                      {t("card.authCliMissingPathHintCmd", { prefix: pathHint.npmPrefix })}
+                    </code>
+                    <button
+                      type="button"
+                      className="btn btn-sm oneclick-auth-path-hint-copy"
+                      data-testid="oneclick-auth-path-hint-copy"
+                      onClick={() => {
+                        void copyText(t("card.authCliMissingPathHintCmd", { prefix: pathHint.npmPrefix }));
+                      }}
+                    >
+                      {t("card.copy")}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <span>{errorMsg}</span>
+          )}
           <button
             type="button"
             className="btn btn-sm oneclick-auth-retry"

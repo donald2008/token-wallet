@@ -103,6 +103,14 @@ const zh = {
     statusDot: "状态: {label}",
     /* t_5d8c3c81 只读缓存语义: 异常卡有旧数据时, 标注数据时效让用户知道不是最新值 */
     staleFetchedAgo: "当前数据为 {ago} 采集(非最新)",
+    /* t_12bdc277 火山授权三连 P0 + L1/L2 引导(2026-09-11):
+     * cli_missing: 授权阶段 CLI 不可用, 用户无需翻日志也能自助恢复 */
+    authCliMissingTitle: "{cli} 未安装或不在 PATH",
+    authCliMissingInstall: "请先安装: {cmd}",
+    authCliMissingRestart: "装完需重启 app(PATH 继承)",
+    authCliMissingPathHintTitle: "检测到 npm 全局目录 {prefix} 不在 PATH",
+    authCliMissingPathHintDesc: "包已安装但 app 找不到。请把 npm prefix 加入 PATH 后重启 app:",
+    authCliMissingPathHintCmd: "$env:Path = \"{prefix};$env:Path\"",
   },
   ago: {
     now: "刚刚",
@@ -436,6 +444,13 @@ const en: Dict = {
     statusDot: "Status: {label}",
     /* t_5d8c3c81: data freshness note shown on abnormal cards with stale-but-rendered data */
     staleFetchedAgo: "Data last fetched {ago} (stale)",
+    /* t_12bdc277 cli_missing onepager guidance (2026-09-11) */
+    authCliMissingTitle: "{cli} not installed or not in PATH",
+    authCliMissingInstall: "Install first: {cmd}",
+    authCliMissingRestart: "Restart app after installing (PATH is inherited at launch)",
+    authCliMissingPathHintTitle: "npm global prefix {prefix} is not in PATH",
+    authCliMissingPathHintDesc: "The package is installed but the app can't find it. Add the npm prefix to PATH and restart the app:",
+    authCliMissingPathHintCmd: "$env:Path = \"{prefix};$env:Path\"",
   },
   ago: {
     now: "just now",

@@ -236,11 +236,21 @@ export async function commandRun(payload: CommandRunPayload): Promise<unknown | 
   return viaHost;
 }
 
+/** 授权失败类型(t_12bdc277 P0 L1, 2026-09-11): cli_missing 走安装引导, exec_error 通用错误 */
+export type AuthFailureKind = "cli_missing" | "exec_error";
+
+/** PATH 自检结果(t_12bdc277 P0 L2): npm prefix 不在 PATH 时, app 探测命中后填充,
+ * renderer 据此渲染额外引导(用户装了 CLI 但 app 找不到的场景) */
+export interface AuthPathHint {
+  npmPrefix: string;
+}
+
 /**
  * t_fb8c44d8: command 通道一键授权 — 主进程 command_auth_start 桥。
  * 传入 CLI 名(从 setup_hint 提取, ep: arkcli/bl); 返回 { ok, sessionId?, url?, finishMode?, message? }。
  * 浏览器自动打开由主进程 shell.openExternal 完成(renderer 只拿 url 做展示)。
  * finishMode: "code"=用户需从浏览器复制 code 粘贴(app 显输入框); "callback"=免粘贴等浏览器授权完成。
+ * 失败时携带 kind(错误分类)+ pathHint(PATH 自检), 供 renderer 渲染 cli_missing 引导文案。
  */
 export async function commandAuthStart(cli: string): Promise<{
   ok: boolean;
@@ -248,6 +258,8 @@ export async function commandAuthStart(cli: string): Promise<{
   url?: string;
   finishMode?: "code" | "callback";
   message?: string;
+  kind?: AuthFailureKind;
+  pathHint?: AuthPathHint;
 }> {
   const viaHost = await hostInvoke<{
     ok: boolean;
@@ -255,6 +267,8 @@ export async function commandAuthStart(cli: string): Promise<{
     url?: string;
     finishMode?: "code" | "callback";
     message?: string;
+    kind?: AuthFailureKind;
+    pathHint?: AuthPathHint;
   }>("command_auth_start", { cli });
   return viaHost ?? { ok: false, message: "授权通道不可用(浏览器预览模式)" };
 }
@@ -263,11 +277,11 @@ export async function commandAuthStart(cli: string): Promise<{
 export async function commandAuthFinish(
   sessionId: string,
   code: string,
-): Promise<{ ok: boolean; message: string }> {
-  const viaHost = await hostInvoke<{ ok: boolean; message: string }>("command_auth_finish", {
-    sessionId,
-    code,
-  });
+): Promise<{ ok: boolean; message: string; kind?: AuthFailureKind; pathHint?: AuthPathHint }> {
+  const viaHost = await hostInvoke<{ ok: boolean; message: string; kind?: AuthFailureKind; pathHint?: AuthPathHint }>(
+    "command_auth_finish",
+    { sessionId, code },
+  );
   return viaHost ?? { ok: false, message: "授权通道不可用(浏览器预览模式)" };
 }
 
