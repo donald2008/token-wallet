@@ -1,4 +1,10 @@
-# t_04f75eae 集成验收报告 — typecheck / vitest / e2e 全绿 + 真机三项复验（R2 修订版）
+# t_04f75eae 集成验收报告 — typecheck / vitest / e2e 全绿 + 真机三项复验（R3 修订版）
+
+> **R3（2026-09-12）**：按人工终审驳回意见（run 927 changes_requested）修复后重交。
+> 变更：app.css 紧凑视口段（`@media (max-height: 680px)`）内大屏所有文本元素
+> `line-height` 由 unitless 乘数锁定为定值 px（修复④，消除跨平台 fontconfig 回退字体
+> 度量差异），门禁「零滚动」断言保持严格不加容差；清除 R1 遗留旧版 `01-home-360px.png`
+> （P2 项）。复验基线：njbx02 修前 4 次全挂（598 > 592 恒定）→ 修后本机 4 次全绿。
 
 > **R2（2026-09-11）**：按 reviewer 驳回意见（comment #1389）修复后重交。
 > 变更：③ 证据重拍（standalone 路径 + 900×600/900×640 量化 in-viewport 断言）、
@@ -92,7 +98,7 @@ $ corepack pnpm -C packages/app exec playwright test
 | `03-home-1280x720.png` | 对照：主页 1280×720 | 同上 |
 
 > R1 的 `02-dashboard-900x600.png`（内嵌路径误标为大屏证据）已删除；R1 的
-> `01-home-360px.png` 被本组 01/01b 取代。
+> `01-home-360px.png` 被本组 01/01b 取代，R3 已从树中清除（避免证据目录双版本混淆）。
 
 ### ① 主页「本地 Agent」标题无蓝色 ✅
 

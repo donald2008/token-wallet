@@ -2855,6 +2855,41 @@ body {
   .agent-dashboard-c .chart-wrap {
     min-height: 150px;
   }
+
+  /* t_04f75eae R3 集成修复 ④: 行高锁定定值 px, 消除平台字体度量差异。
+   * 驳回实录: 门禁「零滚动」断言在 njbx02 复跑 4 次全挂(scrollHeight 598 > clientHeight 592,
+   * 恒定), 而 k3 reviewer 机(DejaVu 回退字体)单测绿 —— 探针 spec 实测每个区块恰好高 6px
+   * (hero 165 vs 159 / trend 386 vs 380 / list 578 vs 563), 根因=unitless line-height 乘数
+   * 随 fontconfig 回退字体的字体度量(ascent+descent)浮动, 断言对平台字体敏感不可移植。
+   * 修法=standalone 紧凑视口段所有文本元素 line-height 改定值 px(对齐 8px 网格), 行高
+   * 不再随字体浮动; 宽松视口(>680px)不命中本段, 观感不变。门禁断言保持严格, 不加容差。 */
+  .agent-dashboard-c,
+  .agent-dashboard-c-head,
+  .agent-dashboard-c-controls,
+  .dash-chrome,
+  .dash-chrome-title,
+  .agent-dashboard-c-title,
+  .agent-dashboard-c-back,
+  .theme-toggle,
+  .theme-toggle button,
+  .agent-dashboard-c .hero-tokens,
+  .agent-dashboard-c .hero-unit,
+  .agent-dashboard-c .hero-cost,
+  .agent-dashboard-c .meta,
+  .agent-dashboard-c .panel-title-row,
+  .agent-dashboard-c .panel-title,
+  .agent-dashboard-c .panel-title-row .right,
+  .agent-dashboard-c .pct,
+  .agent-dashboard-c .detail-list li,
+  .agent-dashboard-c .idle-tag,
+  .agent-dashboard-c-footer {
+    line-height: 16px;
+  }
+  .agent-dashboard-c .hero-tokens {
+    /* 32px 字号: 16px 定值行高小于字面高度, 上下半行距(8px)为负, 文本上下缘可能裁切
+     * — 单列锁定 32px(=字号, 8px 网格), hero 为 flex 基线对齐, 裁切风险最高的单一大字号 */
+    line-height: 32px;
+  }
 }
 .agent-dashboard-c .split-bar {
   display: flex;
