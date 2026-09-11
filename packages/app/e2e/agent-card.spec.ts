@@ -490,3 +490,83 @@ test("t_185002af 返回键语义分流: standalone→win_close, 主窗→切页�
     "主窗路径返回键不得触发 win_close(应走视图切换)",
   ).toBe(false);
 });
+
+/** t_04f75eae 集成门禁: standalone 大屏必须在窗口内收口(不被窗缘裁切)。
+ *  背景: 独立窗 900×640(useContentSize, main.ts) 内, .dash-chrome(33px) 之上再叠
+ *  min-height:600 的大屏容器 ⇒ 内容 678 > 可用高, 明细列表末行 + 页脚被窗缘裁掉。
+ *  修复(见 app.css t_04f75eae ①②③)后本测试锁两件事:
+ *   1) 卡面尺寸 900×600: 四象限(hero / 趋势 / model / 三分项 / 明细) bottom ≤ 视口高;
+ *   2) 产品窗口内容尺寸 900×640: 容器零纵向滚动(scrollHeight ≤ clientHeight) 且页脚在视口内。 */
+test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×640 零滚动", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  await seedAgentUsage(page, { ok: true, data: fakeSummary });
+
+  const quads = [
+    "agent-dashboard-c-hero-tokens",
+    "agent-dashboard-c-chart-trend",
+    "agent-dashboard-c-chart-model",
+    "agent-dashboard-c-seg-hit",
+    "agent-dashboard-c-detail-list",
+  ];
+
+  const measure = (ids: string[]) =>
+    page.evaluate((list: string[]) => {
+      const out: { id: string; present: boolean; top: number; bottom: number; vh: number }[] = [];
+      for (const id of list) {
+        const el = document.querySelector(`[data-testid="${id}"]`);
+        if (!el) {
+          out.push({ id, present: false, top: 0, bottom: 0, vh: window.innerHeight });
+          continue;
+        }
+        const r = el.getBoundingClientRect();
+        out.push({
+          id,
+          present: true,
+          top: r.top,
+          bottom: r.bottom,
+          vh: window.innerHeight,
+        });
+      }
+      return out;
+    }, ids);
+
+  // ① 900×600(卡面尺寸): 四象限底部均不越出视口
+  await page.setViewportSize({ width: 900, height: 600 });
+  await page.goto("?view=agent-dashboard&standalone=1");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  await pwExpect(page.getByTestId("dash-chrome")).toBeVisible();
+  await page.waitForTimeout(600);
+  for (const q of await measure(quads)) {
+    expect(q.present, `${q.id} 必须渲染(standalone 大屏四象限)`).toBe(true);
+    expect(q.top, `${q.id} top=${q.top} 不得越出视口上缘`).toBeGreaterThanOrEqual(-0.5);
+    expect(q.bottom, `${q.id} bottom=${q.bottom} 必须 ≤ 视口高 ${q.vh}`).toBeLessThanOrEqual(
+      q.vh + 0.5,
+    );
+  }
+
+  // ② 900×640(产品窗口内容尺寸): 容器零滚动 + 页脚可见
+  await page.setViewportSize({ width: 900, height: 640 });
+  await page.goto("?view=agent-dashboard&standalone=1");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  await page.waitForTimeout(600);
+  const box = await page.evaluate(() => {
+    const dash = document.querySelector(".agent-dashboard-c") as HTMLElement;
+    const footer = document.querySelector(".agent-dashboard-c-footer") as HTMLElement;
+    return {
+      ch: dash.clientHeight,
+      sh: dash.scrollHeight,
+      footerBottom: footer.getBoundingClientRect().bottom,
+      vh: window.innerHeight,
+    };
+  });
+  expect(box.sh, `大屏容器不得纵向滚动(scrollHeight ${box.sh} > clientHeight ${box.ch})`).toBeLessThanOrEqual(
+    box.ch + 1,
+  );
+  expect(box.footerBottom, `页脚 bottom=${box.footerBottom} 必须 ≤ 视口高 ${box.vh}`).toBeLessThanOrEqual(
+    box.vh + 0.5,
+  );
+});

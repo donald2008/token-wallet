@@ -2675,7 +2675,11 @@ body {
    * overflow-y: auto 双保险,即使内容超出可视区也能滚动兜底,不再被窗口边缘截断 */
   width: 100%;
   height: 100%;
-  min-height: 600px;
+  /* t_04f75eae 集成修复 ①: min-height 600 顶出窗缘 — standalone 时上方还有 33px 的
+   * .dash-chrome, 总高 = chrome(33) + max(600, 内容) > 窗内容高(900×640 时 624-33=591)
+   * ⇒ 容器被 .panel overflow:hidden 裁 + html 多出 8px 滚动条。改 min-height:0 后
+   * 本容器作为 .panel(列 flex) 的子项按剩余高度收缩, 四象限边框落回窗口内。 */
+  min-height: 0;
   box-sizing: border-box;
   overflow-y: auto;
 }
@@ -2815,7 +2819,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-8, 8px);
-  min-height: 220px;
+  /* t_04f75eae 集成修复 ②: 内层卡 min-height 220 在紧凑视口(900×640/900×600 独立窗)
+   * 会把两行 row-grid 顶到 220×2+ 而超出容器 ⇒ 明细列表底部被窗缘裁掉 18px。
+   * 改 0 = 「宽松视口按内容撑开(观感不变), 紧凑视口按剩余高度收缩」；图表下限由
+   * .chart-wrap(180px) 单独兜住, 明细列表本就是变长列表(overflow:auto 自滚动)。 */
+  min-height: 0;
 }
 .agent-dashboard-c .panel-title-row {
   display: flex;
@@ -2837,6 +2845,16 @@ body {
   position: relative;
   flex: 1;
   min-height: 180px;
+}
+
+/* t_04f75eae 集成修复 ③: 紧凑高度视口(独立窗 900×640 内容高 591 / 更小窗)下图表下限
+ * 180 会让「顶摘要 + 2×2 grid + 页脚」的最小高度(≈610)超出容器 → 容器内滚动条 + 页脚
+ * 被裁。降到 150 后最小高度 ≈580 ≤ 591, 窗口内零裁切; 宽松视口(主窗内嵌 1280×720 等)
+ * 不命中媒体查询, 图表仍 180 起步 + flex:1 撑满, 观感不变。 */
+@media (max-height: 680px) {
+  .agent-dashboard-c .chart-wrap {
+    min-height: 150px;
+  }
 }
 .agent-dashboard-c .split-bar {
   display: flex;
