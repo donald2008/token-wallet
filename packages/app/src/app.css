@@ -862,9 +862,10 @@ body {
 .local-agent-title {
   font-weight: 600;
   flex: 1;
-  /* t_4b7984d9 A: 干掉 button 子元素 user-agent 默认蓝, 与「即将推出」tag 同族克制视觉;
-   * 卡上拍板中性前景色(实测本地 CSS 无 color 声明, 吃 Chromium user-agent 蓝) */
-  color: var(--fg);
+  /* t_4b7984d9 A (round-5): 与「即将推出」tag 同族克制视觉 — 卡面拍板口径即「tag 同族」,
+   * tag 用 var(--fg-dim), title 对齐之。round-2 的 var(--fg) 在 dark 主题下是 #e5e9f0
+   * (B 通道最大的冷白), 用户真机读作「蓝」, 故降为中性灰阶 --fg-dim。 */
+  color: var(--fg-dim);
 }
 
 .local-agent-tag {

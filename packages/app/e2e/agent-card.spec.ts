@@ -570,3 +570,59 @@ test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×
     box.vh + 0.5,
   );
 });
+
+/** t_4b7984d9 round-5 A 项收口门禁: 「本地 Agent」标题三主题颜色断言。
+ *  用户真机两次反馈「蓝还在」: round-2 的 var(--fg) 在 dark/dark-glass 下是 #e5e9f0
+ *  (B 通道最大,深底上读作冷蓝),round-2/3 真壳实测只验了 light 没咬住。
+ *  round-5 按「与『即将推出』tag 同族克制视觉」的拍板口径对齐 --fg-dim:
+ *    dark  #9aa4b2 / light  #5d6778 (中性灰阶, 三主题下均非蓝)
+ *  断言有判别力: 旧值(--fg)与新值(--fg-dim)在三主题下 RGB 均不相等,
+ *  本测试对 round-2 旧 CSS 必挂。 */
+for (const theme of ["dark", "light", "dark-glass", "light-glass"] as const) {
+  test(`t_4b7984d9 round-5 A: local-agent-title 颜色 = --fg-dim (${theme})`, async ({
+    hostPage,
+    page,
+  }) => {
+    void hostPage;
+    // 主题落点: localStorage theme.v1 + glass.v1 (theme.ts loadThemeMode/loadGlass)
+    // glass 变体下 title 颜色仍走同一 --fg-dim token (theme.css glass 段不覆盖前景色)
+    // consent 走 fixtures mock 桥(不读 localStorage), 与既有测试同模式: 点同意 → 设主题 → reload
+    await page.getByTestId("consent-agree").click();
+    await page.evaluate((t: string) => {
+      const glass = t.endsWith("-glass");
+      localStorage.setItem(
+        "token-wallet.theme.v1",
+        glass ? t.replace("-glass", "") : t,
+      );
+      localStorage.setItem("token-wallet.glass.v1", glass ? "1" : "0");
+    }, theme);
+    await page.reload();
+    await page.goto("?view=panel");
+    await pwExpect(page.getByTestId("local-agent-section")).toHaveCount(0); // 默认 usage tab
+    // round-4 ④: LocalAgentSection 挂在「本地 Agent」tab 下
+    await page.getByTestId("main-tab-local-agent").click();
+    await pwExpect(page.getByTestId("local-agent-toggle")).toBeVisible();
+    await page.getByTestId("local-agent-toggle").click();
+    await pwExpect(page.getByTestId("local-agent-body")).toBeVisible();
+
+    const colors = await page.evaluate(() => {
+      const title = document.querySelector(".local-agent-title") as HTMLElement;
+      const tag = document.querySelector(".local-agent-tag") as HTMLElement;
+      return {
+        title: getComputedStyle(title).color,
+        tag: getComputedStyle(tag).color,
+        dataTheme: document.documentElement.dataset.theme,
+      };
+    });
+    // 主题落点正确
+    expect(colors.dataTheme).toBe(theme);
+    // title 与 tag 同族(同为 --fg-dim) — 拍板口径「克制视觉同族」的机器可验形式
+    expect(colors.title, `theme=${theme} title 颜色须与 tag(--fg-dim) 同族`).toBe(colors.tag);
+    // 非蓝判定: --fg-dim 是中性灰阶, G 通道居中, B-G 差 < 24 (冷白 --fg 的 B-G 差 = 240-233 = 7
+    // 不够判别, 故直接用「与 tag 同色」这一强断言 + title 非纯白两道)
+    const m = colors.title.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    expect(m, `computed color 必须可解析: ${colors.title}`).toBeTruthy();
+    const [, , g, b] = m!.map(Number) as unknown as number[];
+    expect(Math.abs(b - g), `theme=${theme} 不得偏蓝(B-G=${Math.abs(b - g)})`).toBeLessThan(24);
+  });
+}

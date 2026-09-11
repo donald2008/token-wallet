@@ -52,7 +52,7 @@ export function totalTokens(row: SummaryRow): number {
  *  删原 K/M 简写分支, 一律 Intl.NumberFormat("en-US") 千分位完整展示;
  *  365px 卡片宽度下 9 位数字 + 「tokens」unit 走 .agent-tokens-number 的
  *  font-variant-numeric: tabular-nums + clamp 字号自适应, **禁止截断/换行**。
- *  AgentDashboardC 同步: hero 区与 detail-list 的 tokens 列共用 fmtTokensAll。 */
+ *  AgentDashboardC 同步: hero 区与 detail-list 的 tokens 列与其自有 fmt 函数保持同口径。 */
 const fmtWhole = new Intl.NumberFormat("en-US");
 export function formatTokens(n: number): string {
   return fmtWhole.format(n);
