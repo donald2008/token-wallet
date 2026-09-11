@@ -465,12 +465,14 @@ export async function updaterInstall(): Promise<void> {
 
 /**
  * 主窗口 Agent 卡点 [详情→] 触发。 真壳路径: 主进程 createAgentDashboardWindow()
- * 开 900×600 frame:false transparent 窗口(URL 携带 ?view=agent-dashboard, 渲染层自动进入 dashboard)。
- * 浏览器降级: 返回 ok:false, 调用方走 portal 模态(90vw×90vh max 900×600)兜底。
+ * 开 900×600 独立窗口(系统边框先交付, URL 携带 ?view=agent-dashboard, 渲染层 App.tsx
+ * 启动 useEffect 读 window.location.search 据此 setView("agent-dashboard"))。
+ * 浏览器降级: 返回 ok:false, App.tsx onAgentCardDetail 走 setView("agent-dashboard")
+ * 切到页内 dashboard 视图(复用既有 AgentDashboardC 渲染, 保持 e2e 兼容性)。
  */
 export interface OpenAgentDashboardResult {
   ok: boolean;
-  /** ok=false 时 = 浏览器降级, UI 应弹 portal 模态 */
+  /** ok=false 时 = 浏览器降级(e2e / 纯 dev), UI 应切到页内 dashboard 视图 */
   reason?: "unavailable";
 }
 

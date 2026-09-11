@@ -116,6 +116,20 @@ function AppShell() {
   // 页内导航仅留给首开向导 + 方案页(D-021 一次性引导 view="add"; theme-glass 实验 view="quota";
   // t_9255cb63: view="agent-dashboard" = 主页 Agent 卡详情(大屏方案 C))
   const [view, setView] = useState<"panel" | "add" | "quota" | "agent-dashboard">("panel");
+  // t_4b7984d9 round-2 P0 fix: 独立窗口 query param 自动跳转。 main.ts createAgentDashboardWindow
+  // 在 loadURL/loadFile 写入 ?view=agent-dashboard, 渲染层启动读 window.location.search 据此 setView。
+  // 浏览器路径(主窗 / e2e)无此 param, view 保持初始 panel 不受影响。
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const v = sp.get("view");
+      if (v === "agent-dashboard" || v === "add" || v === "quota" || v === "panel") {
+        setView(v);
+      }
+    } catch {
+      // 解析失败 fallback 初始 panel, 不阻塞渲染
+    }
+  }, []);
   // D-038: 设置弹窗(纯偏好) 与 添加向导弹窗(侧栏 ＋) 是两个独立模态
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);

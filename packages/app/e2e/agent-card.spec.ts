@@ -302,3 +302,25 @@ test("LocalAgentSection 占位文案中性化, 不含 daemon 错误状态", asyn
   // 占位特征: 含「即将推出」或「coming soon」
   expect(bodyText).toMatch(/即将推出|coming\s*soon/i);
 });
+
+/** t_4b7984d9 round-2 P0 修复门禁: 独立窗口 query param 自动跳转。
+ * App.tsx 启动 useEffect 读 window.location.search 里的 view=agent-dashboard,
+ * 据此 setView("agent-dashboard") → 渲染 AgentDashboardC。
+ * e2e 走浏览器降级路径(mock open_agent_dashboard 返 ok:false),
+ * 通过直接 goto "?view=agent-dashboard" 验证 query param 跳转生效。
+ */
+test("P0 query param 自动跳转: ?view=agent-dashboard → 直入 AgentDashboardC", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  // 主页正常态先确认可见
+  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible({ timeout: 5000 });
+  // 关键: 直接 goto 带 query param 的 URL, 等同于 main.ts 独立窗口 loadFile({search:"?view=..."})
+  await page.goto("?view=agent-dashboard");
+  // AgentDashboardC 的"返回主页"按钮可见 = 已进入 dashboard 视图
+  await pwExpect(
+    page.getByRole("button", { name: /返回|back|主页/i }),
+  ).toBeVisible({ timeout: 5000 });
+});

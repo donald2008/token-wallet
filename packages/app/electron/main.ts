@@ -201,9 +201,12 @@ function createWindow(): void {
   }
 }
 
-/** t_4b7984d9 C: 打开 Agent 用量详情大屏独立窗口(900×600 frame:false transparent)。
- *  URL 携带 ?view=agent-dashboard query param, 渲染层 main.tsx / App.tsx 据此
- *  自动进入 dashboard 视图, 不需新 HTML 入口。singleton: 已开则聚焦不重开。 */
+/** t_4b7984d9 C round-2 P1 fix: 打开 Agent 用量详情大屏独立窗口(900×600, 系统边框先交付)。
+ *  URL 携带 ?view=agent-dashboard query param, 渲染层 App.tsx 启动 useEffect 据此 setView。
+ *  singleton: 已开则聚焦不重开。
+ *  设计取舍: 任务拍板"撞无边框/拖拽/主题问题, 最小可用优先(带系统边框先交付, 标注后续美化)",
+ *  故采用 frame:true + transparent:false 默认配置, 窗口自带最小化/最大化/关闭按钮。
+ *  后续若需 D-024 家族无边框透明观感再迭代, 但当前卡先保证用户能关窗。 */
 function createAgentDashboardWindow(): void {
   if (agentDashboardWindow && !agentDashboardWindow.isDestroyed()) {
     agentDashboardWindow.show();
@@ -217,9 +220,7 @@ function createAgentDashboardWindow(): void {
     minWidth: 600,
     minHeight: 400,
     maximizable: true,
-    frame: false,
-    transparent: true,
-    thickFrame: false,
+    // t_4b7984d9 round-2 P1 fix: 删 frame:false / transparent:true / thickFrame:false — 走系统边框。
     title: "token-wallet · Agent 用量详情",
     parent: mainWindow ?? undefined, // 隶属主窗口, 主窗最小化/隐藏不影响 dashboard
     webPreferences: {
