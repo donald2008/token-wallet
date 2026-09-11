@@ -862,6 +862,9 @@ body {
 .local-agent-title {
   font-weight: 600;
   flex: 1;
+  /* t_4b7984d9 A: 干掉 button 子元素 user-agent 默认蓝, 与「即将推出」tag 同族克制视觉;
+   * 卡上拍板中性前景色(实测本地 CSS 无 color 声明, 吃 Chromium user-agent 蓝) */
+  color: var(--fg);
 }
 
 .local-agent-tag {
@@ -2555,10 +2558,14 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .agent-tokens-number {
-  font-size: var(--font-32, 32px);
+  /* t_4b7984d9 B: 9 位全数字(4,474,000)+「tokens」unit 在 360px 卡片内禁止截断/换行;
+   * tabular-nums 等宽数字防抖动 + clamp(28px ~ 32px)自适应卡片宽度, 6 位内显大 9 位显小不溢出 */
+  font-size: clamp(20px, 9vw, 32px);
   font-weight: 600;
   line-height: 1.2;
   color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .agent-tokens-unit {
   font-size: var(--font-12, 12px);

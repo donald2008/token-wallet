@@ -7,6 +7,7 @@ import {
   getPersistedLang,
   getSortConfig,
   getStoragePaths,
+  openAgentDashboard,
   persistConsent,
   setSortConfig as persistSortConfig,
   updateTrayStatus,
@@ -315,6 +316,18 @@ function AppShell() {
     getSharedStore().remove(id, getSharedKeyring());
   }, []);
 
+  // t_4b7984d9 C: 详情按钮回调 → 真壳路径调 openAgentDashboard() 开 900×600 独立窗口
+  // (主进程 open_agent_dashboard IPC), 浏览器降级(e2e / 纯 dev)回到 setView 切页内视图,
+  // 复用既有的 AgentDashboardC 渲染, e2e 兼容性不变。同一回调双分支 = 数据契约 + UI 一致。
+  const onAgentCardDetail = useCallback(async () => {
+    const r = await openAgentDashboard();
+    if (!r.ok) {
+      // 浏览器无桥降级: 切到页内 dashboard 视图(与原 view="agent-dashboard" 路径同形态)
+      setView("agent-dashboard");
+    }
+    // 真壳 ok=true 时主进程已开窗, 此处 no-op(独立窗口自己 mcpUsageSummary)
+  }, []);
+
   // 真实实例集合: 仅真实实例卡渲染删除钮(dev 场景 mock 预览卡不给无效按钮)
   const realInstanceIds = useMemo(() => new Set(instances.map((i) => i.id)), [instances]);
 
@@ -516,7 +529,7 @@ function AppShell() {
                         row={row}
                         activity={activity}
                         generatedAt={mcpSummary.generatedAt}
-                        onOpenDetail={() => setView("agent-dashboard")}
+                        onOpenDetail={onAgentCardDetail}
                       />
                     );
                   })

@@ -278,6 +278,10 @@ const ipcMocks: Record<string, IpcHandler> = {
     }
     return s.ok && s.data ? { ok: true, data: s.data } : { ok: false, reason: s.reason ?? "unreachable" };
   },
+  // t_4b7984d9 C: 详情大屏独立窗口 IPC mock — 浏览器无桥降级返 ok:false,
+  // 让 App.tsx onAgentCardDetail 自动 setView("agent-dashboard") 复用既有大屏渲染路径
+  // (e2e 行为与 round-2 一致; 真壳路径: 主进程真开 900×600 BrowserWindow, 与本 mock 解耦)
+  open_agent_dashboard: () => ({ ok: false, reason: "unavailable" }),
   // ---- D-046: updater 三通道 + 事件桥(localStorage token-wallet.mock.updater 存状态;
   // 测试用 seedUpdaterState() 注入目标态, 覆盖四态渲染断言) ----
   updater_check: () => {

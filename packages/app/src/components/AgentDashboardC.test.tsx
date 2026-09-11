@@ -99,6 +99,11 @@ describe("AgentDashboardC", () => {
     expect(njbx02?.textContent).toMatch(/njbx02/);
     expect(njbx02?.textContent).toMatch(/1\.23 USD/);
     expect(njbx02?.textContent).not.toMatch(/——|—/); // 拍板:不留破折号
+    // t_4b7984d9 B: detail-list 的 tokens 列也是全数字(50000+10000+4000 = 64000 → "64,000"),
+    // 删原 K/M 简写分支后与 AgentCard 口径一致
+    const tokensCell = njbx02?.querySelector(".tokens");
+    expect(tokensCell?.textContent).toMatch(/64,000/);
+    expect(tokensCell?.textContent).not.toMatch(/\d+\.?\d*K\b|\d+\.?\d*M\b/);
   });
 
   it("cost_total=null 时 detail-list .cost 留空(visibility:hidden 保持对齐)", () => {

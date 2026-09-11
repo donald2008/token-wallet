@@ -14,10 +14,9 @@ import type { AgentDashboardCProps, TrendBucket, ModelSlice, DetailRow } from ".
 
 type ThemeMode = "dark" | "light";
 
+// t_4b7984d9 B: 全数字 token 展示(与 AgentCard.tsx formatTokens 口径对齐), 删原 K/M 简写分支
 const fmtWhole = new Intl.NumberFormat("en-US");
 function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return fmtWhole.format(n);
 }
 function fmtCost(n: number | null, currency: string | null): string {

@@ -106,6 +106,9 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 /** 托盘菜单"退出"置位后才允许真退出; 否则关闭按钮=隐藏到托盘(D-003) */
 let allowQuit = false;
+/** t_4b7984d9 C: Agent 用量详情大屏独立窗口(900×600, frame:false transparent), 复用主窗口
+ *  preload + preload 同形态(只走 invoke / on 桥)。singleton: 已开则聚焦不重开。 */
+let agentDashboardWindow: BrowserWindow | null = null;
 
 function showMainWindow(): void {
   if (!mainWindow) return;
@@ -195,6 +198,60 @@ function createWindow(): void {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL as string);
   } else {
     void mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+  }
+}
+
+/** t_4b7984d9 C: 打开 Agent 用量详情大屏独立窗口(900×600 frame:false transparent)。
+ *  URL 携带 ?view=agent-dashboard query param, 渲染层 main.tsx / App.tsx 据此
+ *  自动进入 dashboard 视图, 不需新 HTML 入口。singleton: 已开则聚焦不重开。 */
+function createAgentDashboardWindow(): void {
+  if (agentDashboardWindow && !agentDashboardWindow.isDestroyed()) {
+    agentDashboardWindow.show();
+    agentDashboardWindow.focus();
+    return;
+  }
+  agentDashboardWindow = new BrowserWindow({
+    width: 900,
+    height: 600,
+    // 设计基准 900×600, 内容自适应, 不强制最大化
+    minWidth: 600,
+    minHeight: 400,
+    maximizable: true,
+    frame: false,
+    transparent: true,
+    thickFrame: false,
+    title: "token-wallet · Agent 用量详情",
+    parent: mainWindow ?? undefined, // 隶属主窗口, 主窗最小化/隐藏不影响 dashboard
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  // dashboard 窗的关闭按钮 = 直接销毁(不挂托盘, 用户拍板"带系统边框先交付, 标注后续美化")
+  agentDashboardWindow.on("closed", () => {
+    agentDashboardWindow = null;
+  });
+  // 选父窗口居中(900×600 + 主窗口 360×720 → 居中叠加), 视觉层次感
+  if (mainWindow) {
+    const main = mainWindow.getBounds();
+    const dash = agentDashboardWindow.getBounds();
+    agentDashboardWindow.setBounds({
+      x: Math.round(main.x + (main.width - dash.width) / 2),
+      y: Math.round(main.y + (main.height - dash.height) / 2),
+      width: dash.width,
+      height: dash.height,
+    });
+  }
+  if (isDev) {
+    const url = new URL(process.env.ELECTRON_RENDERER_URL as string);
+    url.searchParams.set("view", "agent-dashboard");
+    void agentDashboardWindow.loadURL(url.toString());
+  } else {
+    void agentDashboardWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"), {
+      search: "?view=agent-dashboard",
+    });
   }
 }
 
@@ -450,6 +507,14 @@ function registerIpc(): void {
   ipcMain.handle("updater_download", () => appUpdater.download());
   ipcMain.handle("updater_install", () => {
     appUpdater.install();
+  });
+
+  // ---- t_4b7984d9 C: 详情大屏独立窗口 IPC(真壳路径, 浏览器降级走 portal 模态) ----
+  // 主窗口 Agent 卡点 [详情→] → 触发此通道 → 主进程 createAgentDashboardWindow 开
+  // 900×600 frame:false transparent 窗口, URL 携带 ?view=agent-dashboard, 渲染层自动进入 dashboard
+  ipcMain.handle("open_agent_dashboard", () => {
+    createAgentDashboardWindow();
+    return { ok: true };
   });
 
   // ---- D-055: MCP daemon 托管 11 通道(t_4bd214de + t_9255cb63) ----

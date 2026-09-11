@@ -461,6 +461,24 @@ export async function updaterInstall(): Promise<void> {
   if (viaHost) await viaHost;
 }
 
+// ---------------- t_4b7984d9 C: Agent 用量详情大屏独立窗口 IPC ----------------
+
+/**
+ * 主窗口 Agent 卡点 [详情→] 触发。 真壳路径: 主进程 createAgentDashboardWindow()
+ * 开 900×600 frame:false transparent 窗口(URL 携带 ?view=agent-dashboard, 渲染层自动进入 dashboard)。
+ * 浏览器降级: 返回 ok:false, 调用方走 portal 模态(90vw×90vh max 900×600)兜底。
+ */
+export interface OpenAgentDashboardResult {
+  ok: boolean;
+  /** ok=false 时 = 浏览器降级, UI 应弹 portal 模态 */
+  reason?: "unavailable";
+}
+
+export async function openAgentDashboard(): Promise<OpenAgentDashboardResult> {
+  const viaHost = hostInvoke<OpenAgentDashboardResult>("open_agent_dashboard");
+  return viaHost ?? { ok: false, reason: "unavailable" };
+}
+
 // ---------------- D-055 / t_4bd214de: MCP daemon 桥(renderer 端 wrapper) ----------------
 
 /**

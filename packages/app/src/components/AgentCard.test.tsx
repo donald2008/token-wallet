@@ -63,7 +63,7 @@ describe("AgentCard", () => {
     );
     expect(c.querySelector('[data-testid="agent-card"][data-agent="njbx02"]')).toBeTruthy();
     const tokens = c.querySelector('[data-testid="agent-tokens"]');
-    expect(tokens?.textContent).toMatch(/64\.0K/); // 50000+10000+4000 = 64000 → 64.0K
+    expect(tokens?.textContent).toMatch(/64,000/); // 50000+10000+4000 = 64000 → 64,000 (t_4b7984d9 B: 全数字, 千分位)
     const cost = c.querySelector('[data-testid="agent-cost"]');
     expect(cost?.textContent).toBe("1.23 USD");
     expect(cost?.classList.contains("is-empty")).toBe(false);

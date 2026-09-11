@@ -90,8 +90,11 @@ test("主页 Agent 卡: 真数据渲染 + 三种活动态 + 金额可空留白",
   const desktop = page.locator('[data-testid="agent-card"][data-agent="desktop-e5jupfs"]');
   await pwExpect(desktop).toBeVisible();
 
-  // njbx02: tokens 三项和 = 64000 → 64.0K + 金额 1.23 USD + 活动 ok
-  await pwExpect(njbx02.locator('[data-testid="agent-tokens"]')).toContainText("64.0K");
+  // njbx02: tokens 三项和 = 64000 → 64,000 (t_4b7984d9 B: 全数字, 千分位) + 金额 1.23 USD + 活动 ok
+  await pwExpect(njbx02.locator('[data-testid="agent-tokens"]')).toContainText("64,000");
+  // 反向断言: 绝不出现 K/M 简写
+  const tokensText = (await njbx02.locator('[data-testid="agent-tokens"]').textContent()) ?? "";
+  expect(tokensText).not.toMatch(/\d+\.?\d*K\b|\d+\.?\d*M\b/);
   await pwExpect(njbx02.locator('[data-testid="agent-cost"]')).toContainText("1.23 USD");
   await pwExpect(njbx02.locator('[data-testid="agent-status-dot"]')).toHaveAttribute("data-health", "ok");
   await pwExpect(njbx02.locator('[data-testid="agent-activity-badge"]')).toHaveText("有活动");

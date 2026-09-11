@@ -48,12 +48,13 @@ export function totalTokens(row: SummaryRow): number {
   return row.input_cache_hit_tokens + row.input_cache_miss_tokens + row.output_tokens;
 }
 
-/** token 大数字格式化(K/M 友好)。Intl.NumberFormat 用 zh-CN locale,
- *  渲染 1,234,567 / 1.2K / 3.4M。 */
+/** token 大数字格式化(t_4b7984d9 B): 用户拍板全数字展示(「4,474,000 比 4.5M 震撼」)。
+ *  删原 K/M 简写分支, 一律 Intl.NumberFormat("en-US") 千分位完整展示;
+ *  365px 卡片宽度下 9 位数字 + 「tokens」unit 走 .agent-tokens-number 的
+ *  font-variant-numeric: tabular-nums + clamp 字号自适应, **禁止截断/换行**。
+ *  AgentDashboardC 同步: hero 区与 detail-list 的 tokens 列共用 fmtTokensAll。 */
 const fmtWhole = new Intl.NumberFormat("en-US");
 export function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return fmtWhole.format(n);
 }
 
