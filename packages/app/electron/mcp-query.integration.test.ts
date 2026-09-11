@@ -33,14 +33,36 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DAEMON_PORT = 19132;
 const DAEMON_KEY = "0123456789abcdef0123456789abcdef";
 const DAEMON_HOST = "127.0.0.1";
-// 用 which 拿 python3 绝对路径,绕开 vitest pool 的 PATH 不继承
-const PYTHON_BIN = (() => {
-  try {
-    return fs.realpathSync("/usr/local/lib/hermes-agent/venv/bin/python3");
-  } catch {
-    return "python3";
+// t_eece584f round-2: 探测 python3 + mcp_server 包路径, 不硬编码 hermes venv
+// (老路径在 home-computer / desktop-e5jupfs 上不存在, CI matrix 必挂)。
+// 探测策略: 先 spawn python3 看 venv 是否可用; 不行用 PATH 探测; 不行 try
+// PYTHON_BIN env 覆盖。
+function detectPythonBin(): string {
+  const candidates = [
+    process.env.PYTHON_BIN,
+    "/usr/local/lib/hermes-agent/venv/bin/python3",
+    "/usr/bin/python3",
+    "/usr/local/bin/python3",
+    "python3",
+  ].filter((x): x is string => Boolean(x));
+  for (const c of candidates) {
+    if (c.startsWith("/")) {
+      try {
+        if (fs.existsSync(c)) return c;
+      } catch {
+        /* ignore */
+      }
+    } else {
+      // 非绝对路径 — 留给 spawn 用 PATH 解析
+      return c;
+    }
   }
-})();
+  return "python3";
+}
+const PYTHON_BIN = detectPythonBin();
+// 探测 mcp_server 包位置: 同 packages/mcp-server 目录结构, 从 HERE 推
+const MCP_SERVER_SRC = path.resolve(HERE, "../../mcp-server/src");
+const MCP_SERVER_CWD = path.resolve(HERE, "../../mcp-server");
 
 let daemon: ChildProcess | null = null;
 let daemonReady = false;
@@ -56,34 +78,31 @@ async function startDaemon(): Promise<ChildProcess> {
   }
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    // t_eece584f: vitest pool 偶尔用 hermes runtime python3.11(无 fastmcp),
-    // 强制 PATH 走 venv 路径确保 spawn 到带 fastmcp 的 python;同时显式挂 site-packages
-    // PYTHONPATH(避免 PYTHONPATH 被父进程遮蔽, vitest pool 可能 strip env)
+    // t_eece584f round-2: PATH 强制带系统 bin, 避免 vitest pool 切到 hermes runtime
     PATH: [
-      path.dirname(PYTHON_BIN),
+      path.dirname(PYTHON_BIN) === "." ? "" : path.dirname(PYTHON_BIN),
       "/usr/local/bin",
       "/usr/bin",
       "/bin",
       process.env.PATH ?? "",
-    ].join(path.delimiter),
-    // t_eece584f: mcp_server 是 pip editable install 到 packages/mcp-server/src,
-    // 不是 site-packages。daemon 端 __main__.py 用 `from . import onboarding` 是相对包,
-    // PYTHONPATH 必须指 packages/mcp-server/src 让 mcp_server 包可被 import。
+    ].filter(Boolean).join(path.delimiter),
+    // t_eece584f round-2: PYTHONPATH 推 mcp_server 包路径而非硬编码 site-packages
+    // (mcp_server 是 pip editable install 到 packages/mcp-server/src, __main__.py 用
+    // 相对包 import, 必须把 src 挂到 PYTHONPATH)
     PYTHONPATH: [
-      path.resolve(HERE, "../../mcp-server/src"),
+      MCP_SERVER_SRC,
       "/usr/local/lib/hermes-agent/venv/lib/python3.11/site-packages",
-    ].join(path.delimiter),
+    ].filter(Boolean).join(path.delimiter),
     TOKEN_WALLET_MCP_KEY: DAEMON_KEY,
     TOKEN_WALLET_HOST: DAEMON_HOST,
     TOKEN_WALLET_PORT: String(DAEMON_PORT),
     TOKEN_WALLET_DB_PATH: dbPath,
     USAGE_TTL_DAYS: "90",
   };
-  const cwd = path.resolve(HERE, "../../mcp-server");
   const child = spawn(
     PYTHON_BIN,
     ["-m", "mcp_server"],
-    { env, cwd, stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    { env, cwd: MCP_SERVER_CWD, stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
   );
   child.stdout?.on("data", () => {
     /* swallow */
@@ -269,6 +288,59 @@ describe("t_eece584f mcp-query 真 daemon 冒烟", () => {
     );
     expect(r.parsed.total.calls).toBe(0);
     expect(r.parsed.generated_at).toBeTruthy();
+  }, 60_000);
+
+  it("自愈(协议层): 杀 daemon 重启 → app 不显式 invalidateSession → 下次 query 经 status=404 + body=-32600 自动重握手恢复", async () => {
+    // t_eece584f round-2: 协议层自愈(非应用层失效) — 真机场景核心 case
+    // app 不知道 daemon 重启, 缓存里仍是旧 sid; 下次 query 自动被 daemon 返 404 + body 拒绝,
+    // → callMcpTool attempt 识别 _SessionExpired → 自动重握手 → 拿新 sid → 拿真数据
+    // 这才是 task body 验收 '点刷新 → 卡恢复真数据' 的协议路径
+
+    // 预热: 用当前 daemon 拿 sid 缓存
+    await callMcpTool<UsageSummaryOutput>(
+      { host: DAEMON_HOST, port: DAEMON_PORT, key: DAEMON_KEY },
+      { name: "usage_summary", arguments: {} },
+      realHttpShim(),
+      { timeoutMs: 8000 },
+    );
+    // 杀 daemon(快速重启模拟外部重启)
+    expect(daemon).not.toBeNull();
+    await stopDaemon();
+    // 立刻重启新 daemon(旧 sid 已死)
+    daemon = await startDaemon();
+    daemonReady = true;
+    // 不显式 invalidateSession — 缓存里仍是旧 sid
+    // 下次 query: 用旧 sid → daemon 返 status=404 + body=-32600 'Session not found'
+    // → callMcpTool attempt self-heal 判定 → _SessionExpired → invalidateSession + 重握手 → 拿新 sid
+    // → 重试 → 拿真数据
+    const r = await callMcpTool<UsageSummaryOutput>(
+      { host: DAEMON_HOST, port: DAEMON_PORT, key: DAEMON_KEY },
+      { name: "usage_summary", arguments: { group_by: ["agent"] } },
+      realHttpShim(),
+      { timeoutMs: 8000 },
+    );
+    expect(r.parsed.total.calls).toBe(0);
+    expect(r.parsed.generated_at).toBeTruthy();
+    // 第二次 query 应复用新 sid(不重发 initialize)— 验缓存已被自愈更新
+    let initializeCount = 0;
+    const spy: HttpShim = {
+      postJson: async <T,>(opts: {
+        url: string;
+        headers: Record<string, string>;
+        body: unknown;
+        timeoutMs: number;
+      }): Promise<{ status: number; body: T; headers: Record<string, string> }> => {
+        if ((opts.body as { method: string }).method === "initialize") initializeCount++;
+        return realHttpShim().postJson<T>(opts);
+      },
+    };
+    await callMcpTool<UsageSummaryOutput>(
+      { host: DAEMON_HOST, port: DAEMON_PORT, key: DAEMON_KEY },
+      { name: "usage_summary", arguments: {} },
+      spy,
+      { timeoutMs: 8000 },
+    );
+    expect(initializeCount).toBe(0); // 缓存已被自愈刷新, 复用新 sid
   }, 60_000);
 
   it("McpCallError.kind 正确归类: 不可达(unreachable)", async () => {
