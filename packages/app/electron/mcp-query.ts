@@ -72,17 +72,29 @@ export function defaultHttpShim(): HttpShim {
           body: JSON.stringify(opts.body),
           signal: ctrl.signal,
         });
-        // MCP streamable-http: 200 走 application/json 或 text/event-stream;
-        // 非 200 → throw 让调用方归类(401 → unauthorized, 其他 → unreachable)
-        if (resp.status !== 200) {
-          throw new Error(`mcp http status ${resp.status}`);
-        }
-        // t_eece584f: 收 headers 给 session 捕获用 — 原生 fetch Headers → plain object
+        // 收 headers 给 session 捕获用 — 原生 fetch Headers → plain object (全小写键)
         const respHeaders: Record<string, string> = {};
         resp.headers.forEach((v, k) => {
           respHeaders[k.toLowerCase()] = v;
         });
-        const parsed = (await parseStreamableBody(resp)) as T;
+        // t_eece584f round-2: MCP streamable-http 协议层错误用 HTTP 4xx + JSON-RPC body
+        // (实测 fastmcp 4.x: 无 session → 400, 假 session → 404, 鉴权错 → 401/403)。
+        // 不能在 status check 阶段直接 throw — 必须让上层解析 body 才能识别 self-heal 判定。
+        //
+        // 区分:
+        //   - 401/403 鉴权错 → throw "mcp http status N"(归类 unauthorized)
+        //   - 其他 status(含 400/404/5xx + 有 body)→ 尝试解析 body, 失败 throw unreachable
+        //   - 解析成功 → return { status, body, headers }(让上层走 protocol_error / self-heal 判定)
+        if (resp.status === 401 || resp.status === 403) {
+          throw new Error(`mcp http status ${resp.status}`);
+        }
+        let parsed: T;
+        try {
+          parsed = (await parseStreamableBody(resp)) as T;
+        } catch {
+          // body 解析失败(非 JSON-RPC envelope)→ 视为 daemon 不可达
+          throw new Error(`mcp http status ${resp.status}`);
+        }
         return { status: resp.status, body: parsed, headers: respHeaders };
       } finally {
         clearTimeout(timer);
@@ -296,18 +308,24 @@ export async function callMcpTool<T>(
     method: "tools/call",
     params: { name: input.name, arguments: input.arguments },
   };
-  const headers: Record<string, string> = {
-    Authorization: "Bearer " + cfg.key,
-    Accept: "application/json, text/event-stream",
-    "mcp-session-id": sid,
-  };
 
-  const attempt = async (): Promise<McpCallToolResult<T>> => {
+  /**
+   * 单次工具调用尝试。
+   * - allowSelfHeal=true 时, 响应 -32600 Missing session ID / Session not found 触发 _SessionExpired
+   *   (外层 catch 会重握手 + 重试一次)
+   * - allowSelfHeal=false 时, 同样的错误直接归类 protocol_error(防止自愈递归)
+   *
+   * callHeaders 允许重试时传入替换 sid 的 headers 副本。
+   */
+  const attempt = async (
+    callHeaders: Record<string, string>,
+    allowSelfHeal: boolean,
+  ): Promise<McpCallToolResult<T>> => {
     let resp: { status: number; body: JsonRpcResponse; headers: Record<string, string> };
     try {
       resp = await http.postJson<JsonRpcResponse>({
         url: endpoint,
-        headers,
+        headers: callHeaders,
         body,
         timeoutMs,
       });
@@ -317,17 +335,17 @@ export async function callMcpTool<T>(
       throw new McpCallError("unreachable", msg);
     }
 
-    // 协议层错误: 自愈判定(-32600 Missing session ID / 404 Session not found)
+    // 协议层错误: 自愈判定(-32600 Missing session ID / Session not found)
     if (resp.body.error) {
       const code = resp.body.error.code;
       const msg = resp.body.error.message ?? "";
-      // -32600 + Missing session ID: session 失效, 重握手
-      if (code === -32600 && /Missing session ID/i.test(msg)) {
+      // t_eece584f round-2: daemon 协议层错误用 HTTP 4xx + JSON-RPC body
+      // (实测 fastmcp 4.x: 无 session → 400, 假 session → 404)。defaultHttpShim 已修,
+      // 这里能正常拿到 body.error, 不再被 status check 阻断。
+      if (allowSelfHeal && code === -32600 && /Missing session ID/i.test(msg)) {
         throw new _SessionExpired("Missing session ID");
       }
-      // 404 + Session not found: daemon 重启后旧 sid 失效
-      // (实测 fastmcp 4.x: 假 sid 返回 status=404 + JSON-RPC error.code=-32600 + message="Session not found")
-      if (code === -32600 && /Session not found/i.test(msg)) {
+      if (allowSelfHeal && code === -32600 && /Session not found/i.test(msg)) {
         throw new _SessionExpired("Session not found");
       }
       throw new McpCallError("protocol_error", `${code}: ${msg}`);
@@ -338,18 +356,22 @@ export async function callMcpTool<T>(
       throw new McpCallError("protocol_error", "missing result.content[0].text");
     }
     try {
-      const parsed = JSON.parse(text) as T;
-      return { parsed };
+      return { parsed: JSON.parse(text) as T };
     } catch {
       throw new McpCallError("protocol_error", "tool result is not valid JSON");
     }
   };
 
+  const initialHeaders: Record<string, string> = {
+    Authorization: "Bearer " + cfg.key,
+    Accept: "application/json, text/event-stream",
+    "mcp-session-id": sid,
+  };
   try {
-    return await attempt();
+    return await attempt(initialHeaders, true);
   } catch (e) {
     if (!(e instanceof _SessionExpired)) throw e;
-    // 自愈: 失效缓存, 重握手一次, 重试原请求
+    // 自愈: 失效缓存, 重握手一次, 重试原请求(只一次, 防循环)
     invalidateSession(endpoint);
     let newSid: string;
     try {
@@ -363,37 +385,8 @@ export async function callMcpTool<T>(
             initErr instanceof Error ? initErr.message : String(initErr),
           );
     }
-    // 用新 sid 重试(只一次)
-    const retriedHeaders = { ...headers, "mcp-session-id": newSid };
-    let resp: { status: number; body: JsonRpcResponse; headers: Record<string, string> };
-    try {
-      resp = await http.postJson<JsonRpcResponse>({
-        url: endpoint,
-        headers: retriedHeaders,
-        body,
-        timeoutMs,
-      });
-    } catch (e2) {
-      const msg = e2 instanceof Error ? e2.message : String(e2);
-      if (/status (401|403)/.test(msg)) throw new McpCallError("unauthorized", msg);
-      throw new McpCallError("unreachable", msg);
-    }
-    // 自愈后仍报错: 不再重试, 直接归类
-    if (resp.body.error) {
-      throw new McpCallError(
-        "protocol_error",
-        `${resp.body.error.code}: ${resp.body.error.message}`,
-      );
-    }
-    const text = resp.body.result?.content?.[0]?.text;
-    if (typeof text !== "string") {
-      throw new McpCallError("protocol_error", "missing result.content[0].text");
-    }
-    try {
-      return { parsed: JSON.parse(text) as T };
-    } catch {
-      throw new McpCallError("protocol_error", "tool result is not valid JSON");
-    }
+    // 用新 sid 重试 — allowSelfHeal=false 阻断自愈递归
+    return await attempt({ ...initialHeaders, "mcp-session-id": newSid }, false);
   }
 }
 

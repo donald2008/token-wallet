@@ -26,7 +26,7 @@ function mockHttpStateful(responses: Array<{
   status?: number;
   body?: unknown;
   headers?: Record<string, string>;
-  /** true = throw 网络错(模拟 ECONNREFUSED) */
+  /** true = throw 网络错(模拟 ECONNREFUSED / abort) */
   throwNetwork?: boolean;
 }>): { shim: HttpShim; captured: Array<{ body: unknown; headers: Record<string, string>; url: string }> } {
   const captured: Array<{ body: unknown; headers: Record<string, string>; url: string }> = [];
@@ -42,6 +42,10 @@ function mockHttpStateful(responses: Array<{
       const r = responses[i++] ?? responses[responses.length - 1];
       if (!r) throw new Error("mockHttpStateful: out of responses");
       if (r.throwNetwork) throw new Error("ECONNREFUSED");
+      // t_eece584f round-2: 与 defaultHttpShim 行为对齐 — 401/403 throw (unauthorized 路径)
+      if (r.status === 401 || r.status === 403) {
+        throw new Error(`mcp http status ${r.status}`);
+      }
       return Promise.resolve({
         status: r.status ?? 200,
         body: (r.body ?? null) as T,
@@ -410,14 +414,16 @@ describe("t_eece584f session 生命周期", () => {
     }
   });
 
-  it("自愈: -32600 Missing session ID → 失效缓存, 重握手, 重试原请求, 拿新 sid 返回数据", async () => {
+  it("自愈: daemon 返 400 + body -32600 Missing session ID → 失效缓存, 重握手, 重试原请求, 拿新 sid 返回数据", async () => {
+    // t_eece584f round-2: 真实 daemon 协议语义 — 协议层错误用 HTTP 4xx + JSON-RPC body
+    // (fastmcp 4.x 实测: 无 session → 400 + body code=-32600)
     const oldSid = "old-session-id-old-session-id-old-s";
     const newSid = "new-session-id-new-session-id-new-s";
     const { shim, captured } = mockHttpStateful([
       // 1: initialize → 旧 sid
       buildJsonRpcInitializeOk(oldSid),
-      // 2: tools/call → 拿旧 sid, 但 daemon 端过期 → -32600 Missing session ID
-      { status: 200, body: buildJsonRpcError(-32600, "Bad Request: Missing session ID") },
+      // 2: tools/call → 拿旧 sid, 但 daemon 端过期 → status=400 + body -32600 Missing session ID
+      { status: 400, body: buildJsonRpcError(-32600, "Bad Request: Missing session ID") },
       // 3: 自愈后重新 initialize → 新 sid
       buildJsonRpcInitializeOk(newSid),
       // 4: 重试 tools/call → 用新 sid → 200 + data
@@ -437,12 +443,13 @@ describe("t_eece584f session 生命周期", () => {
     expect(captured[3]!.headers["mcp-session-id"]).toBe(newSid);
   });
 
-  it("自愈: -32600 Session not found → 同上(daemon 重启场景)", async () => {
+  it("自愈: daemon 返 404 + body -32600 Session not found → 同上(daemon 重启场景)", async () => {
+    // t_eece584f round-2: 真实 daemon 协议语义 — 假 session → status=404 + body -32600
     const oldSid = "old-restart-old-restart-old-restart";
     const newSid = "new-restart-new-restart-new-restart";
     const { shim, captured } = mockHttpStateful([
       buildJsonRpcInitializeOk(oldSid),
-      { status: 200, body: buildJsonRpcError(-32600, "Session not found") },
+      { status: 404, body: buildJsonRpcError(-32600, "Session not found") },
       buildJsonRpcInitializeOk(newSid),
       buildJsonRpcOk(fakeSummary),
     ]);
@@ -456,17 +463,18 @@ describe("t_eece584f session 生命周期", () => {
     expect(captured[3]!.headers["mcp-session-id"]).toBe(newSid);
   });
 
-  it("自愈只触发一次: 重握手后 tools/call 仍报 -32600 → 不再重试, 直接 protocol_error", async () => {
+  it("自愈只触发一次: 重握手后 tools/call 仍报 400+protocol_error → 不再重试, 直接 protocol_error", async () => {
+    // t_eece584f round-2: 真实 daemon 协议语义 — 重试后仍 protocol_error(非 session 错)
     const oldSid = "aaaaaaaaaaaaaa";
     const newSid = "bbbbbbbbbbbbbb";
     const { shim, captured } = mockHttpStateful([
       buildJsonRpcInitializeOk(oldSid),
-      // tools/call 用旧 sid → Missing session ID
-      { status: 200, body: buildJsonRpcError(-32600, "Bad Request: Missing session ID") },
+      // tools/call 用旧 sid → 400 + Missing session ID(触发自愈)
+      { status: 400, body: buildJsonRpcError(-32600, "Bad Request: Missing session ID") },
       // 自愈 initialize → 新 sid
       buildJsonRpcInitializeOk(newSid),
-      // 重试 tools/call → daemon 端仍报错
-      { status: 200, body: buildJsonRpcError(-32601, "method not found") },
+      // 重试 tools/call → 仍报 404 + method not found(非 session 错, 不触发自愈)
+      { status: 404, body: buildJsonRpcError(-32601, "method not found") },
     ]);
     await expect(
       callMcpTool<UsageSummaryOutput>(
@@ -479,6 +487,39 @@ describe("t_eece584f session 生命周期", () => {
     expect(captured).toHaveLength(4);
     expect((captured[3]!.body as { method: string }).method).toBe("tools/call");
     expect(captured[3]!.headers["mcp-session-id"]).toBe(newSid);
+  });
+
+  it("daemon 返 401 → unauthorized(kind 正确归类)", async () => {
+    // t_eece584f round-2: 鉴权错应该 throw, body 不被解析(unauthorized 不需要自愈)
+    const { shim } = mockHttpStateful([
+      buildJsonRpcInitializeOk("sid1"),
+      { status: 401, body: buildJsonRpcError(-32001, "Unauthorized") },
+    ]);
+    await expect(
+      callMcpTool(
+        { host: "127.0.0.1", port: 9131, key: "wrong-key" },
+        { name: "usage_summary", arguments: {} },
+        shim,
+      ),
+    ).rejects.toMatchObject({ kind: "unauthorized" });
+  });
+
+  it("daemon 返 500 + HTML 错误页(body 解析失败)→ unreachable", async () => {
+    // t_eece584f round-2: 5xx + 非 JSON-RPC body 应视为 daemon 不可达
+    // (走 defaultHttpShim 真行为: parseStreamableBody 失败 → 兜底 throw "mcp http status 500"
+    //  → callMcpTool attempt catch 归类 unreachable)
+    const shim: HttpShim = {
+      postJson: async () => {
+        throw new Error("mcp http status 500");
+      },
+    };
+    await expect(
+      callMcpTool(
+        { host: "127.0.0.1", port: 9131, key: "k" },
+        { name: "usage_summary", arguments: {} },
+        shim,
+      ),
+    ).rejects.toMatchObject({ kind: "unreachable" });
   });
 
   it("invalidateSession: 显式失效后下次调用重新 initialize", async () => {
