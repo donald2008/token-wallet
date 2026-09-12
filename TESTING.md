@@ -65,6 +65,9 @@ pnpm --filter app test:e2e --project=electron-shell     # Windows 本机执行
 - **覆盖**(`e2e/shell-visual.spec.ts`):
   ① 真窗口启动 → 主面板渲染(视口 360×720 + panel 零横向溢出几何探针)
   ② 三主题(dark/light/glass)各一张截图 → `packages/app/verification/shell-visual/`
+     (玻璃用例显式设 `token-wallet.glassAlpha.v1`=0.5: 默认 alpha=1.0 不透明时
+     dark-glass 与 dark 渲染像素同构, 3 张截图无判别力; 并断言 `--glass-alpha`
+     CSS 变量真落值 = 主题真渲染, 非仅 `<html data-theme>` 属性)
   ③ Agent 卡 → 大屏关键路径(mock 桥降级 + 真桥主进程开 900×640 独立窗两路径)
   ④ tab 互斥(切「本地 Agent」→ card-list/agent-card-section 卸载)
 - **断言形态**: 几何探针(scrollWidth vs clientWidth、getBoundingClientRect、viewportSize)
@@ -73,8 +76,9 @@ pnpm --filter app test:e2e --project=electron-shell     # Windows 本机执行
   不许静默。
 - **IPC 数据**: 复用 L2 同一套 mock 桥(fixtures.ts 导出 ipcMocks)保证确定性;
   真桥路径用例不覆写 window.tokenWallet, 走 preload + 主进程真 IPC 验开窗。
-- **证据落位**: `packages/app/verification/shell-visual/`(shell-dark/light/glass.png +
-  shell-dashboard.png + shell-dashboard-standalone.png)。
+- **证据落位**: `packages/app/verification/shell-visual/`(shell-dark/light/glass.png;
+  ③ 用例双态取证 — daemon 有数据 → `shell-dashboard-standalone.png`,
+  未连接 → `shell-agent-empty.png`, 两态都是真壳真实行为)。
 
 ## L3 真实通道验证(半自动)
 

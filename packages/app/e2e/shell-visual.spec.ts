@@ -132,14 +132,18 @@ async function launchShell(): Promise<{ app: ElectronApplication; page: Page; us
 }
 
 /** 三主题统一入口: 预置主题 localStorage → reload → 等 panel-main 渲染。
- *  (theme.ts 走 localStorage, 真桥不参与主题 — browser-only 与真壳同语义) */
-async function applyTheme(page: Page, theme: string, glass: string): Promise<void> {
+ *  (theme.ts 走 localStorage, 真桥不参与主题 — browser-only 与真壳同语义)
+ *  glassAlpha: 玻璃透明度(0.15~1, 默认 1.0 = 不透明)。默认值下 dark-glass 与 dark
+ *  渲染像素完全一致(theme.ts GLASS_ALPHA_DEFAULT=1, t_c20d4d11 用户拍板)——本层要
+ *  验「主题真渲染」, 玻璃用例显式给中间值 0.5, 让 glass 截图与 dark 有可判别差异。 */
+async function applyTheme(page: Page, theme: string, glass: string, glassAlpha?: string): Promise<void> {
   await page.evaluate(
-    ([th, gl]) => {
+    ([th, gl, ga]) => {
       localStorage.setItem("token-wallet.theme.v1", th as string);
       localStorage.setItem("token-wallet.glass.v1", gl as string);
+      if (ga) localStorage.setItem("token-wallet.glassAlpha.v1", ga as string);
     },
-    [theme, glass],
+    [theme, glass, glassAlpha ?? ""],
   );
   await page.reload();
   await page.waitForSelector('[data-testid="panel-main"]', { state: "visible", timeout: 15_000 });
@@ -185,15 +189,15 @@ async function noHorizontalOverflow(page: Page, selector: string): Promise<boole
  *  ⚠️ 真壳跑生产构建(dist/index.html, isProd=true)→ 零实例走 EmptyState(暂无 Provider),
  *  card-list 不渲染(P0-8 生产 mock 门禁); browser-only 跑 vite dev 才有 mixed 演示卡。
  *  本用例断言主面板骨架 + 主题, 不依赖卡片数据。 */
-for (const [name, theme, glass] of [
-  ["dark", "dark", "0"],
-  ["light", "light", "0"],
-  ["glass", "dark", "1"],
+for (const [name, theme, glass, glassAlpha] of [
+  ["dark", "dark", "0", ""],
+  ["light", "light", "0", ""],
+  ["glass", "dark", "1", "0.5"],
 ] as const) {
   t(`真壳启动 → 主面板渲染 + 三主题截图(${name})`, async () => {
     const { app, page, userData } = await launchShell();
     try {
-      await applyTheme(page, theme, glass);
+      await applyTheme(page, theme, glass, glassAlpha);
 
       // ① 主面板渲染断言: panel + panel-main + bottombar + EmptyState(生产零实例空态)
       const panel = page.locator(".panel");
@@ -217,6 +221,15 @@ for (const [name, theme, glass] of [
       // html data-theme 断言(主题真渲染的 DOM 锚, 与截图交叉验证)
       const expectTheme = glass === "1" ? "dark-glass" : theme;
       await expect(page.locator("html")).toHaveAttribute("data-theme", expectTheme);
+
+      // 玻璃用例: alpha 真落到 CSS 变量(theme.ts useEffect → <html style="--glass-alpha">)
+      // + 截图与 dark 有可判别差异(主题真渲染, 非仅 DOM 属性)
+      if (glass === "1") {
+        const alphaVar = await page.evaluate(() =>
+          document.documentElement.style.getPropertyValue("--glass-alpha"),
+        );
+        expect(alphaVar, "玻璃 alpha 未落到 --glass-alpha CSS 变量").toBe(glassAlpha);
+      }
 
       // ② 截图落盘
       fs.mkdirSync(SHOTS_DIR, { recursive: true });
