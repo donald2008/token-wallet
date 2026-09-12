@@ -10,7 +10,7 @@
     "dev:web": "vite",
     "build": "node electron/scripts/build.mjs && vite build",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test --project=browser-only",
+    "test:e2e": "playwright test --project=browser-only --project=electron-shell",
     "test": "vitest run",
     "dist:win": "node electron/scripts/dist-win.mjs"
   },

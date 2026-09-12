@@ -25,7 +25,12 @@ import { test as base, expect, type Page } from "@playwright/test";
 
 type IpcHandler = (args?: Record<string, unknown>) => unknown;
 
-const ipcMocks: Record<string, IpcHandler> = {
+/**
+ * t_2520e5f1 L2.5: 导出给 electron-shell project 复用 — 真壳 spec(_electron.launch)
+ * 用同一套 mock 桥注入 BrowserWindow 页面, 保证 browser-only 与真壳两个 project
+ * 走同一份 IPC 语义(mock 形态与 Electron preload 同构)。
+ */
+export const ipcMocks: Record<string, IpcHandler> = {
   get_bootstrap: () => {
     let agreed = false;
     try {

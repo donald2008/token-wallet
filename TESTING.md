@@ -8,6 +8,7 @@
 |----|--------|------|------|--------|
 | L1 单元 | core: schema/registry/credential/store/调度器 | vitest | 任何机 | ✅ 全自动 |
 | L2 前端 E2E | app 交互全流程(mock 桌面桥 IPC) | Playwright browser 模式 | Linux/CI | ✅ 全自动 |
+| L2.5 真壳视觉 | 真窗口几何/主题真渲染/互斥交互 | Playwright `_electron.launch`(D-030a) | Windows 本机 | ⚠️ 半自动(启动需本机, 断言全自动) |
 | L3 真通道 | 真 API + 真余额 | 手动 + golden sample | 我们的机器 | ⚠️ 半自动 |
 | L4 Windows 冒烟 | 安装/托盘/首开 | 手动 | Windows 本机 | ❌ 人肉 |
 
@@ -46,6 +47,34 @@ pnpm --filter app test:e2e          # browser-only project(headless Chromium)
 mock 约定: IPC 用 `ipcMocks` 拦截断言(`getCapturedInvokes`),前端逻辑全部真跑。
 
 验收: `playwright test --project=browser-only` 全绿 + 截图留证。
+
+## L2.5 真壳视觉验证(packages/app, Playwright _electron, t_2520e5f1)
+
+L2(browser-only mock 桥 + 默认 1280 视口)与 L4(Windows 人肉)之间的自动化层:
+`@playwright/test` 内置 `_electron.launch()` 驱动**真壳**(dist-electron/main.cjs),
+在真实 BrowserWindow 几何下做断言 + 截图。三连返工(tab 不切换/窗口截断/主题色不生效)
+全部是 browser-only 不触发、真壳才现形的缺陷 — 本层拦下它们, 人肉只留最终确认。
+
+```bash
+pnpm -C packages/app build                              # 前置: 出 dist-electron/main.cjs + dist/index.html
+pnpm --filter app test:e2e --project=electron-shell     # Windows 本机执行
+```
+
+- **环境**: 仅 Windows 本机可跑(Linux xvfb 无边框透明窗口观感不可验, 见环境能力矩阵)。
+  spec 内 platform 守卫: 非 win32 全部 `test.skip` 并输出说明, Linux/CI 照常全绿。
+- **覆盖**(`e2e/shell-visual.spec.ts`):
+  ① 真窗口启动 → 主面板渲染(视口 360×720 + panel 零横向溢出几何探针)
+  ② 三主题(dark/light/glass)各一张截图 → `packages/app/verification/shell-visual/`
+  ③ Agent 卡 → 大屏关键路径(mock 桥降级 + 真桥主进程开 900×640 独立窗两路径)
+  ④ tab 互斥(切「本地 Agent」→ card-list/agent-card-section 卸载)
+- **断言形态**: 几何探针(scrollWidth vs clientWidth、getBoundingClientRect、viewportSize)
+  + computed style + 截图, 不依赖 vision(vision 判定由 reviewer/老大侧做)。
+- **失败诊断**: console error / pageerror 全量收集 + 失败截图落 /tmp/shell-visual-fail/,
+  不许静默。
+- **IPC 数据**: 复用 L2 同一套 mock 桥(fixtures.ts 导出 ipcMocks)保证确定性;
+  真桥路径用例不覆写 window.tokenWallet, 走 preload + 主进程真 IPC 验开窗。
+- **证据落位**: `packages/app/verification/shell-visual/`(shell-dark/light/glass.png +
+  shell-dashboard.png + shell-dashboard-standalone.png)。
 
 ## L3 真实通道验证(半自动)
 
