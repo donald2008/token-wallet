@@ -825,57 +825,7 @@ body {
   white-space: nowrap;
 }
 
-/* ---- 本地 Agent 区(§6.5): 默认折叠占位(P3) ---- */
-.local-agent {
-  flex: 0 0 auto;
-  border-top: 1px solid var(--border);
-  background: var(--bg-elev);
-}
-
-.local-agent-head {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: 8px 12px;
-  border: none;
-  background: transparent;
-  color: var(--fg);
-  font-size: var(--font-size);
-  cursor: pointer;
-  text-align: left;
-}
-.local-agent-head:hover {
-  background: var(--bg-hover);
-}
-
-.local-agent-chevron {
-  display: inline-block;
-  font-size: 10px;
-  color: var(--fg-dim);
-  transition: transform 0.15s ease;
-}
-.local-agent-chevron[data-open] {
-  transform: rotate(90deg);
-}
-
-.local-agent-title {
-  font-weight: 600;
-  flex: 1;
-  /* t_4b7984d9 A (round-5): 与「即将推出」tag 同族克制视觉 — 卡面拍板口径即「tag 同族」,
-   * tag 用 var(--fg-dim), title 对齐之。round-2 的 var(--fg) 在 dark 主题下是 #e5e9f0
-   * (B 通道最大的冷白), 用户真机读作「蓝」, 故降为中性灰阶 --fg-dim。 */
-  color: var(--fg-dim);
-}
-
-.local-agent-tag {
-  font-size: 11px;
-  color: var(--fg-dim);
-}
-
-.local-agent-body {
-  padding: var(--space-4) var(--space-12) var(--space-8) var(--space-28);
-}
+/* round-6: LocalAgentSection 占位组件已删除, 其 §6.5 样式块一并移除 */
 
 /* ---- 进度条(手写 bars 模板微部件, D-002) ---- */
 .bar-row {

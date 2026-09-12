@@ -112,6 +112,8 @@ async function agreeAndSeedMultiFromSingle(page: import("@playwright/test").Page
   await seedAgentUsageMulti(page, deriveMultiFromSingle(fakeSummary));
   await page.reload();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
+  // round-6: agent-card-section 迁入「本地 Agent」tab
+  await page.getByTestId("main-tab-local-agent").click();
 }
 
 async function agreeAndSeed(page: import("@playwright/test").Page) {
@@ -120,6 +122,8 @@ async function agreeAndSeed(page: import("@playwright/test").Page) {
   await seedAgentUsage(page, { ok: true, data: fakeSummary });
   await page.reload();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
+  // round-6: agent-card-section 迁入「本地 Agent」tab, 断言前先切换
+  await page.getByTestId("main-tab-local-agent").click();
 }
 
 /** L2 冒烟 1: 主页 Agent 卡区存在 + 渲染真数据(daemon 来源时间戳可见) */
@@ -309,6 +313,8 @@ test("daemon 不可达: 主页 Agent 卡区显式「daemon 未连接」空态(�
   await seedAgentUsage(page, { ok: false, reason: "unreachable" });
   await page.reload();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
+  // round-6: agent-card-section 迁入「本地 Agent」tab, 断言前先切换
+  await page.getByTestId("main-tab-local-agent").click();
 
   // 空态卡存在 + reason 文案 + 「daemon 未连接」徽章
   await pwExpect(page.getByTestId("agent-card-empty")).toBeVisible();
@@ -325,6 +331,8 @@ test("daemon 不可达: 大屏方案 C 空态 + 返回按钮", async ({ hostPage
   await seedAgentUsage(page, { ok: false, reason: "unreachable" });
   await page.reload();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
+  // round-6: agent-card-section 迁入「本地 Agent」tab, 断言前先切换
+  await page.getByTestId("main-tab-local-agent").click();
 
   // 大屏方案 C 入口: 通过直接 state 触发不现实(主页 Agent 卡空态无详情按钮),
   // 改用 settings/QuotaGallery 同样 view 切路径的等价验证: 大屏空态组件本身
@@ -345,6 +353,8 @@ test("daemon 鉴权失败(401): 主页 Agent 卡区 reason 文案「鉴权失败
   await seedAgentUsage(page, { ok: false, reason: "unauthorized" });
   await page.reload();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
+  // round-6: agent-card-section 迁入「本地 Agent」tab, 断言前先切换
+  await page.getByTestId("main-tab-local-agent").click();
 
   await pwExpect(page.getByTestId("agent-card-empty")).toBeVisible();
   await pwExpect(page.getByTestId("agent-empty-reason")).toContainText("鉴权失败");
@@ -376,6 +386,8 @@ test("零 provider 实例 + daemon ok: 点 scenario-empty 让 providers 真为 [
   await page.reload();
   // reload 后 scenario 状态保留(dev state)? — React useState 默认丢, 复点一次探针确保 []
   await page.getByTestId("scenario-empty").click();
+  // round-6: agent-card-section 迁入「本地 Agent」tab, 断言前先切换
+  await page.getByTestId("main-tab-local-agent").click();
 
   // 关键断言: agent-card-section 必须可见(此前会被 providers.length > 0 门禁掉)
   await pwExpect(page.getByTestId("agent-card-section")).toBeVisible({ timeout: 5000 });
@@ -397,56 +409,46 @@ test("零 provider 实例 + daemon unreachable + scenario-empty 探针: AgentCar
   await seedAgentUsage(page, { ok: false, reason: "unreachable" });
   await page.reload();
   await page.getByTestId("scenario-empty").click();
+  // round-6: agent-card-section 迁入「本地 Agent」tab, 断言前先切换
+  await page.getByTestId("main-tab-local-agent").click();
 
   await pwExpect(page.getByTestId("agent-card-section")).toBeVisible({ timeout: 5000 });
   await pwExpect(page.getByTestId("agent-card-empty")).toBeVisible();
   await pwExpect(page.getByTestId("agent-empty-reason")).toContainText("daemon 未连接");
 });
 
-/** t_12bdc277 round-2: LocalAgentSection 占位文案中性化
- * 展开折叠区, 文案应是中性占位(「本地 agent 用量接入即将推出」),
- * 不得渲染看似真实的错误状态(如「daemon 未连接」)
- * t_4b7984d9 round-4 ④: 先切到「本地 Agent」tab(默认 usage tab 下 LocalAgentSection 不挂载)
+/** t_4b7984d9 round-6(用户真机拍板): LocalAgentSection 占位组件已整体删除。
+ * 本测试反转职责: 门禁「即将推出」占位零残留 —— 本地 Agent tab 下
+ * agent-card-section 必须挂载, 任何「即将推出/coming soon」文案都是回归。
  */
-test("LocalAgentSection 占位文案中性化, 不含 daemon 错误状态", async ({ hostPage, page }) => {
+test("本地 Agent tab: agent-card-section 挂载, 占位文案零残留", async ({ hostPage, page }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
-  // 切到「本地 Agent」tab(round-4 ④)
   await page.getByTestId("main-tab-local-agent").click();
-  // 展开折叠区
-  await page.getByTestId("local-agent-toggle").click();
-  await pwExpect(page.getByTestId("local-agent-body")).toBeVisible();
-  const bodyText = await page.getByTestId("local-agent-body").textContent();
-  expect(bodyText).toBeTruthy();
-  // 中性占位断言: 不得含真实错误文案
-  expect(bodyText).not.toMatch(/daemon\s*未连接|请先启动\s*daemon/i);
-  // 占位特征: 含「即将推出」或「coming soon」
-  expect(bodyText).toMatch(/即将推出|coming\s*soon/i);
+  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
+  const panelText = await page.getByTestId("panel-main").textContent();
+  expect(panelText).not.toMatch(/即将推出|coming\s*soon/i);
 });
 
-/** t_4b7984d9 round-4 ④ 回归门禁: tab 互斥显示
- * 「用量」tab 默认显示 agent-card-section;点「本地 Agent」切换后,
- * agent-card-section 消失,local-agent-section 出现;切回「用量」又恢复。
+/** t_4b7984d9 round-6 回归门禁: tab 互斥(语义反转版)
+ * 「用量」tab = provider 卡列表; 「本地 Agent」tab = agent-card-section。
  * 互斥状态机走通。
  */
-test("主页 tab 分离: 用量 ↔ 本地 Agent 互斥切换", async ({ hostPage, page }) => {
+test("主页 tab 分离: 用量(provider 卡) ↔ 本地 Agent(agent 卡) 互斥切换", async ({ hostPage, page }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
-  // 默认: 用量 tab 激活, agent-card-section 可见, local-agent-section 不可见
+  // 默认: 用量 tab 激活, agent-card-section 不挂载(已迁走), card-list 可见
   await pwExpect(page.getByTestId("main-tab-usage")).toHaveAttribute("aria-pressed", "true");
-  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
-  await pwExpect(page.getByTestId("local-agent-section")).toHaveCount(0);
+  await pwExpect(page.getByTestId("agent-card-section")).toHaveCount(0);
   // 切到「本地 Agent」
   await page.getByTestId("main-tab-local-agent").click();
   await pwExpect(page.getByTestId("main-tab-local-agent")).toHaveAttribute("aria-pressed", "true");
   await pwExpect(page.getByTestId("main-tab-usage")).toHaveAttribute("aria-pressed", "false");
-  await pwExpect(page.getByTestId("local-agent-section")).toBeVisible();
-  await pwExpect(page.getByTestId("agent-card-section")).toHaveCount(0);
+  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
   // 切回「用量」
   await page.getByTestId("main-tab-usage").click();
   await pwExpect(page.getByTestId("main-tab-usage")).toHaveAttribute("aria-pressed", "true");
-  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
-  await pwExpect(page.getByTestId("local-agent-section")).toHaveCount(0);
+  await pwExpect(page.getByTestId("agent-card-section")).toHaveCount(0);
 });
 
 /** t_4b7984d9 round-2 P0 修复门禁: 独立窗口 query param 自动跳转。
@@ -461,7 +463,8 @@ test("P0 query param 自动跳转: ?view=agent-dashboard → 直入 AgentDashboa
 }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
-  // 主页正常态先确认可见
+  // 主页正常态先确认可见(round-6: agent-card-section 在「本地 Agent」tab)
+  await page.getByTestId("main-tab-local-agent").click();
   await pwExpect(page.getByTestId("agent-card-section")).toBeVisible({ timeout: 5000 });
   // 关键: 直接 goto 带 query param 的 URL, 等同于 main.ts 独立窗口 loadFile({search:"?view=..."})
   await page.goto("?view=agent-dashboard");
@@ -521,6 +524,8 @@ test("t_185002af 返回键语义分流: standalone→win_close, 主窗→切页�
   await page.goto("?view=agent-dashboard");
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
   await page.getByTestId("agent-dashboard-c-back").click();
+  // round-6: 回主页落在「用量」tab, agent-card-section 在「本地 Agent」tab
+  await page.getByTestId("main-tab-local-agent").click();
   await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
   const invokes2 = await getCapturedInvokes(page);
   expect(
@@ -609,22 +614,15 @@ test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×
   );
 });
 
-/** t_4b7984d9 round-5 A 项收口门禁: 「本地 Agent」标题三主题颜色断言。
- *  用户真机两次反馈「蓝还在」: round-2 的 var(--fg) 在 dark/dark-glass 下是 #e5e9f0
- *  (B 通道最大,深底上读作冷蓝),round-2/3 真壳实测只验了 light 没咬住。
- *  round-5 按「与『即将推出』tag 同族克制视觉」的拍板口径对齐 --fg-dim:
- *    dark  #9aa4b2 / light  #5d6778 (中性灰阶, 三主题下均非蓝)
- *  断言有判别力: 旧值(--fg)与新值(--fg-dim)在三主题下 RGB 均不相等,
- *  本测试对 round-2 旧 CSS 必挂。 */
+/** t_4b7984d9 round-6: LocalAgentSection 占位组件已整体删除(用户真机拍板),
+ * round-5 A 的 local-agent-title/tag 颜色门禁随之失效 —— 该 DOM 已不存在。
+ * 保留同精神断言: agent-card-section 标题仍走中性色(--fg-dim), 四主题不偏蓝。 */
 for (const theme of ["dark", "light", "dark-glass", "light-glass"] as const) {
-  test(`t_4b7984d9 round-5 A: local-agent-title 颜色 = --fg-dim (${theme})`, async ({
+  test(`t_4b7984d9 round-6: agent-card-section 标题色 = --fg-dim (${theme})`, async ({
     hostPage,
     page,
   }) => {
     void hostPage;
-    // 主题落点: localStorage theme.v1 + glass.v1 (theme.ts loadThemeMode/loadGlass)
-    // glass 变体下 title 颜色仍走同一 --fg-dim token (theme.css glass 段不覆盖前景色)
-    // consent 走 fixtures mock 桥(不读 localStorage), 与既有测试同模式: 点同意 → 设主题 → reload
     await page.getByTestId("consent-agree").click();
     await page.evaluate((t: string) => {
       const glass = t.endsWith("-glass");
@@ -636,28 +634,18 @@ for (const theme of ["dark", "light", "dark-glass", "light-glass"] as const) {
     }, theme);
     await page.reload();
     await page.goto("?view=panel");
-    await pwExpect(page.getByTestId("local-agent-section")).toHaveCount(0); // 默认 usage tab
-    // round-4 ④: LocalAgentSection 挂在「本地 Agent」tab 下
     await page.getByTestId("main-tab-local-agent").click();
-    await pwExpect(page.getByTestId("local-agent-toggle")).toBeVisible();
-    await page.getByTestId("local-agent-toggle").click();
-    await pwExpect(page.getByTestId("local-agent-body")).toBeVisible();
+    await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
 
     const colors = await page.evaluate(() => {
-      const title = document.querySelector(".local-agent-title") as HTMLElement;
-      const tag = document.querySelector(".local-agent-tag") as HTMLElement;
+      const title = document.querySelector(".agent-card-section-title") as HTMLElement;
       return {
         title: getComputedStyle(title).color,
-        tag: getComputedStyle(tag).color,
         dataTheme: document.documentElement.dataset.theme,
       };
     });
-    // 主题落点正确
     expect(colors.dataTheme).toBe(theme);
-    // title 与 tag 同族(同为 --fg-dim) — 拍板口径「克制视觉同族」的机器可验形式
-    expect(colors.title, `theme=${theme} title 颜色须与 tag(--fg-dim) 同族`).toBe(colors.tag);
-    // 非蓝判定: --fg-dim 是中性灰阶, G 通道居中, B-G 差 < 24 (冷白 --fg 的 B-G 差 = 240-233 = 7
-    // 不够判别, 故直接用「与 tag 同色」这一强断言 + title 非纯白两道)
+    // 非蓝判定: --fg-dim 中性灰阶, B-G 差 < 24
     const m = colors.title.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
     expect(m, `computed color 必须可解析: ${colors.title}`).toBeTruthy();
     const [, , g, b] = m!.map(Number) as unknown as number[];
@@ -665,15 +653,14 @@ for (const theme of ["dark", "light", "dark-glass", "light-glass"] as const) {
   });
 }
 
-/** t_4b7984d9 round-5 ⑤ (comment 1398): tab 互斥必须覆盖 provider 主列表三态分支。
- *  round-4 ④ 只互斥了 agent-card-section 与 LocalAgentSection, provider 卡列表
- *  (LoadingState/CollectingState/EmptyState/card-list) 漏在互斥外 —— 用户真机实测
- *  切「本地 Agent」tab 后「暂无 Provider」空态仍可见。
- *  360×720 视口锁死(round-3 教训: browser-only 默认 1280 视口下布局缺陷假绿)。 */
-test.describe("t_4b7984d9 round-5 ⑤ tab 互斥收口", () => {
+/** t_4b7984d9 round-6 ⑤(语义反转版): tab 互斥必须覆盖 provider 主列表三态分支。
+ *  round-6 信息架构 = 「用量」tab 显示 provider 主列表 + 「本地 Agent」tab 显示
+ *  agent-card-section(AgentCard)。360×720 视口锁死(round-3 教训: browser-only
+ *  默认 1280 视口下布局缺陷假绿)。 */
+test.describe("t_4b7984d9 round-6 tab 互斥收口", () => {
   test.use({ viewport: { width: 360, height: 720 } });
 
-  test("本地 Agent tab 下 provider 主列表三态全部不可见, 切回用量恢复", async ({
+  test("用量 tab 显示 provider 主列表, 本地 Agent tab 只见 agent 区", async ({
     hostPage,
     page,
   }) => {
@@ -694,17 +681,18 @@ test.describe("t_4b7984d9 round-5 ⑤ tab 互斥收口", () => {
       (await visible("collecting-state")) ||
       (await visible("loading-state"));
     expect(usageHasList, "用量 tab 下 provider 主列表(某态)应可见").toBe(true);
+    // round-6: agent-card-section 已迁走, 用量 tab 不得渲染
+    expect(await visible("agent-card-section"), "agent-card-section 不得在用量 tab 渲染").toBe(false);
 
-    // 切「本地 Agent」: provider 三态 + agent-card-section 全部不可见
+    // 切「本地 Agent」: agent-card-section 可见, provider 三态全部不可见
     await page.getByTestId("main-tab-local-agent").click();
-    await pwExpect(page.getByTestId("local-agent-toggle")).toBeVisible();
+    await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
     expect(await visible("card-list"), "card-list 不得在本地 Agent tab 渲染").toBe(false);
     expect(await visible("empty-state"), "empty-state 不得在本地 Agent tab 渲染").toBe(false);
     expect(await visible("collecting-state"), "collecting-state 不得在本地 Agent tab 渲染").toBe(false);
     expect(await visible("loading-state"), "loading-state 不得在本地 Agent tab 渲染").toBe(false);
-    expect(await visible("agent-card-section"), "agent-card-section 不得在本地 Agent tab 渲染").toBe(false);
 
-    // 切回「用量」: 恢复
+    // 切回「用量」: provider 主列表恢复, agent 区消失
     await page.getByTestId("main-tab-usage").click();
     const backVisible =
       (await visible("card-list")) ||
@@ -712,6 +700,7 @@ test.describe("t_4b7984d9 round-5 ⑤ tab 互斥收口", () => {
       (await visible("collecting-state")) ||
       (await visible("loading-state"));
     expect(backVisible, "切回用量 tab 后 provider 主列表应恢复").toBe(true);
+    expect(await visible("agent-card-section"), "切回用量后 agent-card-section 应消失").toBe(false);
   });
 });
 // ---- t_12c28686: 大屏数据面接真多维(group_by=["agent","model"] / ["day"]) ----
@@ -789,6 +778,8 @@ async function agreeAndSeedMulti(page: import("@playwright/test").Page) {
   });
   await page.reload();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
+  // round-6: agent-card-section 迁入「本地 Agent」tab
+  await page.getByTestId("main-tab-local-agent").click();
 }
 
 test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + 趋势多天桶", async ({
@@ -854,6 +845,8 @@ test("t_12c28686 多维失败域隔离: model/day 维度 unreachable → 各模�
   });
   await page.reload();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
+  // round-6: agent-card-section 迁入「本地 Agent」tab
+  await page.getByTestId("main-tab-local-agent").click();
 
   await page.getByTestId("agent-detail-njbx02").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
@@ -896,6 +889,8 @@ test("t_12c28686 单模型如实 1 slice + 趋势不足 2 天显「数据积累�
   });
   await page.reload();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
+  // round-6: agent-card-section 迁入「本地 Agent」tab
+  await page.getByTestId("main-tab-local-agent").click();
 
   await page.getByTestId("agent-detail-njbx02").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();

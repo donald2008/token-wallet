@@ -154,12 +154,6 @@ const zh = {
     tokens: "tokens",
     credits: "credits",
   },
-  local: {
-    title: "本地 Agent",
-    tag: "即将推出",
-    /* t_12bdc277 round-2: 中性占位文案, 不得渲染看似真实的错误状态(如「daemon 未连接」) */
-    body: "本地 agent 用量接入即将推出",
-  },
   consent: {
     title: "欢迎使用 token-wallet",
     l1a: "本应用",
@@ -493,12 +487,6 @@ const en: Dict = {
     requests: "times",
     tokens: "tokens",
     credits: "credits",
-  },
-  local: {
-    title: "Local agents",
-    tag: "Coming soon",
-    /* t_12bdc277 round-2: neutral placeholder copy, never render fake error states like "daemon disconnected" */
-    body: "Local agent usage integration coming soon",
   },
   consent: {
     title: "Welcome to token-wallet",
