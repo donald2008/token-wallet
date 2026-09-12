@@ -152,21 +152,41 @@ function AppShell() {
     ok: false,
     reason: "unavailable",
   });
+  // t_12c28686: 大屏多维数据面 — Model 分布(group_by=["agent","model"]) + 趋势(group_by=["day"])
+  // 两个附加查询, 与单维查询同一 tick 并行发起(3 次 invoke 而非 4 次; 明细/三分项从单维 summary 取)。
+  // 独立 state: 主页 Agent 卡区只消费单维结果, 大屏消费三维 — 失败域互不拖累(模块级空态+重试)。
+  const [mcpModelSummary, setMcpModelSummary] = useState<McpQueryResult<UsageSummaryOutput>>({
+    ok: false,
+    reason: "unavailable",
+  });
+  const [mcpTrendSummary, setMcpTrendSummary] = useState<McpQueryResult<UsageSummaryOutput>>({
+    ok: false,
+    reason: "unavailable",
+  });
+  const tick = useCallback(async () => {
+    // 并行 3 查: 单维(agent) / 二维(agent+model) / 单维(day); 每份独立落地, 单份失败不阻塞其余
+    const [r, rm, rt] = await Promise.all([
+      mcpUsageSummary({ group_by: ["agent"] }),
+      mcpUsageSummary({ group_by: ["agent", "model"] }),
+      mcpUsageSummary({ group_by: ["day"] }),
+    ]);
+    setMcpSummary(r);
+    setMcpModelSummary(rm);
+    setMcpTrendSummary(rt);
+  }, []);
   useEffect(() => {
     let alive = true;
-    let timer: number | null = null;
-    const tick = async () => {
-      const r = await mcpUsageSummary({ group_by: ["agent"] });
+    const guardedTick = async () => {
       if (!alive) return;
-      setMcpSummary(r);
+      await tick();
     };
-    void tick();
-    timer = window.setInterval(() => void tick(), 30_000);
+    void guardedTick();
+    const timer = window.setInterval(() => void guardedTick(), 30_000);
     return () => {
       alive = false;
-      if (timer !== null) window.clearInterval(timer);
+      window.clearInterval(timer);
     };
-  }, []);
+  }, [tick]);
 
   // 首开判定(§10, P0-7 接真): Rust get_bootstrap 读 settings.json consent;
   // 并行加载 instances.yaml → 预填内存 store(面板重启后实例仍在)
@@ -473,8 +493,11 @@ function AppShell() {
           )}
           <AgentDashboardC
             summary={mcpSummary.data}
+            modelSummary={mcpModelSummary}
+            trendSummary={mcpTrendSummary}
             generatedAt={mcpSummary.generatedAt}
             onBack={dashboardBack}
+            onRetry={() => void tick()}
           />
         </div>
       );

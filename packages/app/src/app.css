@@ -2857,6 +2857,17 @@ body {
     min-height: 150px;
   }
 
+  /* t_12c28686: agent tab 行加入 hero 区后紧凑视口(900×640 独立窗)内容高 +31px,
+   * 集成门禁「零滚动」实测 594 > 592。在已有紧凑段内再收两处(均 4px 网格内):
+   * 容器 gap 12→8(5 处 ×4px=20px) + hero-strip 上下 padding 12→8(8px) —
+   * 观感仍克制, 宽松视口(>680px)不命中, 布局不变。 */
+  .agent-dashboard-c {
+    gap: var(--space-8, 8px);
+  }
+  .agent-dashboard-c .hero-strip {
+    padding: var(--space-8, 8px) var(--space-12, 12px);
+  }
+
   /* t_04f75eae R3 集成修复 ④: 行高锁定定值 px, 消除平台字体度量差异。
    * 驳回实录: 门禁「零滚动」断言在 njbx02 复跑 4 次全挂(scrollHeight 598 > clientHeight 592,
    * 恒定), 而 k3 reviewer 机(DejaVu 回退字体)单测绿 —— 探针 spec 实测每个区块恰好高 6px
@@ -2883,6 +2894,10 @@ body {
   .agent-dashboard-c .pct,
   .agent-dashboard-c .detail-list li,
   .agent-dashboard-c .idle-tag,
+  .dash-module-empty,
+  .dash-module-empty button,
+  .dash-agent-tabs,
+  .dash-agent-tab,
   .agent-dashboard-c-footer {
     line-height: 16px;
   }
@@ -2974,4 +2989,42 @@ body {
   gap: var(--space-12, 12px);
   padding: var(--space-12, 12px);
   align-items: flex-start;
+}
+
+/* ---- t_12c28686: 大屏模块空态(拉取失败/数据积累中) + agent 维度切换 tab ---- */
+.dash-module-empty {
+  flex: 1;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12, 12px);
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-8, 8px);
+}
+.dash-agent-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4, 4px);
+  margin-top: var(--space-8, 8px);
+}
+.dash-agent-tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  color: var(--fg-dim);
+  font-size: var(--font-11, 11px);
+  padding: var(--space-4, 4px) var(--space-12, 12px);
+  cursor: pointer;
+}
+.dash-agent-tab:hover {
+  color: var(--fg);
+}
+.dash-agent-tab.active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
 }

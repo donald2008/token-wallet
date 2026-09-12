@@ -258,15 +258,32 @@ const ipcMocks: Record<string, IpcHandler> = {
   // ---- t_9255cb63: MCP daemon 读数据桥 2 通道 mock ----
   // 读 localStorage token-wallet.mock.mcp.usage(由 seedAgentUsage 注入),
   // 缺省 {ok:false, reason:"unreachable"} — 浏览器 dev 模式无 daemon 时降级显式空态。
-  mcp_usage_summary: (_args?: Record<string, unknown>) => {
-    let s: { ok: boolean; reason?: string; data?: unknown } = { ok: false, reason: "unreachable" };
+  // t_12c28686: handler 按 payload.group_by 分流返回对应的 seed 维度数据 —
+  //   seedAgentUsage 接受单份(向后兼容: 任意 group_by 都返回它)或多份
+  //   {byGroupBy: {"agent": ..., "agent,model": ..., "day": ...}} 形态。
+  //   缺对应维度的 seed → 返回 unreachable(该模块显式空态, 不静默)。
+  mcp_usage_summary: (args?: Record<string, unknown>) => {
+    const groupBy = Array.isArray(args?.group_by) ? (args!.group_by as string[]).join(",") : "agent";
+    let s:
+      | { ok: boolean; reason?: string; data?: unknown }
+      | { byGroupBy?: Record<string, { ok: boolean; reason?: string; data?: unknown }> }
+      = { ok: false, reason: "unreachable" };
     try {
       const raw = localStorage.getItem("token-wallet.mock.mcp.usage");
       if (raw) s = JSON.parse(raw);
     } catch {
       /* ignore */
     }
-    return s.ok && s.data ? { ok: true, data: s.data } : { ok: false, reason: s.reason ?? "unreachable" };
+    if ("byGroupBy" in s && s.byGroupBy) {
+      const one = s.byGroupBy[groupBy];
+      return one && one.ok && one.data
+        ? { ok: true, data: one.data }
+        : { ok: false, reason: one?.reason ?? "unreachable" };
+    }
+    const single = s as { ok: boolean; reason?: string; data?: unknown };
+    return single.ok && single.data
+      ? { ok: true, data: single.data }
+      : { ok: false, reason: single.reason ?? "unreachable" };
   },
   mcp_usage_report_echo: () => {
     let s: { ok: boolean; reason?: string; data?: unknown } = { ok: false, reason: "unreachable" };
@@ -803,4 +820,18 @@ export async function seedAgentUsage(
   await page.evaluate((p) => {
     localStorage.setItem("token-wallet.mock.mcp.usage", JSON.stringify(p));
   }, payload);
+}
+
+/**
+ * t_12c28686: 注入多维 usage_summary(按 group_by 分流)。
+ * keys: "agent" / "agent,model" / "day" — mcp_usage_summary mock 按调用方 group_by
+ * join(",") 后查表返回; 缺 key 的维度 → unreachable(该模块显式空态)。
+ */
+export async function seedAgentUsageMulti(
+  page: import("@playwright/test").Page,
+  byGroupBy: Record<"agent" | "agent,model" | "day", { ok: boolean; reason?: string; data?: unknown }>,
+): Promise<void> {
+  await page.evaluate((p) => {
+    localStorage.setItem("token-wallet.mock.mcp.usage", JSON.stringify({ byGroupBy: p }));
+  }, byGroupBy);
 }

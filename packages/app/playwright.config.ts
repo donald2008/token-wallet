@@ -17,8 +17,12 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm dev:web --port 1501 --strictPort",
-    port: 1501,
+    // t_12c28686: 端口可由 PW_PORT 覆盖(与 fixtures.ts 的 hostPage 同源变量)。
+    // 背景: 兄弟 session 的 dev server 反复占 1501, reuseExistingServer 会静默复用
+    // *别人目录*的旧源码 server, e2e 渲染出与磁盘不符的组件(本卡实测两轮假红)。
+    // 隔离端口跑法: PW_PORT=1521 pnpm test:e2e — webServer 与 fixture goto 同端口。
+    command: "pnpm dev:web --port ${PW_PORT:-1501} --strictPort",
+    port: Number(process.env.PW_PORT ?? 1501),
     reuseExistingServer: true,
   },
 });

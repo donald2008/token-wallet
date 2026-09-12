@@ -1,12 +1,21 @@
 /**
- * Agent 用量大屏 · 方案 C(t_9255cb63, D-055 后续)
+ * Agent 用量大屏 · 方案 C(t_9255cb63, D-055 后续; t_12c28686 数据面接真多维)
  * Layout: 顶摘要 + 2×2 grid(趋势 / Model 环形 / 三分项 / 明细按 agent)。
  * 视觉参考: packages/app/dev-pages/agent-dashboard/agent-dashboard-C.html
  *  (feat/mcp-server dev-pages/ 同款视觉)。本组件用真数据(mcpUsageSummary 输出)
- * 替换原 HTML 的 mock.js 数据源, 保留 chart.js 渲染 + 8px 网格 + tokens 变量。
+ *  替换原 HTML 的 mock.js 数据源, 保留 chart.js 渲染 + 8px 网格 + tokens 变量。
+ *
+ * t_12c28686(用户 9/11 验收反馈 ③) 数据面升级:
+ * - Model 分布: 调用方另拉 group_by=["agent","model"], rows[].group = "agent|model"
+ *   → 过滤当前 agent 后按 model 切片(真实多模型 ≥2 slice; 只有 1 个模型就如实 1 slice,
+ *   不伪造多色环 — P0-8「不显示假数据」原则)
+ * - 趋势: 调用方另拉 group_by=["day"], rows[].group = YYYY-MM-DD → 真多天桶;
+ *   <2 天(daemon 刚启用)→「数据积累中(N 天)」占位, 不画假曲线
+ * - 多 agent: hero 区 agent tab 栏, 切换联动 Model 分布/明细/三分项过滤
+ * - 拉取失败 → 模块内显式「数据拉取失败 + 重试」, 不静默空白
  *
  * 数据契约(本组件入参): 见 ./AgentDashboardC.types.ts — 由调用方(App.tsx)从
- * mcpUsageSummary 拉数据后组装。
+ * mcpUsageSummary 并行拉 3 份(group_by 3 种)后组装。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SummaryRow, UsageSummaryOutput } from "../mcpQueryTypes";
@@ -24,12 +33,34 @@ function fmtCost(n: number | null, currency: string | null): string {
   return `${n.toFixed(2)} ${currency}`;
 }
 
-// ---- 派生数据(从 usage_summary 输出转成 chart/dashboard 所需形态) ----
+/** t_12c28686: 多维 group 字段解析 — 按维度名顺序拆 "a|b|c"。
+ * 防御: 连续分隔符产生的空段一律丢弃; 段数不足(长度 < dims)视为脏行返回 null。 */
+export function splitGroupDims(group: string, dims: string[]): string[] | null {
+  const parts = group
+    .split("|")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (parts.length !== dims.length) return null;
+  return parts;
+}
 
-/** trend = 默认按 day 分组(若 daemon 未返 day 维, 用 summary.total 的 by_status 占位) */
+function rowTokens(r: SummaryRow): number {
+  return r.input_cache_hit_tokens + r.input_cache_miss_tokens + r.output_tokens;
+}
+
+/** trend = group_by=["day"] rows → 按天升序桶; label 直接用 YYYY-MM-DD。
+ * 单维兼容: 若 rows 里解析不出 day 维(如调用方仍传单维 summary), 退回「今日」单桶占位。 */
 function buildTrend(summary: UsageSummaryOutput): TrendBucket[] {
-  // 我们这里取简化策略: 若 group_by 含 day, rows[].group 形如 YYYY-MM-DD;
-  // 若 group_by=["agent"] 单维(默认), 用一个桶表达"今日总和",便于 e2e 验证非空。
+  const buckets: TrendBucket[] = [];
+  for (const r of summary.rows) {
+    const day = splitGroupDims(r.group, ["day"])?.[0];
+    if (day) buckets.push({ label: day, tokens: rowTokens(r) });
+  }
+  if (buckets.length > 0) {
+    buckets.sort((a, b) => a.label.localeCompare(b.label));
+    return buckets;
+  }
+  // 兼容退路: 单维单行时用一个「今日」桶表达今日总和(与旧口径一致, 便于 e2e 非空验证)
   const total = summary.total;
   return [
     {
@@ -39,26 +70,23 @@ function buildTrend(summary: UsageSummaryOutput): TrendBucket[] {
   ];
 }
 
-/** model distribution = group_by=["model"] 时直接用 rows;
- *  当前默认 group_by=["agent"], 故从单行 row 内部 by_status 推不出 model 分布。
- *  退路: 把 total 三分项作为 model distribution(只 1 slice), 真接入 daemon 后由
- *  group_by=["agent","model"] 多维查询补完整。注释明示。 */
-function buildModelSlices(summary: UsageSummaryOutput): ModelSlice[] {
-  const t = summary.total;
-  if (t.calls === 0) return [];
-  // 占位 slice: "tokens"(无 model 信息)。真接入后改 group_by=["model"] 多维查询。
-  return [
-    {
-      model: "tokens",
-      tokens: t.input_cache_hit_tokens + t.input_cache_miss_tokens + t.output_tokens,
-    },
-  ];
+/** model distribution = group_by=["agent","model"] rows 过滤当前 agent。
+ *  只 1 个模型 → 如实 1 slice(不伪造多色环); 0 模型 → 空数组(空态由调用方判)。 */
+function buildModelSlices(summary: UsageSummaryOutput, agentId: string): ModelSlice[] {
+  const slices: ModelSlice[] = [];
+  for (const r of summary.rows) {
+    const dims = splitGroupDims(r.group, ["agent", "model"]);
+    if (!dims || dims[0] !== agentId || !dims[1]) continue;
+    slices.push({ model: dims[1], tokens: rowTokens(r) });
+  }
+  slices.sort((a, b) => b.tokens - a.tokens);
+  return slices;
 }
 
 function buildDetailRows(summary: UsageSummaryOutput): DetailRow[] {
   return summary.rows.map((r: SummaryRow) => ({
     agent_id: r.group,
-    tokens: r.input_cache_hit_tokens + r.input_cache_miss_tokens + r.output_tokens,
+    tokens: rowTokens(r),
     cost: r.cost_total,
     currency: r.currency,
     calls: r.calls,
@@ -105,22 +133,81 @@ function readThemeColor(name: string, fallback: string): string {
   return v || fallback;
 }
 
+/** 模块空态(拉取失败/无数据)共用小结构 — 显式文案, 不静默空白(P0-8 原则) */
+function ModuleEmpty({
+  text,
+  onRetry,
+  testid,
+}: {
+  text: string;
+  onRetry?: () => void;
+  testid: string;
+}): ReactNode {
+  return (
+    <div className="dash-module-empty" data-testid={testid}>
+      <span>{text}</span>
+      {onRetry && (
+        <button
+          type="button"
+          className="agent-dashboard-c-back"
+          data-testid={`${testid}-retry`}
+          onClick={onRetry}
+        >
+          重试
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ---- 主组件 ----
 
 export function AgentDashboardC({
   summary,
+  modelSummary,
+  trendSummary,
   generatedAt,
   onBack,
+  onRetry,
 }: AgentDashboardCProps): ReactNode {
   const [theme, setTheme] = useState<ThemeMode>("dark");
-
-  const trend = useMemo(() => buildTrend(summary), [summary]);
-  const slices = useMemo(() => buildModelSlices(summary), [summary]);
+  // t_12c28686: 多 agent 切换(交互从简, tab) — 默认选中 tokens 最多的 agent
   const detailRows = useMemo(() => buildDetailRows(summary), [summary]);
+  const [selectedAgent, setSelectedAgent] = useState<string>(() => {
+    if (detailRows.length === 0) return "";
+    return [...detailRows].sort((a, b) => b.tokens - a.tokens)[0]!.agent_id;
+  });
+  // 数据刷新后选中 agent 可能已不在 rows 里(30s 轮询窗口变化) → 回退到最大 tokens 行
+  const activeAgent = detailRows.some((r) => r.agent_id === selectedAgent)
+    ? selectedAgent
+    : detailRows.length > 0
+      ? [...detailRows].sort((a, b) => b.tokens - a.tokens)[0]!.agent_id
+      : "";
 
+  const trend = useMemo(
+    () => (trendSummary.ok ? buildTrend(trendSummary.data) : []),
+    [trendSummary],
+  );
+  const slices = useMemo(
+    () => (modelSummary.ok && activeAgent ? buildModelSlices(modelSummary.data, activeAgent) : []),
+    [modelSummary, activeAgent],
+  );
   const trendCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const modelCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstancesRef = useRef<{ trend: unknown; model: unknown }>({ trend: null, model: null });
+
+  // 趋势空态语义: 拉取失败 → failed; day 桶不足 2 天(兼容退路的「今日」单桶也算 1 天) → 数据积累中
+  const trendState: "ok" | "failed" | "accumulating" = !trendSummary.ok
+    ? "failed"
+    : trend.length < 2
+      ? "accumulating"
+      : "ok";
+  // Model 分布空态语义: 拉取失败 → failed; ok 但 0 slice → 无数据
+  const modelState: "ok" | "failed" | "empty" = !modelSummary.ok
+    ? "failed"
+    : slices.length === 0
+      ? "empty"
+      : "ok";
 
   const renderCharts = useCallback(async () => {
     let ChartMod: any;
@@ -142,9 +229,9 @@ export function AgentDashboardC({
       '"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif';
     ChartMod.defaults.font.size = 10;
 
-    // ---- trend bar ----
+    // ---- trend bar(仅趋势数据 ok 且 ≥2 天才画 — 不画假曲线) ----
     const trendCanvas = trendCanvasRef.current;
-    if (trendCanvas) {
+    if (trendCanvas && trendState === "ok") {
       const prev = chartInstancesRef.current.trend as { destroy: () => void } | null;
       prev?.destroy?.();
       chartInstancesRef.current.trend = new ChartMod(trendCanvas, {
@@ -190,9 +277,9 @@ export function AgentDashboardC({
       });
     }
 
-    // ---- model doughnut ----
+    // ---- model doughnut(仅模型数据 ok 且 ≥1 slice 才画 — 单模型如实 1 slice) ----
     const modelCanvas = modelCanvasRef.current;
-    if (modelCanvas) {
+    if (modelCanvas && modelState === "ok") {
       const prev = chartInstancesRef.current.model as { destroy: () => void } | null;
       prev?.destroy?.();
       const palette = ["#4f8cff", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#0ea5e9", "#facc15"];
@@ -222,7 +309,7 @@ export function AgentDashboardC({
         },
       });
     }
-  }, [trend, slices]);
+  }, [trend, slices, trendState, modelState]);
 
   useEffect(() => {
     void renderCharts();
@@ -232,17 +319,25 @@ export function AgentDashboardC({
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
+  // t_12c28686 口径裁决: hero 总用量/三分项 = 全局 total(任务卡「三分项维持现有调用」,
+  // hero 大数是产品噱头), agent tab 只联动 Model 分布 + 明细过滤。
   const totalTokens =
     summary.total.input_cache_hit_tokens +
     summary.total.input_cache_miss_tokens +
     summary.total.output_tokens;
   const totalCost = fmtCost(summary.total.cost_total, summary.total.currency);
 
-  // 三分项百分比
+  // 三分项百分比(全局 total 口径)
   const sum = totalTokens || 1;
-  const pctHit = ((summary.total.input_cache_hit_tokens / sum) * 100).toFixed(1);
-  const pctMiss = ((summary.total.input_cache_miss_tokens / sum) * 100).toFixed(1);
-  const pctOut = ((summary.total.output_tokens / sum) * 100).toFixed(1);
+  const hitTokens = summary.total.input_cache_hit_tokens;
+  const missTokens = summary.total.input_cache_miss_tokens;
+  const outTokens = summary.total.output_tokens;
+  const pctHit = ((hitTokens / sum) * 100).toFixed(1);
+  const pctMiss = ((missTokens / sum) * 100).toFixed(1);
+  const pctOut = ((outTokens / sum) * 100).toFixed(1);
+
+  // 当前 agent 的明细行(明细随 agent tab 联动过滤)
+  const currentDetail = detailRows.find((r) => r.agent_id === activeAgent) ?? null;
 
   return (
     <div className="agent-dashboard-c" data-testid="agent-dashboard-c" data-theme={theme}>
@@ -285,7 +380,9 @@ export function AgentDashboardC({
       {/* 顶部 Hero */}
       <div className="hero-strip">
         <div>
-          <div className="panel-title">总用量 · 全部 agent</div>
+          <div className="panel-title">
+            "总用量 · 全部 agent"
+          </div>
           <div className="hero">
             <div className="hero-tokens" data-testid="agent-dashboard-c-hero-tokens">
               {fmtWhole.format(totalTokens)}
@@ -299,6 +396,24 @@ export function AgentDashboardC({
               {totalCost ? `· ${totalCost}` : ""}
             </div>
           </div>
+          {/* t_12c28686: agent 维度切换(tab, 交互从简) — 联动 Model 分布/三分项/明细 */}
+          {detailRows.length > 1 && (
+            <div className="dash-agent-tabs" role="tablist" aria-label="Agent 切换" data-testid="dash-agent-tabs">
+              {detailRows.map((r) => (
+                <button
+                  key={r.agent_id}
+                  type="button"
+                  role="tab"
+                  aria-selected={r.agent_id === activeAgent}
+                  className={`dash-agent-tab${r.agent_id === activeAgent ? " active" : ""}`}
+                  data-testid={`dash-agent-tab-${r.agent_id}`}
+                  onClick={() => setSelectedAgent(r.agent_id)}
+                >
+                  {r.agent_id}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="meta">
           <div>
@@ -325,21 +440,36 @@ export function AgentDashboardC({
           <div className="panel-title-row">
             <h3 className="panel-title">趋势 · tokens 消耗</h3>
             <div className="right">
-              {trend.length} buckets · max {fmtTokens(Math.max(0, ...trend.map((b) => b.tokens)))}
+              {trendState === "ok" ? `${trend.length} buckets · max ${fmtTokens(Math.max(0, ...trend.map((b) => b.tokens)))}` : "—"}
             </div>
           </div>
-          <div className="chart-wrap">
-            <canvas ref={trendCanvasRef} data-testid="agent-dashboard-c-chart-trend" />
-          </div>
+          {trendState === "ok" ? (
+            <div className="chart-wrap">
+              <canvas ref={trendCanvasRef} data-testid="agent-dashboard-c-chart-trend" />
+            </div>
+          ) : trendState === "accumulating" ? (
+            <ModuleEmpty
+              testid="dash-trend-empty"
+              text={`数据积累中（${trend.length} 天）`}
+            />
+          ) : (
+            <ModuleEmpty testid="dash-trend-empty" text="数据拉取失败" onRetry={onRetry} />
+          )}
         </div>
         <div className="panel">
           <div className="panel-title-row">
             <h3 className="panel-title">Model 分布</h3>
             <div className="right">环形</div>
           </div>
-          <div className="chart-wrap">
-            <canvas ref={modelCanvasRef} data-testid="agent-dashboard-c-chart-model" />
-          </div>
+          {modelState === "ok" ? (
+            <div className="chart-wrap">
+              <canvas ref={modelCanvasRef} data-testid="agent-dashboard-c-chart-model" />
+            </div>
+          ) : modelState === "empty" ? (
+            <ModuleEmpty testid="dash-model-empty" text="暂无模型数据" />
+          ) : (
+            <ModuleEmpty testid="dash-model-empty" text="数据拉取失败" onRetry={onRetry} />
+          )}
         </div>
       </div>
 
@@ -373,19 +503,19 @@ export function AgentDashboardC({
             <span>
               Cache hit <strong>{pctHit}%</strong>
             </span>
-            <span className="v-dim">{fmtWhole.format(summary.total.input_cache_hit_tokens)}</span>
+            <span className="v-dim">{fmtWhole.format(hitTokens)}</span>
           </div>
           <div className="pct">
             <span>
               Cache miss <strong>{pctMiss}%</strong>
             </span>
-            <span className="v-dim">{fmtWhole.format(summary.total.input_cache_miss_tokens)}</span>
+            <span className="v-dim">{fmtWhole.format(missTokens)}</span>
           </div>
           <div className="pct">
             <span>
               Output <strong>{pctOut}%</strong>
             </span>
-            <span className="v-dim">{fmtWhole.format(summary.total.output_tokens)}</span>
+            <span className="v-dim">{fmtWhole.format(outTokens)}</span>
           </div>
         </div>
         <div className="panel">
@@ -394,18 +524,21 @@ export function AgentDashboardC({
             <div className="right">tokens + 金额</div>
           </div>
           <ul className="detail-list" data-testid="agent-dashboard-c-detail-list">
-            {detailRows.map((r) => (
-              <li key={r.agent_id} data-testid={`agent-dashboard-c-detail-${r.agent_id}`}>
+            {currentDetail && (
+              <li
+                key={currentDetail.agent_id}
+                data-testid={`agent-dashboard-c-detail-${currentDetail.agent_id}`}
+              >
                 <div className="name">
-                  {r.agent_id}
-                  {r.idle && <span className="idle-tag">空闲</span>}
+                  {currentDetail.agent_id}
+                  {currentDetail.idle && <span className="idle-tag">空闲</span>}
                 </div>
-                <div className="tokens">{r.idle ? "—" : fmtTokens(r.tokens)}</div>
-                <div className={`cost${fmtCost(r.cost, r.currency) === "" ? " is-empty" : ""}`}>
-                  {fmtCost(r.cost, r.currency)}
+                <div className="tokens">{currentDetail.idle ? "—" : fmtTokens(currentDetail.tokens)}</div>
+                <div className={`cost${fmtCost(currentDetail.cost, currentDetail.currency) === "" ? " is-empty" : ""}`}>
+                  {fmtCost(currentDetail.cost, currentDetail.currency)}
                 </div>
               </li>
-            ))}
+            )}
           </ul>
         </div>
       </div>
