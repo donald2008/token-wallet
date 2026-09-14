@@ -343,6 +343,7 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
       _event,
       input: UsageSummaryInput,
     ): Promise<{ ok: true; data: UsageSummaryOutput } | { ok: false; reason: string }> => {
+      const t0 = Date.now();
       try {
         const r = await callMcpToolFromEnv<UsageSummaryOutput>(
           configDir(),
@@ -350,8 +351,16 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
           queryHttp,
           { timeoutMs: 5000 },
         );
+        // round-7 终结日志: 每次 IPC 调用一条(状态+耗时+行数) — 成功/失败速率
+        // 与延迟分布直接可统计, 间歇性问题不再需要现场守着抓。
+        const rows = r.parsed.rows?.length ?? -1;
+        console.log(`[mcp-ipc] usage_summary ok=true ${Date.now() - t0}ms rows=${rows}`);
         return { ok: true, data: r.parsed };
       } catch (e) {
+        const kind = e instanceof McpCallError ? e.kind : "protocol_error";
+        console.log(
+          `[mcp-ipc] usage_summary ok=false ${Date.now() - t0}ms reason=${kind} detail=${e instanceof Error ? e.message : String(e)}`,
+        );
         if (e instanceof McpCallError) return { ok: false, reason: e.kind };
         return { ok: false, reason: "protocol_error" };
       }
@@ -366,6 +375,7 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
       _event,
       input: UsageReportEchoInput,
     ): Promise<{ ok: true; data: UsageReportEchoOutput } | { ok: false; reason: string }> => {
+      const t0 = Date.now();
       try {
         const r = await callMcpToolFromEnv<UsageReportEchoOutput>(
           configDir(),
@@ -373,8 +383,13 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
           queryHttp,
           { timeoutMs: 5000 },
         );
+        console.log(`[mcp-ipc] usage_report_echo ok=true ${Date.now() - t0}ms`);
         return { ok: true, data: r.parsed };
       } catch (e) {
+        const kind = e instanceof McpCallError ? e.kind : "protocol_error";
+        console.log(
+          `[mcp-ipc] usage_report_echo ok=false ${Date.now() - t0}ms reason=${kind} detail=${e instanceof Error ? e.message : String(e)}`,
+        );
         if (e instanceof McpCallError) return { ok: false, reason: e.kind };
         return { ok: false, reason: "protocol_error" };
       }
