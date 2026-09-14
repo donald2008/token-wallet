@@ -164,14 +164,18 @@ function AppShell() {
   });
   const tick = useCallback(async () => {
     // 并行 3 查: 单维(agent) / 二维(agent+model) / 单维(day); 每份独立落地, 单份失败不阻塞其余
+    // t_4b7984d9 round-7(用户真机 9/14): 查询存在间歇性失败(成功 7ms / 失败 unreachable 交替),
+    // 失败一拍 UI 就闪回「daemon 未连接」空态 — 抖动期间数据明明刚取到过。
+    // 修复: 失败且已有上一次成功数据时, 保留旧数据继续展示(不覆盖为失败空态),
+    // 仅在从未成功过时才落到空态。三份独立处理。
     const [r, rm, rt] = await Promise.all([
       mcpUsageSummary({ group_by: ["agent"] }),
       mcpUsageSummary({ group_by: ["agent", "model"] }),
       mcpUsageSummary({ group_by: ["day"] }),
     ]);
-    setMcpSummary(r);
-    setMcpModelSummary(rm);
-    setMcpTrendSummary(rt);
+    setMcpSummary((prev) => (r.ok || !prev.ok ? r : prev));
+    setMcpModelSummary((prev) => (rm.ok || !prev.ok ? rm : prev));
+    setMcpTrendSummary((prev) => (rt.ok || !prev.ok ? rt : prev));
   }, []);
   useEffect(() => {
     let alive = true;
