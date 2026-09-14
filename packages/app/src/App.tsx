@@ -480,7 +480,7 @@ function AppShell() {
   if (view === "agent-dashboard") {
     if (mcpSummary.ok) {
       return (
-        <div className="panel">
+        <div className="panel" data-standalone={standalone ? "1" : undefined}>
           {standalone && (
             <div className="dash-chrome" data-testid="dash-chrome">
               <span className="dash-chrome-title">Agent 用量详情</span>

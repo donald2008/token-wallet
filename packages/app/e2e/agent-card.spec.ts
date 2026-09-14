@@ -135,9 +135,11 @@ test("主页 Agent 卡: 真数据渲染 + 三种活动态 + 金额可空留白",
   await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
   await pwExpect(page.getByTestId("agent-card-list")).toBeVisible();
 
-  // 元数据 = daemon generated_at(非 mock 拍脑袋值)
+  // 元数据 = daemon generated_at(非 mock 拍脑袋值)。
+  // t_5cf22ba4: round-7(b166e1b) 把时间戳改短格式「MM-DD HH:mm」, 旧断言(全 ISO 串)漏改
+  // 预存红 —— 对齐 round-7 契约断言短格式。
   await pwExpect(page.getByTestId("agent-card-section-meta")).toContainText(
-    "数据 2026-09-09T12:34:56+08:00",
+    "数据 09-09 12:34",
   );
 
   // 三条 Agent 卡 + data-agent
@@ -267,13 +269,14 @@ test("详情按钮切大屏方案 C: hero + 趋势 + model + 三分项 + 明细�
   await pwExpect(list.locator("li")).toHaveCount(1);
   const detailHeavy = page.getByTestId("agent-dashboard-c-detail-njbx02-heavy");
   await pwExpect(detailHeavy).toContainText("njbx02-heavy");
-  await pwExpect(detailHeavy).toContainText("12.34 USD");
   await pwExpect(detailHeavy).toContainText("4,474,000");
-  // 切到 home-computer → 明细切行 + cost 留空契约(cost_total=null)
+  // t_5cf22ba4(问题 5): pricing 未接入, 明细行不再渲染金额单元格(标注同步改「tokens」)
+  await pwExpect(detailHeavy.locator(".cost")).toHaveCount(0);
+  // 切到 home-computer → 明细切行(cost_total=null 与有值均不渲染金额单元格, 口径统一)
   await page.getByTestId("dash-agent-tab-home-computer").click();
   const detailHome = page.getByTestId("agent-dashboard-c-detail-home-computer");
   await pwExpect(detailHome).toBeVisible();
-  await pwExpect(detailHome.locator(".cost")).toHaveClass(/is-empty/);
+  await pwExpect(detailHome.locator(".cost")).toHaveCount(0);
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02-heavy")).toHaveCount(0);
 
   // footer 显示 daemon 时间戳(非 mock 拍脑袋)
@@ -316,10 +319,12 @@ test("daemon 不可达: 主页 Agent 卡区显式「daemon 未连接」空态(�
   // round-6: agent-card-section 迁入「本地 Agent」tab, 断言前先切换
   await page.getByTestId("main-tab-local-agent").click();
 
-  // 空态卡存在 + reason 文案 + 「daemon 未连接」徽章
+  // 空态卡存在 + reason 文案 + 徽章。
+  // t_5cf22ba4: round-7(b166e1b) 把徽章改为按 reason 分类的短语(正文保留完整 reason,
+  // 语义分层不重复), 旧断言(徽章=「daemon 未连接」全文)漏改预存红 —— 对齐 round-7 契约。
   await pwExpect(page.getByTestId("agent-card-empty")).toBeVisible();
   await pwExpect(page.getByTestId("agent-empty-reason")).toContainText("daemon 未连接");
-  await pwExpect(page.getByTestId("agent-activity-badge")).toHaveText("daemon 未连接");
+  await pwExpect(page.getByTestId("agent-activity-badge")).toHaveText("连接失败");
   // ⚠️ 关键断言: 不渲染 0 tokens 卡(防止静默吞成 0)
   await pwExpect(page.getByTestId("agent-card")).toHaveCount(0);
 });
@@ -612,6 +617,62 @@ test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×
   expect(box.footerBottom, `页脚 bottom=${box.footerBottom} 必须 ≤ 视口高 ${box.vh}`).toBeLessThanOrEqual(
     box.vh + 0.5,
   );
+});
+
+/** t_5cf22ba4 门禁扩展(用户 9/14 真机截图实证 5 项的回归锁):
+ *  1) 趋势 X 轴日期连续 — 09-13 这类 0 上报日必须以 0 高度桶在场(chart.js labels 计数)。
+ *  2) 三分项头部保留一位小数 — 不再 Math.round 舍入吞项(94/5/0 → 94.1%/5.4%/0.4%)。
+ *  3) 页脚钉底不被窗缘水平切半 — footer top/bottom 落在视口内, 且无滚动中间态残行。 */
+test("t_5cf22ba4: 趋势日期连续 + 三分项头部一位小数 + 页脚完整落视口", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  // day 维造「隔天缺口」: 09-08 有数据 / 09-10 有数据 / 09-09 无行 — 断言补 0 桶后 3 buckets
+  const dayRows = fakeSummary.rows.map((r) => ({ ...r }));
+  const multi = deriveMultiFromSingle(fakeSummary);
+  const dayWithGap = {
+    ...fakeSummary,
+    rows: [
+      { ...dayRows[0]!, group: "2026-09-08" },
+      { ...dayRows[1]!, group: "2026-09-10" },
+    ],
+  };
+  await seedAgentUsageMulti(page, {
+    ...multi,
+    day: { ok: true, data: dayWithGap },
+  });
+  await page.setViewportSize({ width: 900, height: 640 });
+  await page.goto("?view=agent-dashboard&standalone=1");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  await pwExpect(page.getByTestId("agent-dashboard-c-chart-trend")).toBeVisible();
+  await page.waitForTimeout(800); // chart.js 异步渲染
+
+  // ① 趋势: 头部 bucket 计数 = 3(09-08 / 09-09 / 补 0 的 09-10) — 补桶语义由
+  // AgentDashboardC.test.tsx 的 buildTrend 单测锁定, 此处锁渲染层计数与 max 不被补桶污染
+  const trendRight = page.locator(
+    '.agent-dashboard-c .panel:has([data-testid="agent-dashboard-c-chart-trend"]) .panel-title-row .right',
+  );
+  await pwExpect(trendRight).toHaveText("3 buckets · max 4,474,000");
+
+  // ② 三分项头部: 一位小数, 不吞项(fake total = 74.0% / 18.5% / 7.5%)
+  const splitRight = page.locator(
+    '.agent-dashboard-c .panel:has([data-testid="agent-dashboard-c-split-bar"]) .panel-title-row .right',
+  );
+  await pwExpect(splitRight).toHaveText("74.0% / 18.5% / 7.5%");
+
+  // ③ 页脚: top 与 bottom 都在视口内(不被窗缘水平切半), 高度 ≥ 1 行(非裁切残行)
+  const footerBox = await page.evaluate(() => {
+    const f = document.querySelector(".agent-dashboard-c-footer") as HTMLElement | null;
+    if (!f) return null;
+    const r = f.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, height: r.height, vh: window.innerHeight };
+  });
+  expect(footerBox, "页脚必须渲染").toBeTruthy();
+  expect(footerBox!.top).toBeGreaterThanOrEqual(0);
+  expect(footerBox!.bottom).toBeLessThanOrEqual(footerBox!.vh + 0.5);
+  expect(footerBox!.height, "页脚完整一行高(≥14px), 非被窗缘切成两半的残行").toBeGreaterThanOrEqual(14);
 });
 
 /** t_4b7984d9 round-6: LocalAgentSection 占位组件已整体删除(用户真机拍板),

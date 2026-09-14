@@ -2632,6 +2632,8 @@ body {
    * 本容器作为 .panel(列 flex) 的子项按剩余高度收缩, 四象限边框落回窗口内。 */
   min-height: 0;
   box-sizing: border-box;
+  /* t_5cf22ba4(用户截图问题 2, 一屏方案 B): 一屏收口是设计目标, 滚动只是极窄窗口的
+   * 兜底 — 正常 900×640 内容必须零滚动完整落视口(有 e2e 门禁断言)。 */
   overflow-y: auto;
 }
 
@@ -2665,6 +2667,17 @@ body {
 .dash-chrome .spacer {
   flex: 1;
   min-width: 0;
+}
+
+/* t_5cf22ba4(一屏方案 B): standalone 独立窗取消 .panel 的 16px 悬浮卡片留边(8px×2) —
+ * 该留边是主窗「卡片悬浮在桌面」的观感约定, 但独立窗自带全窗 chrome 条, 顶部留边把
+ * chrome 顶出可视区、底部留边吃掉容器高度 ⇒ 文档级滚动条(实测 648 > 640)。贴边后
+ * chrome 恒在窗口顶、内容区满用窗口高度。主窗内嵌/浏览器路径不带 data-standalone, 不受影响。 */
+.panel[data-standalone="1"] {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  border-radius: 0;
 }
 .agent-dashboard-c-head {
   display: flex;
@@ -2798,13 +2811,16 @@ body {
   min-height: 180px;
 }
 
-/* t_04f75eae 集成修复 ③: 紧凑高度视口(独立窗 900×640 内容高 591 / 更小窗)下图表下限
- * 180 会让「顶摘要 + 2×2 grid + 页脚」的最小高度(≈610)超出容器 → 容器内滚动条 + 页脚
- * 被裁。降到 150 后最小高度 ≈580 ≤ 591, 窗口内零裁切; 宽松视口(主窗内嵌 1280×720 等)
- * 不命中媒体查询, 图表仍 180 起步 + flex:1 撑满, 观感不变。 */
+/* t_5cf22ba4(用户截图问题 2, 一屏方案 B): 紧凑视口下限 150→140 — 一屏收口是设计目标,
+ * 140(=17.5×8) 在 4/8 网格内, 宽松视口(>680px)不命中, 图表仍 180 起步。
+ * ⚠️ 同时给定值高度(flex:0 0 auto): flex:1 + min-height 的高度不定会让 chart.js 的
+ * responsive 尺寸循环锁死在初始 canvas 高度上(实测 canvas 反撑父容器 300px → row-grid
+ * 被顶爆), 定值高度让 ResizeObserver 把 canvas 收到 140。 */
 @media (max-height: 680px) {
   .agent-dashboard-c .chart-wrap {
-    min-height: 150px;
+    flex: 0 0 auto;
+    height: 140px;
+    min-height: 140px;
   }
 
   /* t_12c28686: agent tab 行加入 hero 区后紧凑视口(900×640 独立窗)内容高 +31px,
@@ -2812,10 +2828,13 @@ body {
    * 容器 gap 12→8(5 处 ×4px=20px) + hero-strip 上下 padding 12→8(8px) —
    * 观感仍克制, 宽松视口(>680px)不命中, 布局不变。 */
   .agent-dashboard-c {
-    gap: var(--space-8, 8px);
+    gap: var(--space-4, 4px);
+    /* t_5cf22ba4(一屏方案 B): 容器外缘 padding 12→4(全边, 边缘同线), 内容区 +16px */
+    padding: var(--space-4, 4px);
   }
   .agent-dashboard-c .hero-strip {
-    padding: var(--space-8, 8px) var(--space-12, 12px);
+    /* t_5cf22ba4(一屏方案 B): 上下 padding 8→4, 再省 8px */
+    padding: var(--space-4, 4px) var(--space-12, 12px);
   }
 
   /* t_04f75eae R3 集成修复 ④: 行高锁定定值 px, 消除平台字体度量差异。
@@ -2924,7 +2943,9 @@ body {
   min-width: 80px;
 }
 .agent-dashboard-c .detail-list .cost.is-empty {
-  /* 拍板契约: 无金额时彻底留空(占位用 visibility:hidden 保持列对齐, 不显示破折号) */
+  /* 拍板契约: 无金额时彻底留空(占位用 visibility:hidden 保持列对齐, 不显示破折号)
+   * t_5cf22ba4(用户截图问题 5): pricing 未接入期间明细行不再渲染 cost 单元格(见
+   * AgentDashboardC.tsx), 本规则仅供 pricing 接入后复用 — hero cost 空值仍走本契约。 */
   visibility: hidden;
 }
 .agent-dashboard-c-footer {
@@ -2932,6 +2953,15 @@ body {
   color: var(--fg-dim);
   text-align: right;
   font-variant-numeric: tabular-nums;
+  /* t_5cf22ba4(用户截图问题 1): 页脚钉底 — 溢出内容被裁时被裁的是页脚下方的空区,
+   * 页脚本体不再被窗缘水平切成两半(截图实证的「残缺文字行」即页脚被裁态)。 */
+  margin-top: auto;
+  /* t_5cf22ba4(用户截图问题 1): 行级溢出隐藏 — 高度预算超支时整行隐藏(页脚是元信息,
+   * 信息完整性让位于零截断), 不再出现被水平切成两半的残行与卡片边缘叠压。
+   * ⚠️ overflow≠visible 会把 flex item 的自动最小尺寸归零 → 页脚被压缩塌缩(实测 0 高),
+   * 必须显式 flex-shrink:0 保住整行。 */
+  overflow: hidden;
+  flex-shrink: 0;
 }
 .agent-dashboard-c-empty {
   display: flex;

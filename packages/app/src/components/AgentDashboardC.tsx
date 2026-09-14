@@ -49,8 +49,10 @@ function rowTokens(r: SummaryRow): number {
 }
 
 /** trend = group_by=["day"] rows → 按天升序桶; label 直接用 YYYY-MM-DD。
- * 单维兼容: 若 rows 里解析不出 day 维(如调用方仍传单维 summary), 退回「今日」单桶占位。 */
-function buildTrend(summary: UsageSummaryOutput): TrendBucket[] {
+ * 单维兼容: 若 rows 里解析不出 day 维(如调用方仍传单维 summary), 退回「今日」单桶占位。
+ * t_5cf22ba4 注意: 无上报日也会出现在 rows 里(daemon 按 window 全量出桶), 缺桶兜底仍保留。
+ * 导出供 L1 单测(t_5cf22ba4 补 0 桶语义回归锁)。 */
+export function buildTrend(summary: UsageSummaryOutput): TrendBucket[] {
   const buckets: TrendBucket[] = [];
   for (const r of summary.rows) {
     const day = splitGroupDims(r.group, ["day"])?.[0];
@@ -58,7 +60,32 @@ function buildTrend(summary: UsageSummaryOutput): TrendBucket[] {
   }
   if (buckets.length > 0) {
     buckets.sort((a, b) => a.label.localeCompare(b.label));
-    return buckets;
+    // t_5cf22ba4(用户截图问题 4): 无上报日整列消失 → X 轴时间轴不连续。
+    // 按首末日历日逐日补 tokens=0 桶, 保证日期连续(缺失窗口 ≤ 7 天, 防窗口错配时无限补桶)。
+    const filled: TrendBucket[] = [];
+    const DAY_MS = 86_400_000;
+    const labelOf = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    for (let i = 0; i < buckets.length; i++) {
+      const cur = buckets[i]!;
+      if (i > 0) {
+        const prev = buckets[i - 1]!;
+        const prevMs = Date.parse(`${prev.label}T00:00:00Z`);
+        const curMs = Date.parse(`${cur.label}T00:00:00Z`);
+        if (
+          Number.isFinite(prevMs) &&
+          Number.isFinite(curMs) &&
+          curMs > prevMs + DAY_MS &&
+          curMs - prevMs <= 7 * DAY_MS
+        ) {
+          for (let t = prevMs + DAY_MS; t < curMs; t += DAY_MS) {
+            filled.push({ label: labelOf(new Date(t)), tokens: 0 });
+          }
+        }
+      }
+      filled.push(cur);
+    }
+    return filled;
   }
   // 兼容退路: 单维单行时用一个「今日」桶表达今日总和(与旧口径一致, 便于 e2e 非空验证)
   const total = summary.total;
@@ -313,7 +340,9 @@ export function AgentDashboardC({
     summary.total.output_tokens;
   const totalCost = fmtCost(summary.total.cost_total, summary.total.currency);
 
-  // 三分项百分比(全局 total 口径)
+  // 三分项百分比(全局 total 口径)。
+  // t_5cf22ba4(用户截图问题 3): 头部 Math.round 会舍入吞项(94.1+5.4+0.4 → "94/5/0",
+  // 第三项变 0 但条形图里实际有色段, 数据展示不一致) — 改 toFixed(1) 保留一位小数。
   const sum = totalTokens || 1;
   const hitTokens = summary.total.input_cache_hit_tokens;
   const missTokens = summary.total.input_cache_miss_tokens;
@@ -465,7 +494,7 @@ export function AgentDashboardC({
           <div className="panel-title-row">
             <h3 className="panel-title">三分项拆分</h3>
             <div className="right">
-              {Math.round(Number(pctHit))}/{Math.round(Number(pctMiss))}/{Math.round(Number(pctOut))}
+              {`${pctHit}% / ${pctMiss}% / ${pctOut}%`}
             </div>
           </div>
           <div className="split-bar" data-testid="agent-dashboard-c-split-bar">
@@ -507,7 +536,9 @@ export function AgentDashboardC({
         <div className="panel">
           <div className="panel-title-row">
             <h3 className="panel-title">明细 · 按 agent</h3>
-            <div className="right">tokens + 金额</div>
+            {/* t_5cf22ba4(用户截图问题 5): pricing 未接入, 金额恒空 → 标注只写 tokens,
+             * 不展示空金额占位; pricing 接入后恢复「tokens + 金额」即可。 */}
+            <div className="right">tokens</div>
           </div>
           <ul className="detail-list" data-testid="agent-dashboard-c-detail-list">
             {currentDetail && (
@@ -520,9 +551,6 @@ export function AgentDashboardC({
                   {currentDetail.idle && <span className="idle-tag">空闲</span>}
                 </div>
                 <div className="tokens">{currentDetail.idle ? "—" : fmtTokens(currentDetail.tokens)}</div>
-                <div className={`cost${fmtCost(currentDetail.cost, currentDetail.currency) === "" ? " is-empty" : ""}`}>
-                  {fmtCost(currentDetail.cost, currentDetail.currency)}
-                </div>
               </li>
             )}
           </ul>

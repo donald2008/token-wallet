@@ -11,7 +11,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AgentDashboardC, splitGroupDims } from "./AgentDashboardC";
+import { AgentDashboardC, buildTrend, splitGroupDims } from "./AgentDashboardC";
 import type { McpQueryResult } from "../mcpQuery";
 import type { UsageSummaryOutput, SummaryRow } from "../mcpQueryTypes";
 
@@ -151,13 +151,17 @@ describe("AgentDashboardC(单维兼容路径 — 旧 e2e 断言保持)", () => {
     expect(c.querySelector('[data-testid="agent-dashboard-c-samples"]')?.textContent).toBe("150");
   });
 
-  it("detail-list 渲染当前 agent 一行 + 金额可空留白契约", () => {
+  it("detail-list 渲染当前 agent 一行(t_5cf22ba4: 金额单元格不再渲染, 标注=tokens)", () => {
     const { container: c } = mountDash();
     const list = c.querySelector('[data-testid="agent-dashboard-c-detail-list"]');
     expect(list?.querySelectorAll("li")).toHaveLength(1);
     const njbx02 = list?.querySelector('[data-testid="agent-dashboard-c-detail-njbx02"]');
     expect(njbx02?.textContent).toMatch(/njbx02/);
-    expect(njbx02?.textContent).toMatch(/1\.23 USD/);
+    // t_5cf22ba4(问题 5): pricing 未接入, 明细行不渲染金额(标注同步只写 tokens) —
+    // 金额信息仍有值场景也统一不展示, 待 pricing 接入后一并恢复。
+    expect(njbx02?.querySelector(".cost")).toBeNull();
+    expect(list?.parentElement?.textContent).not.toMatch(/tokens \+ 金额/);
+    expect(list?.parentElement?.textContent).not.toMatch(/1\.23 USD/);
     expect(njbx02?.textContent).not.toMatch(/——|—/); // 拍板:不留破折号
     // t_4b7984d9 B: detail-list 的 tokens 列也是全数字(50000+10000+4000 = 64000 → "64,000")
     const tokensCell = njbx02?.querySelector(".tokens");
@@ -165,15 +169,16 @@ describe("AgentDashboardC(单维兼容路径 — 旧 e2e 断言保持)", () => {
     expect(tokensCell?.textContent).not.toMatch(/\d+\.?\d*K\b|\d+\.?\d*M\b/);
   });
 
-  it("cost_total=null 时 detail-list .cost 留空(visibility:hidden 保持对齐)", () => {
+  it("cost_total=null 时 hero-cost 留空 + 明细行不渲染金额单元格(t_5cf22ba4 口径统一)", () => {
     const partial: UsageSummaryOutput = {
       ...fakeSummary,
       rows: [{ ...fakeSummary.rows[0]!, cost_total: null }],
       total: { ...fakeSummary.total, cost_total: null },
     };
     const { container: c } = mountDash(partial);
+    // t_5cf22ba4(问题 5): 明细行金额单元格不渲染(null 与有值同口径)
     const cost = c.querySelector('[data-testid="agent-dashboard-c-detail-njbx02"] .cost');
-    expect(cost?.classList.contains("is-empty")).toBe(true);
+    expect(cost).toBeNull();
     const hero = c.querySelector('[data-testid="agent-dashboard-c-hero-cost"]');
     expect(hero?.classList.contains("is-empty")).toBe(true);
     expect(hero?.textContent).toBe(""); // 彻底空白
@@ -331,5 +336,64 @@ describe("AgentDashboardC(t_12c28686 多维数据面)", () => {
     const { container: c } = mountDash(fakeSummary, { ok: true, data: single, generatedAt: "" });
     expect(c.querySelector('[data-testid="agent-dashboard-c-models"]')?.textContent).toBe("1");
     expect(c.querySelector('[data-testid="agent-dashboard-c-chart-model"]')).toBeTruthy(); // 如实画 1 slice
+  });
+});
+
+describe("AgentDashboardC(t_5cf22ba4 展示品质回归锁)", () => {
+  it("buildTrend: 缺失日补 tokens=0 桶, X 轴日期连续(问题 4)", () => {
+    // rows 只有 09-08 / 09-10, 09-09 无上报 → 补 0 桶
+    const gap: UsageSummaryOutput = {
+      ...multiDaySummary,
+      rows: [
+        { ...rows[0]!, group: "2026-09-08" },
+        { ...rows[1]!, group: "2026-09-10" },
+      ],
+    };
+    const buckets = buildTrend(gap);
+    expect(buckets.map((b) => b.label)).toEqual(["2026-09-08", "2026-09-09", "2026-09-10"]);
+    expect(buckets[1]!.tokens).toBe(0); // 补的 0 桶
+    expect(buckets[0]!.tokens).toBeGreaterThan(0);
+    expect(buckets[2]!.tokens).toBeGreaterThan(0);
+  });
+
+  it("buildTrend: 缺口 >7 天不补桶(防窗口错配无限补), 原样保留两桶", () => {
+    const far: UsageSummaryOutput = {
+      ...multiDaySummary,
+      rows: [
+        { ...rows[0]!, group: "2026-09-01" },
+        { ...rows[1]!, group: "2026-09-12" },
+      ],
+    };
+    const buckets = buildTrend(far);
+    expect(buckets.map((b) => b.label)).toEqual(["2026-09-01", "2026-09-12"]);
+  });
+
+  it("三分项头部保留一位小数不吞项(问题 3): 94.1/5.4/0.4 形态不再被舍入成 94/5/0", () => {
+    // 构造 hit 94.14% / miss 5.44% / out 0.42% 的 total(toFixed(1) → 94.1/5.4/0.4,
+    // 与用户真机截图同形态; 旧 Math.round 会显示 94/5/0 吞掉第三项)
+    const swallow: UsageSummaryOutput = {
+      ...fakeSummary,
+      total: {
+        ...fakeSummary.total,
+        input_cache_hit_tokens: 9414,
+        input_cache_miss_tokens: 544,
+        output_tokens: 42,
+      },
+    };
+    const { container: c } = mountDash(swallow);
+    const splitRight = c.querySelector(
+      '.panel:has([data-testid="agent-dashboard-c-split-bar"]) .panel-title-row .right',
+    );
+    expect(splitRight?.textContent).toBe("94.1% / 5.4% / 0.4%");
+    // 条形图三段照常按比例在位
+    expect(c.querySelector('[data-testid="agent-dashboard-c-seg-out"]')).toBeTruthy();
+  });
+
+  it("明细卡头标注=tokens(问题 5): 不再出现「tokens + 金额」文案", () => {
+    const { container: c } = mountDash();
+    const detailPanel = [...c.querySelectorAll(".panel")].find((p) =>
+      p.querySelector('[data-testid="agent-dashboard-c-detail-list"]'),
+    );
+    expect(detailPanel?.querySelector(".panel-title-row .right")?.textContent).toBe("tokens");
   });
 });
