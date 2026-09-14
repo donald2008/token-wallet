@@ -56,119 +56,121 @@ export interface HttpShim {
 }
 
 export function defaultHttpShim(): HttpShim {
+  // round-7(2026-09-14 证据链收口): shim 从全局 fetch 改为 **node:http 原生直连**。
+  // 证据: 用户真机 win-local-test.mjs — node.exe 同机同 daemon 同请求 33ms 全通;
+  //       electron 主进程同请求 = 200 headers 到、SSE body 5s 零字节。
+  //       Electron 37 主进程全局 fetch 走 Chromium net 栈(非纯 undici), 其对
+  //       keep-alive SSE 流的缓冲/代理行为导致 body 不交付 → 头到体不到。
+  // 修法: localhost 数据面请求不过 Chromium 网络服务 — node:http + 手工 SSE 流式
+  //       读(收到完整 data: 行即解析), 语义与旧 shim 完全一致, 且零系统代理干扰。
   return {
-    postJson: async <T>(opts: {
+    postJson: <T>(opts: {
       url: string;
       headers: Record<string, string>;
       body: unknown;
       timeoutMs: number;
-    }): Promise<{ status: number; body: T; headers: Record<string, string> }> => {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
-      try {
-        const resp = await fetch(opts.url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...opts.headers },
-          body: JSON.stringify(opts.body),
-          signal: ctrl.signal,
+    }): Promise<{ status: number; body: T; headers: Record<string, string> }> =>
+      new Promise<{ status: number; body: T; headers: Record<string, string> }>((resolve, reject) => {
+        const parsed = new URL(opts.url);
+        const mod = parsed.protocol === "https:" ? require("node:https") : require("node:http");
+        const payload = Buffer.from(JSON.stringify(opts.body), "utf8");
+        const req = mod.request(
+          {
+            protocol: parsed.protocol,
+            hostname: parsed.hostname,
+            port: parsed.port,
+            path: parsed.pathname + parsed.search,
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Content-Length": payload.length,
+              ...opts.headers,
+            },
+          },
+          (res: import("node:http").IncomingMessage) => {
+            const status = res.statusCode ?? 0;
+            const respHeaders: Record<string, string> = {};
+            for (const [k, v] of Object.entries(res.headers)) {
+              respHeaders[k.toLowerCase()] = Array.isArray(v) ? v.join(", ") : (v ?? "");
+            }
+            if (status === 401 || status === 403) {
+              res.resume(); // drain
+              reject(new Error(`mcp http status ${status}`));
+              return;
+            }
+            // SSE/JSON 统一流式读: 攒 chunk, 出现可解析 envelope(JSON 或 SSE data:)即 resolve
+            const chunks: Buffer[] = [];
+            let buf = "";
+            let settled = false;
+            const finishJson = () => {
+              if (settled) return;
+              settled = true;
+              const text = Buffer.concat(chunks).toString("utf8");
+              try {
+                resolve({ status, body: JSON.parse(text) as T, headers: respHeaders });
+              } catch (pe) {
+                console.error(
+                  `[mcp-query] body parse failed: status=${status} ct=${respHeaders["content-type"]} parseErr=${pe instanceof Error ? pe.message : pe} body[:200]=${text.slice(0, 200)}`,
+                );
+                reject(new Error(`mcp http status ${status} (parse: ${pe instanceof Error ? pe.message : pe})`));
+              }
+            };
+            const trySseEnvelope = (): boolean => {
+              if (!buf.includes("data:")) return false;
+              const joined = buf
+                .split(/\r?\n/)
+                .filter((l) => l.startsWith("data:"))
+                .map((l) => l.slice("data:".length).trimStart())
+                .join("\n")
+                .trim();
+              if (!joined) return false;
+              try {
+                const body = JSON.parse(joined) as T;
+                settled = true;
+                res.destroy(); // 收到 envelope 即断开 — SSE 流不必读完
+                resolve({ status, body, headers: respHeaders });
+                return true;
+              } catch {
+                return false; // 跨块半行 — 继续攒
+              }
+            };
+            const ct = respHeaders["content-type"] ?? "";
+            res.on("data", (c: Buffer) => {
+              chunks.push(c);
+              buf += c.toString("utf8");
+              if (ct.includes("text/event-stream")) {
+                if (trySseEnvelope()) return;
+              } else if (ct.includes("application/json")) {
+                if (settled) return;
+                // JSON 单发形态: 等流自然结束(end)后整体解析 — fastmcp JSON 模式发完即关
+              }
+            });
+            res.on("end", () => {
+              if (settled) return;
+              finishJson();
+            });
+            res.on("error", (err: Error) => {
+              if (settled) return;
+              settled = true;
+              console.error(`[mcp-query] response stream error: ${err.message}`);
+              reject(new Error(`mcp http status ${status} (stream: ${err.message})`));
+            });
+          },
+        );
+        req.setTimeout(opts.timeoutMs, () => {
+          req.destroy(new Error(`timeout after ${opts.timeoutMs}ms`));
         });
-        // 收 headers 给 session 捕获用 — 原生 fetch Headers → plain object (全小写键)
-        const respHeaders: Record<string, string> = {};
-        resp.headers.forEach((v, k) => {
-          respHeaders[k.toLowerCase()] = v;
-        });
-        // t_eece584f round-2: MCP streamable-http 协议层错误用 HTTP 4xx + JSON-RPC body
-        // (实测 fastmcp 4.x: 无 session → 400, 假 session → 404, 鉴权错 → 401/403)。
-        // 不能在 status check 阶段直接 throw — 必须让上层解析 body 才能识别 self-heal 判定。
-        //
-        // 区分:
-        //   - 401/403 鉴权错 → throw "mcp http status N"(归类 unauthorized)
-        //   - 其他 status(含 400/404/5xx + 有 body)→ 尝试解析 body, 失败 throw unreachable
-        //   - 解析成功 → return { status, body, headers }(让上层走 protocol_error / self-heal 判定)
-        if (resp.status === 401 || resp.status === 403) {
-          throw new Error(`mcp http status ${resp.status}`);
-        }
-        let parsed: T;
-        try {
-          parsed = (await parseStreamableBody(resp)) as T;
-        } catch (parseErr) {
-          // body 解析失败(非 JSON-RPC envelope)→ 视为 daemon 不可达。
-          // round-7 可观测性: 原始失败原因必须落日志 — 此前这里吞成纯 status 码,
-          // 间歇性 unreachable 无任何证据留存, 排障全靠猜(2026-09-14 用户批评成立)。
-          const perr = parseErr instanceof Error ? parseErr.message : String(parseErr);
-          const raw = await resp.text().catch(() => "<body unavailable>");
+        req.on("error", (err: Error) => {
           console.error(
-            `[mcp-query] body parse failed: status=${resp.status} ct=${resp.headers.get("content-type")} parseErr=${perr} body[:200]=${raw.slice(0, 200)}`,
+            `[mcp-query] transport failure(node:http): ${err.name || "Error"}: ${err.message} endpoint=${opts.url}`,
           );
-          throw new Error(`mcp http status ${resp.status} (parse: ${perr})`);
-        }
-        return { status: resp.status, body: parsed, headers: respHeaders };
-      } finally {
-        clearTimeout(timer);
-      }
-    },
+          reject(err);
+        });
+        req.end(payload);
+      }),
   };
 }
 
-/**
- * t_eece584f: 解析 streamable-http body。
- * - content-type: application/json → 直接 JSON.parse
- * - content-type: text/event-stream → 抽 `data:` 行, 最后一行的 data 作 JSON 解析
- *   (fastmcp 4.x 实测每次只 emit 一个 event: message + data: {...}\r\n)
- */
-async function parseStreamableBody(resp: Response): Promise<unknown> {
-  const ct = resp.headers.get("content-type") ?? "";
-  if (ct.includes("application/json")) {
-    return await resp.json();
-  }
-  if (ct.includes("text/event-stream")) {
-    // round-7(证据驱动修复): 用户真机日志实锤 — daemon(uvicorn/Windows)对 tools/call
-    // 返回 200 + text/event-stream 后**流保持打开不关闭**, 旧实现 resp.text() 要等
-    // 流结束才 resolve → 必然等到 timeoutMs 被 abort → "This operation was aborted"
-    // → 全部归类 unreachable。间歇性"成功"(流恰好提前关)由此而来。
-    // 修复: 流式逐块读 — 攒到完整 data: 行(JSON-RPC envelope)即解析返回, 不等流关闭。
-    const reader = resp.body?.getReader();
-    if (!reader) throw new Error("SSE response has no body stream");
-    const decoder = new TextDecoder();
-    let buf = "";
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (value) buf += decoder.decode(value, { stream: true });
-        // 完整事件判定: 已出现 data: 行且缓冲里有可解析的 JSON envelope
-        if (buf.includes("data:")) {
-          const dataLines = buf
-            .split(/\r?\n/)
-            .filter((l) => l.startsWith("data:"))
-            .map((l) => l.slice("data:".length).trimStart());
-          const joined = dataLines.join("\n").trim();
-          if (joined) {
-            try {
-              const parsed = JSON.parse(joined) as unknown;
-              // 成功解析即返回; 读到完整 envelope 后主动取消下游, 释放连接
-              void reader.cancel().catch(() => {});
-              return parsed;
-            } catch {
-              /* 半行/跨块 JSON — 继续读下一个 chunk */
-            }
-          }
-        }
-        if (done) break;
-      }
-    } finally {
-      void reader.cancel().catch(() => {});
-    }
-    // 流结束仍无可解析 envelope
-    const tail = buf.trim().slice(0, 200);
-    throw new Error(`empty SSE data payload (stream ended, tail="${tail}")`);
-  }
-  // 未知 content-type: 退回 text → JSON(尽最大努力, 失败抛 plain error)
-  try {
-    return JSON.parse(await resp.text());
-  } catch {
-    throw new Error("unexpected response content-type");
-  }
-}
 
 export interface McpCallToolInput {
   /** MCP 工具名, 如 "usage_summary" */
