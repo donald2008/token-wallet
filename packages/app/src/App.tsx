@@ -634,6 +634,18 @@ function AppShell() {
               </header>
               <div className="agent-card-list" data-testid="agent-card-list">
                 {mcpSummary.ok ? (
+                  mcpSummary.data.rows.length === 0 ? (
+                    /* t_4b7984d9 round-7: rows=[] 渲染盲区 — daemon 连接成功但窗口内
+                     * 零上报时, map 空数组导致区域整体空白(9/14 用户真机实锤)。
+                     * 显式空态: 说明连接正常、缺的是上报数据源。 */
+                    <div className="agent-rows-empty" data-testid="agent-rows-empty">
+                      <p className="agent-rows-empty-title">暂无 Agent 上报数据</p>
+                      <p className="agent-rows-empty-hint">
+                        daemon 连接正常。窗口内还没有任何 agent 上报用量 —
+                        需要先在 agent 侧（如 njbx02 的 hook 插件）接入上报。
+                      </p>
+                    </div>
+                  ) : (
                   mcpSummary.data.rows.map((row) => {
                     const activity: "active" | "idle" | "no_report_today" =
                       row.calls === 0
@@ -652,6 +664,7 @@ function AppShell() {
                       />
                     );
                   })
+                  )
                 ) : (
                   <AgentCardEmpty
                     reason={

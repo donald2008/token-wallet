@@ -2978,3 +2978,19 @@ body {
   background: var(--accent);
   border-color: var(--accent);
 }
+
+/* ---- Agent rows 空态(round-7): daemon 连接正常但窗口内零上报 ---- */
+.agent-rows-empty {
+  padding: var(--space-16) var(--space-12);
+  text-align: center;
+}
+.agent-rows-empty-title {
+  color: var(--fg);
+  font-weight: 600;
+}
+.agent-rows-empty-hint {
+  margin-top: var(--space-4);
+  color: var(--fg-dim);
+  font-size: 12px;
+  line-height: 1.6;
+}

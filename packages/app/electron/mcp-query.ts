@@ -91,9 +91,16 @@ export function defaultHttpShim(): HttpShim {
         let parsed: T;
         try {
           parsed = (await parseStreamableBody(resp)) as T;
-        } catch {
-          // body 解析失败(非 JSON-RPC envelope)→ 视为 daemon 不可达
-          throw new Error(`mcp http status ${resp.status}`);
+        } catch (parseErr) {
+          // body 解析失败(非 JSON-RPC envelope)→ 视为 daemon 不可达。
+          // round-7 可观测性: 原始失败原因必须落日志 — 此前这里吞成纯 status 码,
+          // 间歇性 unreachable 无任何证据留存, 排障全靠猜(2026-09-14 用户批评成立)。
+          const perr = parseErr instanceof Error ? parseErr.message : String(parseErr);
+          const raw = await resp.text().catch(() => "<body unavailable>");
+          console.error(
+            `[mcp-query] body parse failed: status=${resp.status} ct=${resp.headers.get("content-type")} parseErr=${perr} body[:200]=${raw.slice(0, 200)}`,
+          );
+          throw new Error(`mcp http status ${resp.status} (parse: ${perr})`);
         }
         return { status: resp.status, body: parsed, headers: respHeaders };
       } finally {
@@ -297,6 +304,9 @@ export async function callMcpTool<T>(
   } catch (e) {
     if (e instanceof McpCallError) throw e;
     const msg = e instanceof Error ? e.message : String(e);
+    console.error(
+      `[mcp-query] initialize handshake failure: ${e instanceof Error ? e.name : "unknown"}: ${msg} endpoint=${endpoint}`,
+    );
     if (/status (401|403)/.test(msg)) throw new McpCallError("unauthorized", msg);
     throw new McpCallError("unreachable", msg);
   }
@@ -331,6 +341,11 @@ export async function callMcpTool<T>(
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      // round-7 可观测性: fetch 失败细节(超时/连接拒绝/DNS/中断)落日志 —
+      // 是 TimeoutError 还是 ECONNREFUSED 决定排障方向, 此前全部被吞。
+      console.error(
+        `[mcp-query] tools/call transport failure: ${e instanceof Error ? e.name : "unknown"}: ${msg} endpoint=${endpoint}`,
+      );
       if (/status (401|403)/.test(msg)) throw new McpCallError("unauthorized", msg);
       throw new McpCallError("unreachable", msg);
     }
