@@ -177,10 +177,14 @@ function AppShell() {
     // 失败一拍 UI 就闪回「daemon 未连接」空态 — 抖动期间数据明明刚取到过。
     // 修复: 失败且已有上一次成功数据时, 保留旧数据继续展示(不覆盖为失败空态),
     // 仅在从未成功过时才落到空态。三份独立处理。
+    // round-9(2026-09-14): trend 查询显式 since=7 天前 — 此前不传 since 落进 daemon
+    // 默认「今天 00:00」窗口 → day 桶永远只有 1 个 → 趋势图永远显示『数据积累中』
+    // (t_12c28686 遗留 bug: 趋势图在全历史数据下也永不工作)。
+    const trendSince = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
     const [r, rm, rt] = await Promise.all([
       mcpUsageSummary({ group_by: ["agent"] }),
       mcpUsageSummary({ group_by: ["agent", "model"] }),
-      mcpUsageSummary({ group_by: ["day"] }),
+      mcpUsageSummary({ group_by: ["day"], since: trendSince }),
     ]);
     setMcpSummary((prev) => (r.ok || !prev.ok ? r : prev));
     setMcpModelSummary((prev) => (rm.ok || !prev.ok ? rm : prev));

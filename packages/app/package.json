@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@token-wallet/core": "workspace:*",
+    "chart.js": "4.4.4",
     "electron-updater": "^6.6.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

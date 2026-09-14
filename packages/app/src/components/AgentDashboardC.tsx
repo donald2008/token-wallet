@@ -97,32 +97,18 @@ function buildDetailRows(summary: UsageSummaryOutput): DetailRow[] {
   }));
 }
 
-// ---- chart.js lazy loader(避免 vite bundle 拉整个 chart.js 进主仓) ----
-// 运行时从 CDN 加载(window.Chart 全局); 本组件用 any 形态避免拉 npm 类型包(零 dep)。
-// 类型契约注释: Chart<C, T, O> 形态的 C=bar/doughnut, T=number[], O=配置对象。
-
-let chartLoadPromise: Promise<any> | null = null;
+// ---- chart.js(本地依赖打包, 2026-09-14 round-9 用户真机实锤) ----
+// 原实现: 运行时从 jsdelivr CDN 注入 <script>, CDN 不可达(国内常态)时静默 return
+// → Model 分布卡片**完全空白**(JSX 空态只覆盖 empty/failed, ok 分支纯 canvas,
+//   chart 加载失败时连空态文案都没有)。
+// 修法: chart.js@4.4.4 落 package.json 依赖, 'chart.js/auto' 静态 import 由
+// vite 打包 — 离线可用, 免 CDN。auto 入口等价 umd 全量注册(bar/doughnut 等)。
+import ChartJs from "chart.js/auto";
 async function loadChartJs(): Promise<any> {
   if (typeof window === "undefined") {
     throw new Error("chart.js only loads in browser environment");
   }
-  const w = window as unknown as { Chart?: unknown };
-  if (w.Chart) return w.Chart;
-  if (!chartLoadPromise) {
-    chartLoadPromise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js";
-      script.async = true;
-      script.onload = () => {
-        const c = (window as unknown as { Chart?: unknown }).Chart;
-        if (c) resolve(c);
-        else reject(new Error("chart.js loaded but window.Chart missing"));
-      };
-      script.onerror = () => reject(new Error("chart.js CDN load failed"));
-      document.head.appendChild(script);
-    });
-  }
-  return chartLoadPromise;
+  return ChartJs;
 }
 
 // ---- 主题 ----
