@@ -312,6 +312,23 @@ async function ensureSession(
  *   - result.content[0].text 非 JSON → throw { reason: "protocol_error" }
  *   - initialize 失败 / 缺 sid → throw { reason: "protocol_error" }
  */
+/**
+ * JSON-RPC 请求 id 发号器(进程级单调递增)。
+ *
+ * round-8 根修(2026-09-14, 用户要求重读代码后定案): 此前所有请求默认 id=1,
+ * 而 30s tick 的三路查询(主页/Model/趋势)经同一 session **并发**发出 →
+ * daemon(mcp/server/streamable_http.py)按 request_id 存 per-request stream
+ * (self._request_streams[request_id]) → 同 id 并发键冲突 → 后到覆盖先到,
+ * 被覆盖请求的响应永不送达 → 客户端 5s 超时(每 tick 必挂 2 路, 偶发时序
+ * 错开则全绿 — 与用户日志「1 路 ok=true + 2 路 timeout」逐字吻合)。
+ * 9/12 前单查询/tick 无并发故从未触发; t_12c28686 加第三查询后必现。
+ */
+let rpcIdCounter = 0;
+function nextRpcId(): number {
+  rpcIdCounter += 1;
+  return rpcIdCounter;
+}
+
 export async function callMcpTool<T>(
   cfg: { host: string; port: number; key: string },
   input: McpCallToolInput,
@@ -335,10 +352,11 @@ export async function callMcpTool<T>(
     throw new McpCallError("unreachable", msg);
   }
 
-  // 2) POST tools/call(带 sid)
+  // 2) POST tools/call(带 sid)。id 用进程级发号器 — 并发请求必须各持唯一 id,
+  //    同 id 并发会让 daemon 按 request_id 索引的 per-request stream 互相覆盖。
   const body = {
     jsonrpc: "2.0",
-    id: opts.rpcId ?? 1,
+    id: opts.rpcId ?? nextRpcId(),
     method: "tools/call",
     params: { name: input.name, arguments: input.arguments },
   };
