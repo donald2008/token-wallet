@@ -144,18 +144,43 @@ export function AgentCard({
 }
 
 /** Agent 卡空态(daemon 未连接 / 401 / 协议错) — 任务卡边界:
- *  显式「daemon 未连接」空态, 不静默吞成 0(不渲染 0 tokens 卡)。 */
+ *  显式失败空态, 不静默吞成 0(不渲染 0 tokens 卡)。
+ *  round-7(9/14 用户截图反馈): 徽章与正文重复渲染同一状态两次 —
+ *  徽章改为按 reason 分类的短语(状态行), 正文保留完整 reason, 语义分层不重复。
+ *  reason 支持裸 kind(unreachable/unauthorized/protocol_error)与已格式化文案。 */
+const EMPTY_BADGE: Record<string, string> = {
+  unreachable: "连接失败",
+  unauthorized: "鉴权失败",
+  protocol_error: "协议错误",
+};
+
+/** round-7: reason → 用户可读文案(唯一映射点, App.tsx 三处调用统一走这里)。
+ *  裸 kind 与旧硬编码文案都兜住 — 大屏空态历史传文案串, 主页传裸 kind。 */
+export function agentEmptyReasonText(reason: string): string {
+  switch (reason) {
+    case "unreachable":
+      return "daemon 未连接,请先启动 daemon";
+    case "unauthorized":
+      return "鉴权失败,请检查 daemon API Key";
+    case "protocol_error":
+      return "daemon 协议错误";
+    default:
+      return reason || "daemon 未连接,请先启动 daemon";
+  }
+}
+
 export function AgentCardEmpty({ reason }: { reason: string }): ReactNode {
+  const badge = EMPTY_BADGE[reason] ?? "不可用";
   return (
     <section className="card agent-card agent-card-empty" data-testid="agent-card-empty">
       <div className="card-head">
         <span className="agent-logo" aria-hidden="true">·</span>
         <span className="card-name">Agent 用量</span>
         <span className="status-dot" data-testid="agent-status-dot" data-health="unknown" aria-hidden="true" />
-        <span className="card-status-text text-unknown" data-testid="agent-activity-badge">daemon 未连接</span>
+        <span className="card-status-text text-unknown" data-testid="agent-activity-badge">{badge}</span>
       </div>
       <div className="agent-card-body">
-        <p className="agent-empty-reason" data-testid="agent-empty-reason">{reason}</p>
+        <p className="agent-empty-reason" data-testid="agent-empty-reason">{agentEmptyReasonText(reason)}</p>
       </div>
     </section>
   );

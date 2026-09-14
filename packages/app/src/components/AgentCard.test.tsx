@@ -192,12 +192,21 @@ describe("formatTokens 边界(t_f26c5fb8: K/M 简写分支已删, 一律 Intl.Nu
 });
 
 describe("AgentCardEmpty", () => {
-  it("渲染 reason 文案 + 显式「daemon 未连接」徽章", () => {
-    const { container: c } = mount(<AgentCardEmpty reason="daemon 未连接,请先启动 daemon" />);
+  it("渲染 reason 文案 + 按 reason 分类的徽章(round-7: 徽章与正文不再重复同一状态)", () => {
+    // 主页/大屏传裸 kind → 徽章「连接失败」, 正文完整引导文案
+    const { container: c } = mount(<AgentCardEmpty reason="unreachable" />);
     expect(c.querySelector('[data-testid="agent-card-empty"]')).toBeTruthy();
     expect(c.querySelector('[data-testid="agent-empty-reason"]')?.textContent).toBe(
       "daemon 未连接,请先启动 daemon",
     );
-    expect(c.querySelector('[data-testid="agent-activity-badge"]')?.textContent).toBe("daemon 未连接");
+    expect(c.querySelector('[data-testid="agent-activity-badge"]')?.textContent).toBe("连接失败");
+  });
+
+  it("徽章按 reason 分类: unauthorized → 鉴权失败", () => {
+    const { container: c } = mount(<AgentCardEmpty reason="unauthorized" />);
+    expect(c.querySelector('[data-testid="agent-activity-badge"]')?.textContent).toBe("鉴权失败");
+    expect(c.querySelector('[data-testid="agent-empty-reason"]')?.textContent).toBe(
+      "鉴权失败,请检查 daemon API Key",
+    );
   });
 });

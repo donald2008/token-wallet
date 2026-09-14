@@ -91,6 +91,15 @@ export default function App() {
   );
 }
 
+
+/** round-7: daemon generated_at ISO8601 → 短格式「MM-DD HH:mm」(原始微秒串直出不可读)。 */
+function fmtGeneratedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return `数据 ${iso}`;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `数据 ${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 function AppShell() {
   const { mode: themeMode, setMode: setThemeMode, glass, setGlass, glassAlpha, setGlassAlpha } = useTheme();
   // Phase B: 启动读回持久化语言(真壳 settings.json → setLang 对齐模块级+重渲染; 浏览器=/mock 同语义)
@@ -506,16 +515,11 @@ function AppShell() {
       );
     }
     // daemon 未连接空态: 用 AgentCardEmpty 复用样式保持视觉一致
-    const reasonText =
-      mcpSummary.reason === "unauthorized"
-        ? "鉴权失败,请检查 daemon API Key"
-        : mcpSummary.reason === "protocol_error"
-          ? "daemon 协议错误"
-          : "daemon 未连接,请先启动 daemon";
+    // round-7: reason 文案映射统一到 agentEmptyReasonText(组件层单点)
     return (
       <div className="panel">
         <div className="agent-dashboard-c-empty" data-testid="agent-dashboard-c-empty">
-          <AgentCardEmpty reason={reasonText} />
+          <AgentCardEmpty reason={mcpSummary.reason} />
           <button
             type="button"
             className="agent-dashboard-c-back"
@@ -628,7 +632,7 @@ function AppShell() {
                 <span className="agent-card-section-title">Agent 用量</span>
                 {mcpSummary.ok && (
                   <span className="agent-card-section-meta" data-testid="agent-card-section-meta">
-                    数据 {mcpSummary.generatedAt}
+                    {fmtGeneratedAt(mcpSummary.generatedAt)}
                   </span>
                 )}
               </header>
@@ -666,15 +670,7 @@ function AppShell() {
                   })
                   )
                 ) : (
-                  <AgentCardEmpty
-                    reason={
-                      mcpSummary.reason === "unauthorized"
-                        ? "鉴权失败,请检查 daemon API Key"
-                        : mcpSummary.reason === "protocol_error"
-                          ? "daemon 协议错误"
-                          : "daemon 未连接,请先启动 daemon"
-                    }
-                  />
+                  <AgentCardEmpty reason={mcpSummary.reason} />
                 )}
               </div>
             </section>
