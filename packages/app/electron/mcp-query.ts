@@ -122,23 +122,45 @@ async function parseStreamableBody(resp: Response): Promise<unknown> {
     return await resp.json();
   }
   if (ct.includes("text/event-stream")) {
-    const text = await resp.text();
-    // 抽取所有 data: 行(忽略注释行 / event: 行 / 空行)
-    const dataLines: string[] = [];
-    for (const line of text.split(/\r?\n/)) {
-      if (line.startsWith("data:")) {
-        dataLines.push(line.slice("data:".length).trimStart());
-      }
-    }
-    const joined = dataLines.join("\n").trim();
-    if (!joined) {
-      throw new Error("empty SSE data payload");
-    }
+    // round-7(证据驱动修复): 用户真机日志实锤 — daemon(uvicorn/Windows)对 tools/call
+    // 返回 200 + text/event-stream 后**流保持打开不关闭**, 旧实现 resp.text() 要等
+    // 流结束才 resolve → 必然等到 timeoutMs 被 abort → "This operation was aborted"
+    // → 全部归类 unreachable。间歇性"成功"(流恰好提前关)由此而来。
+    // 修复: 流式逐块读 — 攒到完整 data: 行(JSON-RPC envelope)即解析返回, 不等流关闭。
+    const reader = resp.body?.getReader();
+    if (!reader) throw new Error("SSE response has no body stream");
+    const decoder = new TextDecoder();
+    let buf = "";
     try {
-      return JSON.parse(joined);
-    } catch {
-      throw new Error("SSE data is not valid JSON");
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (value) buf += decoder.decode(value, { stream: true });
+        // 完整事件判定: 已出现 data: 行且缓冲里有可解析的 JSON envelope
+        if (buf.includes("data:")) {
+          const dataLines = buf
+            .split(/\r?\n/)
+            .filter((l) => l.startsWith("data:"))
+            .map((l) => l.slice("data:".length).trimStart());
+          const joined = dataLines.join("\n").trim();
+          if (joined) {
+            try {
+              const parsed = JSON.parse(joined) as unknown;
+              // 成功解析即返回; 读到完整 envelope 后主动取消下游, 释放连接
+              void reader.cancel().catch(() => {});
+              return parsed;
+            } catch {
+              /* 半行/跨块 JSON — 继续读下一个 chunk */
+            }
+          }
+        }
+        if (done) break;
+      }
+    } finally {
+      void reader.cancel().catch(() => {});
     }
+    // 流结束仍无可解析 envelope
+    const tail = buf.trim().slice(0, 200);
+    throw new Error(`empty SSE data payload (stream ended, tail="${tail}")`);
   }
   // 未知 content-type: 退回 text → JSON(尽最大努力, 失败抛 plain error)
   try {
