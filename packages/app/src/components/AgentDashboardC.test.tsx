@@ -433,6 +433,47 @@ describe("AgentDashboardC(t_5cf22ba4 展示品质回归锁)", () => {
     expect(table?.querySelector('[data-testid="agent-dashboard-c-model-row-glm-5.3-flash"]')).toBeTruthy();
   });
 
+  it("t_a76b2621: 纯 output 模型行(tokens>0 且 hit+miss=0) 命中率显 — 而非 NaN/Infinity", () => {
+    // 病态行: 该模型全为 output, cache 分母 hit+miss=0 但 tokens>0 —
+    // 旧守卫查 tokens>0 走进 0/0 分支, 单元格渲染 NaN% 而非占位符。
+    const pureOutModel: UsageSummaryOutput = {
+      ...multiModelSummary,
+      rows: [
+        {
+          ...rows[0]!,
+          group: "njbx02|glm-5.3-flash",
+          calls: 5,
+          input_cache_hit_tokens: 0,
+          input_cache_miss_tokens: 0,
+          output_tokens: 4000,
+        },
+      ],
+    };
+    const { container: c } = mountDash(fakeSummary, { ok: true, data: pureOutModel, generatedAt: "" });
+    const glm = c.querySelector('[data-testid="agent-dashboard-c-model-row-glm-5.3-flash"]');
+    expect(glm).toBeTruthy();
+    expect(glm?.textContent).not.toMatch(/NaN|Infinity/);
+    expect(glm?.textContent).toContain("—");
+    // hero 命中率守卫本就正确(hit+miss>0), 不被本修复误伤仍出 80.0%
+    expect(c.querySelector('[data-testid="agent-dashboard-c-hit-rate"]')?.textContent).toBe("80.0%");
+  });
+
+  it("t_a76b2621: hero 命中率缺数据(hit+miss=0) 显干净 — 而非 —%", () => {
+    // 全局 total 无 cache 拆分 → hero 命中率占位; % 已收进条件分支, 不渲染 "—%"
+    const noCache: UsageSummaryOutput = {
+      ...fakeSummary,
+      total: {
+        ...fakeSummary.total,
+        input_cache_hit_tokens: 0,
+        input_cache_miss_tokens: 0,
+        output_tokens: 6000,
+      },
+      rows: rows.map((r) => ({ ...r, input_cache_hit_tokens: 0, input_cache_miss_tokens: 0 })),
+    };
+    const { container: c } = mountDash(noCache);
+    expect(c.querySelector('[data-testid="agent-dashboard-c-hit-rate"]')?.textContent).toBe("—");
+  });
+
   it("t_e83ad982(问题 3): 明细行扩列 — 调用/Hit/Miss/Output/占比/模型数全在场", () => {
     const { container: c } = mountDash(fakeSummary, okResult);
     const row = c.querySelector('[data-testid="agent-dashboard-c-detail-njbx02"]');

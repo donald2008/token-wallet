@@ -483,8 +483,11 @@ export function AgentDashboardC({
               命中率{" "}
               <strong data-testid="agent-dashboard-c-hit-rate">
                 {/* t_e83ad982(P4 口径统一): 命中率 = hit/(hit+miss)(与 Model 表同口径);
-                 *  pctHit 是三分项「hit 占总量比」, 两语义不同不可混用 */}
-                {(hitTokens + missTokens) > 0 ? ((hitTokens / (hitTokens + missTokens)) * 100).toFixed(1) : "—"}%
+                 *  pctHit 是三分项「hit 占总量比」, 两语义不同不可混用。
+                 *  t_a76b2621: % 收进条件分支, 缺数据显干净 "—" 不渲染 "—%"。 */}
+                {(hitTokens + missTokens) > 0
+                  ? `${((hitTokens / (hitTokens + missTokens)) * 100).toFixed(1)}%`
+                  : "—"}
               </strong>
             </div>
             <div>
@@ -553,14 +556,17 @@ export function AgentDashboardC({
                   {slices.map((s) => {
                     const modelTotal = slices.reduce((a, x) => a + x.tokens, 0) || 1;
                     const share = ((s.tokens / modelTotal) * 100).toFixed(1);
-                    const hitRate = s.tokens > 0 ? ((s.hit / (s.hit + s.miss)) * 100).toFixed(1) : "—";
+                    // t_a76b2621: 守卫真实分母(hit+miss)而非 tokens — 纯 output 行(tokens>0,
+                    // hit+miss=0)曾渲染 NaN%; % 收进条件分支, 缺数据显干净 "—" 不带尾巴。
+                    const hitRate =
+                      s.hit + s.miss > 0 ? `${((s.hit / (s.hit + s.miss)) * 100).toFixed(1)}%` : "—";
                     return (
                       <tr key={s.model} data-testid={`agent-dashboard-c-model-row-${s.model}`}>
                         <td className="name">{s.model}</td>
                         <td className="num">{fmtWhole.format(s.calls)}</td>
                         <td className="num">{fmtTokens(s.tokens)}</td>
                         <td className="num">{share}%</td>
-                        <td className="num">{hitRate}%</td>
+                        <td className="num">{hitRate}</td>
                       </tr>
                     );
                   })}

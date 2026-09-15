@@ -228,7 +228,7 @@ function createAgentDashboardWindow(): void {
     height: 560,
     useContentSize: true,
     autoHideMenuBar: true,
-    // 设计基准 900×640, 内容自适应, 不强制最大化
+    // 设计基准 900×560, 内容自适应, 不强制最大化(t_a76b2621: t_e83ad982 已把窗高 640→560, 注释同步)
     minWidth: 600,
     minHeight: 480,
     maximizable: true,
@@ -251,7 +251,7 @@ function createAgentDashboardWindow(): void {
   });
   // t_4b7984d9 round-4 ② 居中修复: 旧版用 mainWindow 居中(main.x + (main.width - 900)/2),
   // 当主窗 360 宽时 main.width - 900 = -540 ⇒ dashboard 左缘跑到主窗左侧 270px(可能负偏移出屏)。
-  // 正解: 屏幕 workArea 居中(900×640 dashboard 居中于屏幕,与主窗位置无关,层次感清晰)。
+  // 正解: 屏幕 workArea 居中(900×560 dashboard 居中于屏幕,与主窗位置无关,层次感清晰)。
   try {
     const { screen } = require("electron");
     const display = screen.getPrimaryDisplay();
