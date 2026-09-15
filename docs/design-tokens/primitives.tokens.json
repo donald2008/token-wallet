@@ -60,6 +60,7 @@
     "space-24": { "$value": "24px", "$description": "空态/大区块 padding(现有 placeholder)" },
     "space-28": { "$value": "28px", "$description": "树形缩进/折叠区缩进(现有 local-body)" },
     "space-32": { "$value": "32px", "$description": "最大分节间距" },
+    "space-40": { "$value": "40px", "$description": "窗 chrome 条高度(40 = 32+2×4, t_f6c85da6)" },
     "space-48": { "$value": "48px", "$description": "8px 网格 48(大留白/封面级间距, DTCG)" }
   },
   "radius": {

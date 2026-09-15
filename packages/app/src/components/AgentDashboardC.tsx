@@ -99,7 +99,15 @@ export function buildTrend(summary: UsageSummaryOutput): TrendBucket[] {
 
 /** model distribution = group_by=["agent","model"] rows 过滤当前 agent。
  *  只 1 个模型 → 如实 1 slice(不伪造多色环); 0 模型 → 空数组(空态由调用方判)。
- *  t_e83ad982: slice 扩列 calls/hit/miss/out(迷你数据表列, 全部现有 summary 字段)。 */
+ *  t_e83ad982: slice 扩列 calls/hit/miss/out(迷你数据表列, 全部现有 summary 字段)。
+ *  t_f6c85da6(round-3, 老大 9/15 拍板): Top 6 + 其他聚合 —
+ *  - slices = 当前 agent 全部模型行(含 tokens=0, 表格如实显 0.0%); 0 值模型不画弧
+ *    由渲染层过滤(renderCharts 只把 tokens>0 的 slice 进环形 data)。
+ *  - 模型 > 6 时第 7 起聚合为「其他」一行: calls/tokens/hit/miss/out 为合计值, models=N-6。
+ *    命中率在渲染层按合计口径重算(Σhit/Σ(hit+miss), 与单行同公式)。
+ *  - ≤ 6 模型时如实全量(不出现其他行)。 */
+export const MODEL_TOP_N = 6;
+
 function buildModelSlices(summary: UsageSummaryOutput, agentId: string): ModelSlice[] {
   const slices: ModelSlice[] = [];
   for (const r of summary.rows) {
@@ -112,10 +120,29 @@ function buildModelSlices(summary: UsageSummaryOutput, agentId: string): ModelSl
       hit: r.input_cache_hit_tokens,
       miss: r.input_cache_miss_tokens,
       out: r.output_tokens,
+      models: 1,
     });
   }
   slices.sort((a, b) => b.tokens - a.tokens);
-  return slices;
+  if (slices.length <= MODEL_TOP_N) return slices;
+  const top = slices.slice(0, MODEL_TOP_N);
+  const rest = slices.slice(MODEL_TOP_N);
+  const agg: ModelSlice = {
+    model: "__other__",
+    tokens: rest.reduce((a, s) => a + s.tokens, 0),
+    calls: rest.reduce((a, s) => a + s.calls, 0),
+    hit: rest.reduce((a, s) => a + s.hit, 0),
+    miss: rest.reduce((a, s) => a + s.miss, 0),
+    out: rest.reduce((a, s) => a + s.out, 0),
+    models: rest.length,
+  };
+  return [...top, agg];
+}
+
+/** slice 显示名 — 「其他」聚合行带模型数(Top 6 行 = 模型名本身)。
+ *  导出供环形 legend 与表格单元格共用同一文案(两处不会漂移)。 */
+export function sliceLabel(s: ModelSlice): string {
+  return s.models > 1 ? `其他（${s.models} 个模型）` : s.model;
 }
 
 function buildDetailRows(summary: UsageSummaryOutput): DetailRow[] {
@@ -250,6 +277,7 @@ export function AgentDashboardC({
       border: readThemeColor("--border", "#2c3542"),
       bgElev: readThemeColor("--bg-elev", "#1c2129"),
       accent: readThemeColor("--accent", "#4f8cff"),
+      unknown: readThemeColor("--unknown", "#6b7280"),
     };
     ChartMod.defaults.color = c.fgDim;
     ChartMod.defaults.font.family =
@@ -305,21 +333,47 @@ export function AgentDashboardC({
     }
 
     // ---- model doughnut(仅模型数据 ok 且 ≥1 slice 才画 — 单模型如实 1 slice) ----
+    // t_f6c85da6(round-3): 环形配色修复四件套 —
+    // ① palette 7→12 色: 旧 `i % 7` 在第 8 个模型回卷与第 1 个同色相邻(经典错误)。
+    //    12 色按色相环均匀分布(Top 6 正色 + 预留 6), 双主题图形可辨。
+    // ② 段间隔线 = 主题 --border 色(白主题 #e5e9f0 系深灰, 对比可辨), lineWidth 2→1 克制。
+    // ③ 「其他」聚合段用 --unknown 灰(去强调, 与正色区分)。
+    // ④ 本回调依赖数组加入 theme(round-3 实锤根因: 旧依赖漏 theme, 切浅色后 canvas 不重绘,
+    //    图例文字/描边仍为深色主题色 → 白主题环形异常; 像素级取证 #e5e9f0×4902/#1c2129×1158)。
+    // ⑤ 0 值模型不画弧(arcSlices 过滤 tokens=0), 色下标取自全量 slices 位置 → 过滤不漂移色序。
     const modelCanvas = modelCanvasRef.current;
     if (modelCanvas && modelState === "ok") {
       const prev = chartInstancesRef.current.model as { destroy: () => void } | null;
       prev?.destroy?.();
-      const palette = ["#4f8cff", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#0ea5e9", "#facc15"];
+      const donutPalette = [
+        "#4f8cff", // 蓝
+        "#22c55e", // 绿
+        "#f59e0b", // 橙
+        "#a855f7", // 紫
+        "#e14d8a", // 品红(原 #ef4444 红与其区分度低, 换品红拉开)
+        "#0ea5e9", // 天蓝
+        "#facc15", // 黄
+        "#14b8a6", // 青
+        "#fb7185", // 玫红
+        "#84cc16", // 草绿
+        "#f97316", // 深橙
+        "#8b5cf6", // 蓝紫
+      ];
+      const arcSlices = slices
+        .map((s, i) => ({ s, i }))
+        .filter(({ s }) => s.tokens > 0);
       chartInstancesRef.current.model = new ChartMod(modelCanvas, {
         type: "doughnut",
         data: {
-          labels: slices.map((s) => s.model),
+          labels: arcSlices.map(({ s }) => sliceLabel(s)),
           datasets: [
             {
-              data: slices.map((s) => s.tokens),
-              backgroundColor: slices.map((_, i) => palette[i % palette.length]),
-              borderColor: c.bgElev,
-              borderWidth: 2,
+              data: arcSlices.map(({ s }) => s.tokens),
+              backgroundColor: arcSlices.map(({ s, i }) =>
+                s.models > 1 ? c.unknown : donutPalette[i % donutPalette.length],
+              ),
+              borderColor: c.border,
+              borderWidth: 1,
             },
           ],
         },
@@ -336,7 +390,7 @@ export function AgentDashboardC({
         },
       });
     }
-  }, [trend, slices, trendState, modelState]);
+  }, [trend, slices, trendState, modelState, theme]);
 
   useEffect(() => {
     void renderCharts();
@@ -499,7 +553,9 @@ export function AgentDashboardC({
               活跃 <strong data-testid="agent-dashboard-c-active">{detailRows.filter((r) => r.completed > 0).length}</strong>
             </div>
             <div>
-              模型 <strong data-testid="agent-dashboard-c-models">{slices.length}</strong>
+              {/* t_f6c85da6: 模型数 = 当前 agent 真实模型数(rows 计数), 非 slices.length —
+               *  Top6+其他聚合后 slices.length=7 会把 8 模型场景显示成 7(失真)。 */}
+              模型 <strong data-testid="agent-dashboard-c-models">{modelCountByAgent.get(activeAgent) ?? slices.length}</strong>
             </div>
             <div>
               窗 <strong data-testid="agent-dashboard-c-window">{windowLabel}</strong>
@@ -537,41 +593,60 @@ export function AgentDashboardC({
           </div>
           {modelState === "ok" ? (
             <div className="model-duo">
-              <div className="chart-wrap chart-wrap-model">
-                <canvas ref={modelCanvasRef} data-testid="agent-dashboard-c-chart-model" />
+              <div
+                className="chart-wrap chart-wrap-model"
+                data-testid="agent-dashboard-c-chart-model"
+                data-segments={slices.filter((s) => s.tokens > 0).length}
+              >
+                <canvas ref={modelCanvasRef} data-testid="agent-dashboard-c-chart-model-canvas" />
               </div>
               {/* t_e83ad982(问题 2): 消除环形卡 ~60-70% 留白 — 右侧迷你数据表
                *  (模型/调用/tokens/占比/命中率); 单模型也如实 1 行, 不伪造多行 */}
-              <table className="model-table" data-testid="agent-dashboard-c-model-table">
-                <thead>
-                  <tr>
-                    <th scope="col">模型</th>
-                    <th scope="col" className="num">调用</th>
-                    <th scope="col" className="num">tokens</th>
-                    <th scope="col" className="num">占比</th>
-                    <th scope="col" className="num">命中率</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {slices.map((s) => {
-                    const modelTotal = slices.reduce((a, x) => a + x.tokens, 0) || 1;
-                    const share = ((s.tokens / modelTotal) * 100).toFixed(1);
-                    // t_a76b2621: 守卫真实分母(hit+miss)而非 tokens — 纯 output 行(tokens>0,
-                    // hit+miss=0)曾渲染 NaN%; % 收进条件分支, 缺数据显干净 "—" 不带尾巴。
-                    const hitRate =
-                      s.hit + s.miss > 0 ? `${((s.hit / (s.hit + s.miss)) * 100).toFixed(1)}%` : "—";
-                    return (
-                      <tr key={s.model} data-testid={`agent-dashboard-c-model-row-${s.model}`}>
-                        <td className="name">{s.model}</td>
-                        <td className="num">{fmtWhole.format(s.calls)}</td>
-                        <td className="num">{fmtTokens(s.tokens)}</td>
-                        <td className="num">{share}%</td>
-                        <td className="num">{hitRate}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              {/* t_f6c85da6(round-3): 表格包进 .model-table-scroll(overflow:auto) —
+               *  极端最小内容宽(长模型名+9 位数字)下表格可横向滚而不再顶破窗口右缘
+               *  (基线探针实锤: tableRight 899.5 > 容器右缘 875); 纵向同理兜底。 */}
+              <div className="model-table-scroll" data-testid="agent-dashboard-c-model-table-scroll">
+                <table className="model-table" data-testid="agent-dashboard-c-model-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">模型</th>
+                      <th scope="col" className="num">调用</th>
+                      <th scope="col" className="num">tokens</th>
+                      <th scope="col" className="num">占比</th>
+                      <th scope="col" className="num">命中率</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {slices.map((s) => {
+                      const modelTotal = slices.reduce((a, x) => a + x.tokens, 0) || 1;
+                      const share = ((s.tokens / modelTotal) * 100).toFixed(1);
+                      // t_a76b2621: 守卫真实分母(hit+miss)而非 tokens — 纯 output 行(tokens>0,
+                      // hit+miss=0)曾渲染 NaN%; % 收进条件分支, 缺数据显干净 "—" 不带尾巴。
+                      const hitRate =
+                        s.hit + s.miss > 0 ? `${((s.hit / (s.hit + s.miss)) * 100).toFixed(1)}%` : "—";
+                      const isAgg = s.models > 1;
+                      // t_f6c85da6: 表格 = slices 全量(含 0 值模型, 如实 0.0%); 环形才过滤 0 值。
+                      return (
+                        <tr
+                          key={s.model}
+                          data-testid={
+                            isAgg
+                              ? "agent-dashboard-c-model-row-other"
+                              : `agent-dashboard-c-model-row-${s.model}`
+                          }
+                          className={isAgg ? "agg" : undefined}
+                        >
+                          <td className="name">{sliceLabel(s)}</td>
+                          <td className="num">{fmtWhole.format(s.calls)}</td>
+                          <td className="num">{fmtTokens(s.tokens)}</td>
+                          <td className="num">{share}%</td>
+                          <td className="num">{hitRate}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : modelState === "empty" ? (
             <ModuleEmpty testid="dash-model-empty" text="暂无模型数据" />
