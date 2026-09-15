@@ -15,6 +15,11 @@ export interface TrendBucket {
 export interface ModelSlice {
   model: string;
   tokens: number;
+  /** t_e83ad982: 迷你数据表列 — 调用次数 / cache 命中 / cache 未命中 / output(全部现有 summary 字段) */
+  calls: number;
+  hit: number;
+  miss: number;
+  out: number;
 }
 
 export interface DetailRow {
@@ -26,6 +31,11 @@ export interface DetailRow {
   /** completed > 0 → active, calls > 0 && completed = 0 → idle, calls = 0 → no_report_today */
   completed: number;
   idle: boolean;
+  /** t_e83ad982: 明细扩列 — 三分项(hit/miss/output) + 该 agent 模型数(全部现有 summary 字段) */
+  hit: number;
+  miss: number;
+  out: number;
+  models: number;
 }
 
 export interface AgentDashboardCProps {

@@ -142,13 +142,19 @@ describe("splitGroupDims(t_12c28686 多维 group 解析防御)", () => {
 });
 
 describe("AgentDashboardC(单维兼容路径 — 旧 e2e 断言保持)", () => {
-  it("渲染顶部摘要(tokens 三项和 + cost 1.73 USD + 4 元数据)", () => {
+  it("渲染顶部摘要(tokens 三项和 + cost 1.73 USD + 元数据)", () => {
     const { container: c } = mountDash();
     // hero/三分项 = 全局 total 口径(81,000; tab 只联动 Model 分布/明细)
     expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81,000");
     expect(c.querySelector('[data-testid="agent-dashboard-c-hero-cost"]')?.textContent).toMatch(/1\.73 USD/);
     expect(c.querySelector('[data-testid="agent-dashboard-c-active"]')?.textContent).toBe("2"); // 两条都 completed>0
-    expect(c.querySelector('[data-testid="agent-dashboard-c-samples"]')?.textContent).toBe("150");
+    // t_e83ad982: 副指标扩列 — samples 改名 calls(调用, 取 total.calls), 新增命中率/Output/窗口
+    expect(c.querySelector('[data-testid="agent-dashboard-c-calls"]')?.textContent).toBe("150");
+    // 命中率 = hit/(hit+miss) = 60000/75000 = 80.0%(与 Model 表同口径, 非 hit/total 的 74.1%)
+    expect(c.querySelector('[data-testid="agent-dashboard-c-hit-rate"]')?.textContent).toBe("80.0%");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-output"]')?.textContent).toBe("6,000");
+    // 窗口范围来自 summary.window(非「now」)
+    expect(c.querySelector('[data-testid="agent-dashboard-c-window"]')?.textContent).toBe("09-09 ~ 09-09");
   });
 
   it("detail-list 渲染当前 agent 一行(t_5cf22ba4: 金额单元格不再渲染, 标注=tokens)", () => {
@@ -395,5 +401,52 @@ describe("AgentDashboardC(t_5cf22ba4 展示品质回归锁)", () => {
       p.querySelector('[data-testid="agent-dashboard-c-detail-list"]'),
     );
     expect(detailPanel?.querySelector(".panel-title-row .right")?.textContent).toBe("tokens");
+  });
+
+  it("t_e83ad982(问题 2): Model 卡两列 — 迷你数据表每模型一行(calls/tokens/占比/命中率)", () => {
+    const { container: c } = mountDash(fakeSummary, okResult);
+    const table = c.querySelector('[data-testid="agent-dashboard-c-model-table"]');
+    expect(table).toBeTruthy();
+    // njbx02 有 2 模型 → 表 2 行(多模型如实多行)
+    const bodyRows = table?.querySelectorAll("tbody tr") ?? [];
+    expect(bodyRows).toHaveLength(2);
+    // 第一行 = tokens 最大的 glm-5.3-flash: mock 二维 rows 用单维原值(50k+10k+4k=64,000),
+    // 两模型 tokens 同值并列 → 排序稳定取 glm 在前
+    const glm = table?.querySelector('[data-testid="agent-dashboard-c-model-row-glm-5.3-flash"]');
+    expect(glm?.textContent).toContain("glm-5.3-flash");
+    expect(glm?.textContent).toContain("64,000");
+    expect(glm?.textContent).toMatch(/50\.0%/);
+    // 命中率 = hit/(hit+miss) = 50000/60000 = 83.3%
+    expect(glm?.textContent).toMatch(/83\.3%/);
+    // 表头 5 列齐
+    expect(table?.querySelectorAll("thead th")).toHaveLength(5);
+  });
+
+  it("t_e83ad982(问题 2): 单模型迷你表也如实 1 行(不伪造多行)", () => {
+    const single = {
+      ...multiModelSummary,
+      rows: multiModelSummary.rows.filter((r) => r.group !== "njbx02|kimi-k2"),
+    };
+    const { container: c } = mountDash(fakeSummary, { ok: true, data: single, generatedAt: "" });
+    const table = c.querySelector('[data-testid="agent-dashboard-c-model-table"]');
+    expect(table?.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(table?.querySelector('[data-testid="agent-dashboard-c-model-row-glm-5.3-flash"]')).toBeTruthy();
+  });
+
+  it("t_e83ad982(问题 3): 明细行扩列 — 调用/Hit/Miss/Output/占比/模型数全在场", () => {
+    const { container: c } = mountDash(fakeSummary, okResult);
+    const row = c.querySelector('[data-testid="agent-dashboard-c-detail-njbx02"]');
+    expect(row?.textContent).toContain("调用");
+    expect(row?.textContent).toContain("100");
+    expect(row?.textContent).toContain("Hit");
+    expect(row?.textContent).toContain("50,000");
+    expect(row?.textContent).toContain("Miss");
+    expect(row?.textContent).toContain("10,000");
+    expect(row?.textContent).toContain("Output");
+    expect(row?.textContent).toContain("4,000");
+    // 占比 = 64000/81000 = 79.0%
+    expect(row?.textContent).toMatch(/79\.0%/);
+    // 模型数来自 modelSummary 过滤当前 agent(njbx02 = glm + kimi = 2)
+    expect(row?.textContent).toMatch(/模型\s*2/);
   });
 });

@@ -180,10 +180,14 @@ function AppShell() {
     // round-9(2026-09-14): trend 查询显式 since=7 天前 — 此前不传 since 落进 daemon
     // 默认「今天 00:00」窗口 → day 桶永远只有 1 个 → 趋势图永远显示『数据积累中』
     // (t_12c28686 遗留 bug: 趋势图在全历史数据下也永不工作)。
+    // t_e83ad982(窗口口径统一, comment 1495 顺带修): 三查全部挂同一显式 7 天窗 —
+    // 此前单维/二维查询不传 since = daemon 默认「今天」窗, 与 trend 7 天窗同屏矛盾
+    // (趋势 max 81M vs hero 526K)。现 hero/三分项/明细/Model 分布/趋势同窗口,
+    // 窗口范围由组件读 summary.window 显示在 hero「窗」指标 + 页脚。
     const trendSince = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
     const [r, rm, rt] = await Promise.all([
-      mcpUsageSummary({ group_by: ["agent"] }),
-      mcpUsageSummary({ group_by: ["agent", "model"] }),
+      mcpUsageSummary({ group_by: ["agent"], since: trendSince }),
+      mcpUsageSummary({ group_by: ["agent", "model"], since: trendSince }),
       mcpUsageSummary({ group_by: ["day"], since: trendSince }),
     ]);
     setMcpSummary((prev) => (r.ok || !prev.ok ? r : prev));

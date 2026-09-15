@@ -240,8 +240,19 @@ test("详情按钮切大屏方案 C: hero + 趋势 + model + 三分项 + 明细�
   await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("4,555,000");
   await pwExpect(page.getByTestId("agent-dashboard-c-hero-cost")).toContainText("13.57 USD");
   await pwExpect(page.getByTestId("agent-dashboard-c-active")).toHaveText("2"); // njbx02 + njbx02-heavy 都是 active
-  await pwExpect(page.getByTestId("agent-dashboard-c-samples")).toHaveText("8150"); // 100 + 8000 + 50 + 0(无千分位显示)
+  // t_e83ad982: 副指标扩列 — samples 改名 calls(调用, 全数字带千分位), 新增命中率/Output/窗口
+  await pwExpect(page.getByTestId("agent-dashboard-c-calls")).toHaveText("8,150"); // 100 + 8000 + 50 + 0
+  // 命中率 = hit/(hit+miss) = 3,370,760 / 4,213,450 ≈ 80.0%
+  await pwExpect(page.getByTestId("agent-dashboard-c-hit-rate")).toHaveText(/80\.0%/);
+  await pwExpect(page.getByTestId("agent-dashboard-c-output")).toHaveText("341,550");
+  // 窗口范围显式标注(mock window = 09-09 单日)
+  await pwExpect(page.getByTestId("agent-dashboard-c-window")).toHaveText("09-09 ~ 09-09");
   await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("2"); // 多维: njbx02 glm+kimi
+  // t_e83ad982(问题 2): Model 迷你数据表在场, njbx02 2 模型 → 2 行
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-table")).toBeVisible();
+  await pwExpect(page.locator('[data-testid="agent-dashboard-c-model-table"] tbody tr')).toHaveCount(2);
+  // glm 行命中率 = hit/(hit+miss) = 3,310,760 / 4,138,450 ≈ 80.0%(e2e mock 用单维原值)
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-row-glm-5.3-flash")).toContainText("80.0%");
 
   // 三分项 split-bar 宽度按比例(t_4b7984d9 round-3: total 汇总成 4,555,000 后 hit/miss/out 各占
   // 74.005% / 18.500% / 7.495%, 浏览器浮点 .toFixed(1) 输出可能为 "74%" / "18.5%" / "7.5%",
@@ -544,8 +555,10 @@ test("t_185002af 返回键语义分流: standalone→win_close, 主窗→切页�
  *  min-height:600 的大屏容器 ⇒ 内容 678 > 可用高, 明细列表末行 + 页脚被窗缘裁掉。
  *  修复(见 app.css t_04f75eae ①②③)后本测试锁两件事:
  *   1) 卡面尺寸 900×600: 四象限(hero / 趋势 / model / 三分项 / 明细) bottom ≤ 视口高;
- *   2) 产品窗口内容尺寸 900×640: 容器零纵向滚动(scrollHeight ≤ clientHeight) 且页脚在视口内。 */
-test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×640 零滚动", async ({
+ *   2) 产品窗口内容尺寸: 容器零纵向滚动(scrollHeight ≤ clientHeight) 且页脚在视口内。
+ *  t_e83ad982: 窗口壳 640→560(高度预算法 comment 1497), ② 改锁 900×560; ① 保留 600
+ *  (>560 的宽松场景仍须不越界)。 */
+test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×560 零滚动", async ({
   hostPage,
   page,
 }) => {
@@ -596,8 +609,8 @@ test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×
     );
   }
 
-  // ② 900×640(产品窗口内容尺寸): 容器零滚动 + 页脚可见
-  await page.setViewportSize({ width: 900, height: 640 });
+  // ② 900×560(产品窗口内容尺寸, t_e83ad982 降高后): 容器零滚动 + 页脚可见
+  await page.setViewportSize({ width: 900, height: 560 });
   await page.goto("?view=agent-dashboard&standalone=1");
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
   await page.waitForTimeout(600);
@@ -643,7 +656,7 @@ test("t_5cf22ba4: 趋势日期连续 + 三分项头部一位小数 + 页脚完�
     ...multi,
     day: { ok: true, data: dayWithGap },
   });
-  await page.setViewportSize({ width: 900, height: 640 });
+  await page.setViewportSize({ width: 900, height: 560 }); // t_e83ad982: 新窗口壳高度
   await page.goto("?view=agent-dashboard&standalone=1");
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
   await pwExpect(page.getByTestId("agent-dashboard-c-chart-trend")).toBeVisible();

@@ -98,13 +98,21 @@ export function buildTrend(summary: UsageSummaryOutput): TrendBucket[] {
 }
 
 /** model distribution = group_by=["agent","model"] rows 过滤当前 agent。
- *  只 1 个模型 → 如实 1 slice(不伪造多色环); 0 模型 → 空数组(空态由调用方判)。 */
+ *  只 1 个模型 → 如实 1 slice(不伪造多色环); 0 模型 → 空数组(空态由调用方判)。
+ *  t_e83ad982: slice 扩列 calls/hit/miss/out(迷你数据表列, 全部现有 summary 字段)。 */
 function buildModelSlices(summary: UsageSummaryOutput, agentId: string): ModelSlice[] {
   const slices: ModelSlice[] = [];
   for (const r of summary.rows) {
     const dims = splitGroupDims(r.group, ["agent", "model"]);
     if (!dims || dims[0] !== agentId || !dims[1]) continue;
-    slices.push({ model: dims[1], tokens: rowTokens(r) });
+    slices.push({
+      model: dims[1],
+      tokens: rowTokens(r),
+      calls: r.calls,
+      hit: r.input_cache_hit_tokens,
+      miss: r.input_cache_miss_tokens,
+      out: r.output_tokens,
+    });
   }
   slices.sort((a, b) => b.tokens - a.tokens);
   return slices;
@@ -121,6 +129,12 @@ function buildDetailRows(summary: UsageSummaryOutput): DetailRow[] {
     // 与 AgentCard activity 契约对齐(active = completed > 0, idle = calls > 0 && completed = 0,
     //  no_report_today = calls = 0)。dashboard hero "活跃" 计数同口径。
     idle: r.calls > 0 && r.by_status.completed === 0,
+    // t_e83ad982: 明细扩列 — 三分项原值; 模型数从 modelSummary rows 数(group_by=["agent","model"])
+    // 在组件主函数合并传入(此处先填 0 占位, buildDetailRows 只看单维 summary)。
+    hit: r.input_cache_hit_tokens,
+    miss: r.input_cache_miss_tokens,
+    out: r.output_tokens,
+    models: 0,
   }));
 }
 
@@ -352,7 +366,36 @@ export function AgentDashboardC({
   const pctOut = ((outTokens / sum) * 100).toFixed(1);
 
   // 当前 agent 的明细行(明细随 agent tab 联动过滤)
-  const currentDetail = detailRows.find((r) => r.agent_id === activeAgent) ?? null;
+  // t_e83ad982: 明细行的模型数 = modelSummary rows 过滤当前 agent 后的行数(该 agent 的模型数)。
+  const modelCountByAgent = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (modelSummary.ok) {
+      for (const r of modelSummary.data.rows) {
+        const dims = splitGroupDims(r.group, ["agent", "model"]);
+        if (!dims) continue;
+        counts.set(dims[0]!, (counts.get(dims[0]!) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [modelSummary]);
+  const currentDetail = useMemo(() => {
+    const base = detailRows.find((r) => r.agent_id === activeAgent) ?? null;
+    if (!base) return null;
+    return { ...base, models: modelCountByAgent.get(base.agent_id) ?? 0 };
+  }, [detailRows, activeAgent, modelCountByAgent]);
+
+  // t_e83ad982(窗口口径统一): 全部模块挂同一显式 7 天窗 — 窗口范围由 summary.window 显示
+  // 在 hero「窗」指标 + 页脚, 消除「趋势 7 天 vs hero 今天」的视觉矛盾(comment 1495)。
+  const windowLabel = useMemo(() => {
+    const since = summary.window?.since ?? "";
+    const until = summary.window?.until ?? "";
+    if (!since || !until) return "now";
+    const short = (iso: string) => {
+      const m = /^\d{4}-(\d{2}-\d{2})/.exec(iso);
+      return m ? m[1]! : iso.slice(0, 10);
+    };
+    return `${short(since)} ~ ${short(until)}`;
+  }, [summary]);
 
   return (
     <div className="agent-dashboard-c" data-testid="agent-dashboard-c" data-theme={theme}>
@@ -392,9 +435,10 @@ export function AgentDashboardC({
         </div>
       </header>
 
-      {/* 顶部 Hero */}
+      {/* 顶部 Hero — t_e83ad982: 加高扩列(老大 comment 1496: hero 稍大不拥挤),
+       *  副指标从 1 行 4 项扩到 2 行 6 项(调用/命中率/output/活跃/模型/窗口), 全部现有字段 */}
       <div className="hero-strip">
-        <div>
+        <div className="hero-main">
           <div className="panel-title">
             "总用量 · 全部 agent"
           </div>
@@ -430,21 +474,33 @@ export function AgentDashboardC({
             </div>
           )}
         </div>
-        <div className="meta">
-          <div>
-            活跃 <strong data-testid="agent-dashboard-c-active">{detailRows.filter((r) => r.completed > 0).length}</strong>
+        <div className="hero-side">
+          <div className="meta">
+            <div>
+              调用 <strong data-testid="agent-dashboard-c-calls">{fmtWhole.format(summary.total.calls)}</strong>
+            </div>
+            <div>
+              命中率{" "}
+              <strong data-testid="agent-dashboard-c-hit-rate">
+                {/* t_e83ad982(P4 口径统一): 命中率 = hit/(hit+miss)(与 Model 表同口径);
+                 *  pctHit 是三分项「hit 占总量比」, 两语义不同不可混用 */}
+                {(hitTokens + missTokens) > 0 ? ((hitTokens / (hitTokens + missTokens)) * 100).toFixed(1) : "—"}%
+              </strong>
+            </div>
+            <div>
+              Output <strong data-testid="agent-dashboard-c-output">{fmtWhole.format(outTokens)}</strong>
+            </div>
           </div>
-          <div>
-            样本{" "}
-            <strong data-testid="agent-dashboard-c-samples">
-              {detailRows.reduce((a, r) => a + r.calls, 0)}
-            </strong>
-          </div>
-          <div>
-            模型 <strong data-testid="agent-dashboard-c-models">{slices.length}</strong>
-          </div>
-          <div>
-            窗 <strong>now</strong>
+          <div className="meta">
+            <div>
+              活跃 <strong data-testid="agent-dashboard-c-active">{detailRows.filter((r) => r.completed > 0).length}</strong>
+            </div>
+            <div>
+              模型 <strong data-testid="agent-dashboard-c-models">{slices.length}</strong>
+            </div>
+            <div>
+              窗 <strong data-testid="agent-dashboard-c-window">{windowLabel}</strong>
+            </div>
           </div>
         </div>
       </div>
@@ -474,11 +530,42 @@ export function AgentDashboardC({
         <div className="panel">
           <div className="panel-title-row">
             <h3 className="panel-title">Model 分布</h3>
-            <div className="right">环形</div>
+            <div className="right">环形 + 按模型</div>
           </div>
           {modelState === "ok" ? (
-            <div className="chart-wrap">
-              <canvas ref={modelCanvasRef} data-testid="agent-dashboard-c-chart-model" />
+            <div className="model-duo">
+              <div className="chart-wrap chart-wrap-model">
+                <canvas ref={modelCanvasRef} data-testid="agent-dashboard-c-chart-model" />
+              </div>
+              {/* t_e83ad982(问题 2): 消除环形卡 ~60-70% 留白 — 右侧迷你数据表
+               *  (模型/调用/tokens/占比/命中率); 单模型也如实 1 行, 不伪造多行 */}
+              <table className="model-table" data-testid="agent-dashboard-c-model-table">
+                <thead>
+                  <tr>
+                    <th scope="col">模型</th>
+                    <th scope="col" className="num">调用</th>
+                    <th scope="col" className="num">tokens</th>
+                    <th scope="col" className="num">占比</th>
+                    <th scope="col" className="num">命中率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {slices.map((s) => {
+                    const modelTotal = slices.reduce((a, x) => a + x.tokens, 0) || 1;
+                    const share = ((s.tokens / modelTotal) * 100).toFixed(1);
+                    const hitRate = s.tokens > 0 ? ((s.hit / (s.hit + s.miss)) * 100).toFixed(1) : "—";
+                    return (
+                      <tr key={s.model} data-testid={`agent-dashboard-c-model-row-${s.model}`}>
+                        <td className="name">{s.model}</td>
+                        <td className="num">{fmtWhole.format(s.calls)}</td>
+                        <td className="num">{fmtTokens(s.tokens)}</td>
+                        <td className="num">{share}%</td>
+                        <td className="num">{hitRate}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : modelState === "empty" ? (
             <ModuleEmpty testid="dash-model-empty" text="暂无模型数据" />
@@ -550,7 +637,34 @@ export function AgentDashboardC({
                   {currentDetail.agent_id}
                   {currentDetail.idle && <span className="idle-tag">空闲</span>}
                 </div>
+                {/* t_e83ad982(问题 3): 明细扩列 — 调用/三分项/占比/模型数(全部现有字段) */}
                 <div className="tokens">{currentDetail.idle ? "—" : fmtTokens(currentDetail.tokens)}</div>
+                <div className="d-cell">
+                  <span className="d-label">调用</span>
+                  <span className="d-val">{fmtWhole.format(currentDetail.calls)}</span>
+                </div>
+                <div className="d-cell">
+                  <span className="d-label">Hit</span>
+                  <span className="d-val">{fmtTokens(currentDetail.hit)}</span>
+                </div>
+                <div className="d-cell">
+                  <span className="d-label">Miss</span>
+                  <span className="d-val">{fmtTokens(currentDetail.miss)}</span>
+                </div>
+                <div className="d-cell">
+                  <span className="d-label">Output</span>
+                  <span className="d-val">{fmtTokens(currentDetail.out)}</span>
+                </div>
+                <div className="d-cell">
+                  <span className="d-label">占比</span>
+                  <span className="d-val">
+                    {totalTokens > 0 ? ((currentDetail.tokens / totalTokens) * 100).toFixed(1) : "0.0"}%
+                  </span>
+                </div>
+                <div className="d-cell">
+                  <span className="d-label">模型</span>
+                  <span className="d-val">{currentDetail.models}</span>
+                </div>
               </li>
             )}
           </ul>
@@ -558,7 +672,8 @@ export function AgentDashboardC({
       </div>
 
       <div className="agent-dashboard-c-footer" data-testid="agent-dashboard-c-meta">
-        数据生成于 {generatedAt || summary.generated_at} · 来自 daemon usage_summary · 不静默
+        窗口 {windowLabel} · 数据生成于 {generatedAt || summary.generated_at} · 来自 daemon
+        usage_summary · 不静默
       </div>
     </div>
   );

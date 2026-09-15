@@ -11,7 +11,7 @@
  * 覆盖:
  *  ① 真窗口启动 → 主面板渲染(panel 可见 + 窗口内容区 360×720)
  *  ② 三主题(dark/light/glass)各一张截图落 verification/shell-visual/
- *  ③ Agent 卡 → 大屏独立窗口(真桥路径: 主进程 open_agent_dashboard 真开 900×640 窗)
+ *  ③ Agent 卡 → 大屏独立窗口(真桥路径: 主进程 open_agent_dashboard 真开 900×560 窗)
  *  ④ tab 互斥(切「本地 Agent」→ 用量卡区不可见)
  *
  * IPC 策略: **真桥直通**(不用 mock 覆写 window.tokenWallet — preload 先于
@@ -246,9 +246,9 @@ for (const [name, theme, glass, glassAlpha] of [
 
 /** ③: Agent 卡 → 大屏独立窗口(真桥路径)。
  *  daemon 数据面按「有数据/未连接」双态容错断言 — 两者都是真壳真实行为:
- *  - 有数据: 点详情 → 主进程真开 900×640 独立窗 → hero 渲染 + 零溢出
+ *  - 有数据: 点详情 → 主进程真开 900×560 独立窗 → hero 渲染 + 零溢出
  *  - 未连接: 空态显式渲染(不静默吞成 0), detail 按钮不存在 → 断言空态卡可见 */
-t("真壳真桥: Agent 卡详情 → 主进程开 900×640 独立大屏窗", async () => {
+t("真壳真桥: Agent 卡详情 → 主进程开 900×560 独立大屏窗", async () => {
   const { app, page, userData } = await launchShell();
   try {
     await applyTheme(page, "dark", "0");
@@ -272,14 +272,15 @@ t("真壳真桥: Agent 卡详情 → 主进程开 900×640 独立大屏窗", asy
       const dashPage = await app.waitForEvent("window", { timeout: 15_000 });
       await dashPage.waitForLoadState("domcontentloaded");
 
-      // 独立窗几何: 900×640(useContentSize: true → 内容区即 900×640)。
+      // 独立窗几何: 900×560(useContentSize: true → 内容区即 900×560)。
+      // t_e83ad982: 窗口壳 640→560(高度预算法 comment 1497), 真壳断言同步。
       // Electron 页面无 CSS 视口概念(viewportSize() null)→ DOM 根盒模型测内容区。
       const vp = await dashPage.evaluate(() => ({
         w: document.documentElement.clientWidth,
         h: document.documentElement.clientHeight,
       }));
       expect(vp.w, `大屏独立窗内容区宽应 = 900, 实际 ${vp.w}`).toBe(900);
-      expect(vp.h, `大屏独立窗内容区高应 = 640, 实际 ${vp.h}`).toBe(640);
+      expect(vp.h, `大屏独立窗内容区高应 = 560, 实际 ${vp.h}`).toBe(560);
 
       // 独立窗内大屏渲染(?view=agent-dashboard&standalone=1 双参数)
       await dashPage.waitForSelector('[data-testid="agent-dashboard-c"]', { state: "visible", timeout: 15_000 });

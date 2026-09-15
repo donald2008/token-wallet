@@ -2729,13 +2729,30 @@ body {
 }
 .agent-dashboard-c .hero-strip {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-16, 16px);
   padding: var(--space-12, 12px) var(--space-16, 16px);
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius-12, 12px);
+}
+/* t_e83ad982(问题 1 + comment 1496): hero 加高扩列 — 左大数字/agent tab, 右 2×3 副指标 */
+.agent-dashboard-c .hero-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-8, 8px);
+  min-width: 0;
+}
+.agent-dashboard-c .hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--space-8, 8px);
+  flex: 0 0 auto;
 }
 .agent-dashboard-c .hero {
   display: flex;
@@ -2769,6 +2786,86 @@ body {
   color: var(--fg);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+/* t_e83ad982(问题 2): Model 卡两列 — 左环缩小 + 右迷你数据表 */
+.agent-dashboard-c .model-duo {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--space-12, 12px);
+  flex: 1;
+  min-height: 0;
+}
+.agent-dashboard-c .chart-wrap-model {
+  /* 200px = 25×8, 环缩小的定宽容器(4/8 网格字面值, 同 chart-wrap 140px 先例) */
+  flex: 0 0 auto;
+  width: 200px;
+  min-height: 0;
+}
+.agent-dashboard-c .model-table {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  border-collapse: collapse;
+  font-size: var(--font-11, 11px);
+  color: var(--fg);
+  /* t_e83ad982(P1): 表体收缩不溢出 — 数字列加 white-space:nowrap 防折行撑高,
+   * 但容器允许收缩(min-width:0)+ 列内 padding 收窄, 9 位 tokens 在最坏 mock 下不裁切 */
+  table-layout: auto;
+}
+.agent-dashboard-c .model-table th,
+.agent-dashboard-c .model-table td {
+  padding: var(--space-4, 4px) var(--space-4, 4px);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.agent-dashboard-c .model-table th:last-child,
+.agent-dashboard-c .model-table td:last-child {
+  /* 命中率列数值 + % 全可见(修 P1 贴边裁切), 列头写全「命中率」 */
+  padding-right: var(--space-8, 8px);
+}
+.agent-dashboard-c .model-table th {
+  color: var(--fg-dim);
+  font-weight: 500;
+  border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent);
+}
+.agent-dashboard-c .model-table td.name,
+.agent-dashboard-c .model-table th.name,
+.agent-dashboard-c .model-table th:first-child {
+  text-align: left;
+}
+.agent-dashboard-c .model-table td.name {
+  color: var(--fg);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+/* t_e83ad982(问题 3): 明细扩列 — 一行多列(名称/tokens/调用/三分项/占比/模型数) */
+.agent-dashboard-c .detail-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12, 12px);
+  flex-wrap: wrap;
+}
+.agent-dashboard-c .detail-list .d-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-4, 4px);
+  font-size: var(--font-11, 11px);
+}
+.agent-dashboard-c .detail-list .d-label {
+  color: var(--fg-dim);
+  font-size: var(--font-10, 10px);
+}
+.agent-dashboard-c .detail-list .d-val {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }
 .agent-dashboard-c .row-grid {
   display: grid;
@@ -2815,12 +2912,23 @@ body {
  * 140(=17.5×8) 在 4/8 网格内, 宽松视口(>680px)不命中, 图表仍 180 起步。
  * ⚠️ 同时给定值高度(flex:0 0 auto): flex:1 + min-height 的高度不定会让 chart.js 的
  * responsive 尺寸循环锁死在初始 canvas 高度上(实测 canvas 反撑父容器 300px → row-grid
- * 被顶爆), 定值高度让 ResizeObserver 把 canvas 收到 140。 */
-@media (max-height: 680px) {
+ * 被顶爆), 定值高度让 ResizeObserver 把 canvas 收到 140。
+ * t_e83ad982: 窗口壳 640→560(main.ts 高度预算法 comment 1497), 紧凑段阈值同步 680→640
+ * (560+80 余量), model 环容器跟随定值 140。 */
+@media (max-height: 640px) {
   .agent-dashboard-c .chart-wrap {
     flex: 0 0 auto;
     height: 140px;
     min-height: 140px;
+  }
+  .agent-dashboard-c .chart-wrap-model {
+    height: 140px;
+    min-height: 140px;
+  }
+  /* t_e83ad982: 窗壳 560 后首跑实测超支 4px(532 > 528) — panel 上下 padding 12→8,
+   * 两行网格共省 8px, 内容回到预算内(8px 网格, 宽松视口不命中) */
+  .agent-dashboard-c .panel {
+    padding: var(--space-8, 8px) var(--space-12, 12px);
   }
 
   /* t_12c28686: agent tab 行加入 hero 区后紧凑视口(900×640 独立窗)内容高 +31px,
@@ -2862,6 +2970,12 @@ body {
   .agent-dashboard-c .panel-title-row .right,
   .agent-dashboard-c .pct,
   .agent-dashboard-c .detail-list li,
+  .agent-dashboard-c .detail-list .d-cell,
+  .agent-dashboard-c .detail-list .d-label,
+  .agent-dashboard-c .detail-list .d-val,
+  .agent-dashboard-c .model-table,
+  .agent-dashboard-c .model-table th,
+  .agent-dashboard-c .model-table td,
   .agent-dashboard-c .idle-tag,
   .dash-module-empty,
   .dash-module-empty button,
@@ -2917,6 +3031,15 @@ body {
   font-size: var(--font-11, 11px);
   padding: var(--space-4, 4px) 0;
   border-bottom: 1px solid var(--border);
+}
+/* t_e83ad982(问题 3): 明细扩列 — 单行多列(名称/tokens/调用/三分项/占比/模型数)。
+ * 覆盖上方旧 3 列 grid: 一行 flex 摊开, 窄窗 wrap 兜底(保底不裁切)。 */
+.agent-dashboard-c .detail-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12, 12px);
+  flex-wrap: wrap;
 }
 .agent-dashboard-c .detail-list .name {
   display: inline-flex;

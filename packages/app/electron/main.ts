@@ -219,9 +219,13 @@ function createAgentDashboardWindow(): void {
   // t_4b7984d9 round-4 ②: 高度 640(原 600 内容区仅 ~570 底部截断), useContentSize 让
   // width/height 描述内容区; autoHideMenuBar 去掉菜单栏横条占高。无边框窗本无菜单/标题栏,
   // 保留这三项配置对 frame:false 无副作用, 后续若回退系统边框仍是正确形态。
+  // t_e83ad982(问题 4, 底部空白回收): 640→560 高度预算法(comment 1497) —
+  // 改版前基线截图实测内容只填到 y≈515, 底部空白 ~110px ≈ 17%; 密度改版后内容预算
+  // 516px(chrome 33 + padding 8 + head 16 + hero 88 + 网格 2×188 + footer 16, gap 4×4)
+  // → 窗 560 内容区 527, 内容 516/527 = 98% 占满。900×560 均 8px 网格整数。
   agentDashboardWindow = new BrowserWindow({
     width: 900,
-    height: 640,
+    height: 560,
     useContentSize: true,
     autoHideMenuBar: true,
     // 设计基准 900×640, 内容自适应, 不强制最大化

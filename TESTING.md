@@ -68,7 +68,7 @@ pnpm --filter app test:e2e --project=electron-shell     # Windows 本机执行
      (玻璃用例显式设 `token-wallet.glassAlpha.v1`=0.5: 默认 alpha=1.0 不透明时
      dark-glass 与 dark 渲染像素同构, 3 张截图无判别力; 并断言 `--glass-alpha`
      CSS 变量真落值 = 主题真渲染, 非仅 `<html data-theme>` 属性)
-  ③ Agent 卡 → 大屏关键路径(mock 桥降级 + 真桥主进程开 900×640 独立窗两路径)
+  ③ Agent 卡 → 大屏关键路径(mock 桥降级 + 真桥主进程开 900×560 独立窗两路径; t_e83ad982 降高)
   ④ tab 互斥(切「本地 Agent」→ card-list/agent-card-section 卸载)
 - **断言形态**: 几何探针(scrollWidth vs clientWidth、getBoundingClientRect、viewportSize)
   + computed style + 截图, 不依赖 vision(vision 判定由 reviewer/老大侧做)。
