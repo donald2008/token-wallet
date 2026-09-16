@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <title>Layout A · Split-pane (左英雄+趋势 / 右模型+明细+三分项)</title>
+  <link rel="stylesheet" href="./agent-dashboard-shared.css" />
+  <!-- chart.js 真实渲染: CDN (jsdelivr) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="./agent-dashboard-mock.js"></script>
+</head>
+<body>
+  <div class="canvas-scale" id="scale">
+    <div class="canvas" id="canvas">
+    <header class="canvas-header">
+      <div class="canvas-title">Agent 用量详情大屏 · <strong>Layout A · Split-pane</strong></div>
+      <div class="canvas-controls">
+        <div class="window-tabs" id="tabs"></div>
+        <div class="theme-toggle" id="theme">
+          <button data-theme="dark" aria-pressed="true">Dark</button>
+          <button data-theme="light" aria-pressed="false">Light</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout-a">
+      <!-- 左: 英雄 + 5h 趋势 -->
+      <div class="panel hero-panel">
+        <div class="panel-title-row">
+          <h3 class="panel-title">总用量 · <span id="window-label">近 5 小时</span></h3>
+          <div class="right" id="agent-count"></div>
+        </div>
+        <div class="hero">
+          <div class="hero-tokens" id="hero-tokens">0</div>
+          <div class="hero-unit">tokens</div>
+          <div class="hero-cost" id="hero-cost"></div>
+        </div>
+      </div>
+
+      <!-- 左: 趋势 -->
+      <div class="panel trend-panel">
+        <div class="panel-title-row">
+          <h3 class="panel-title">趋势 · <span id="trend-window">5h</span></h3>
+          <div class="right">按 token 总量</div>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
+      </div>
+
+      <!-- 右: 模型分布 -->
+      <div class="panel model-panel">
+        <div class="panel-title-row">
+          <h3 class="panel-title">Model 分布</h3>
+          <div class="right">饼图 · 按 token</div>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-model"></canvas></div>
+      </div>
+
+      <!-- 右下: 明细 + 三分项 -->
+      <div class="right-bottom">
+        <div class="panel detail-panel">
+          <div class="panel-title-row">
+            <h3 class="panel-title">明细 · 按 agent</h3>
+            <div class="right">tokens + 金额</div>
+          </div>
+          <ul class="detail-list" id="detail-list" style="overflow:auto; flex:1;"></ul>
+        </div>
+        <div class="panel split-panel">
+          <div class="panel-title-row">
+            <h3 class="panel-title">三分项拆分</h3>
+            <div class="right" id="split-pct">—</div>
+          </div>
+          <div class="split-bar">
+            <span class="seg-hit" id="seg-hit"></span>
+            <span class="seg-miss" id="seg-miss"></span>
+            <span class="seg-out" id="seg-out"></span>
+          </div>
+          <div class="legend">
+            <span class="dot-hit">Cache hit <strong id="pct-hit-compact" style="margin-left:4px; color:var(--fg);">0%</strong></span>
+            <span class="dot-miss">Cache miss <strong id="pct-miss-compact" style="margin-left:4px; color:var(--fg);">0%</strong></span>
+            <span class="dot-out">Output <strong id="pct-out-compact" style="margin-left:4px; color:var(--fg);">0%</strong></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+
+    const fmt = new Intl.NumberFormat("en-US");
+    function fmtTokens(n) {
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+      return fmt.format(n);
+    }
+    function fmtCost(n) {
+      if (n == null) return null;
+      return "$" + n.toFixed(2);
+    }
+
+    const WINDOWS = ["5h", "today", "week", "month"];
+    const WINDOW_LABEL = { "5h": "近 5 小时", today: "今天", week: "本周", month: "本月" };
+    let currentWindow = "5h";
+    let charts = { trend: null, model: null };
+
+    function setTheme(t) {
+      document.documentElement.dataset.theme = t;
+      document.querySelectorAll("#theme button").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.theme === t));
+      });
+      renderCharts();
+    }
+
+    function renderTabs() {
+      const el = document.getElementById("tabs");
+      el.innerHTML = "";
+      for (const w of WINDOWS) {
+        const b = document.createElement("button");
+        b.textContent = WINDOW_LABEL[w];
+        b.setAttribute("aria-pressed", String(w === currentWindow));
+        b.addEventListener("click", () => {
+          currentWindow = w;
+          renderTabs();
+          renderAll();
+        });
+        el.appendChild(b);
+      }
+    }
+
+    function renderHero() {
+      const summaries = AgentUsageMock.buildAgentSummaries(currentWindow);
+      const totalTokens = summaries.reduce((a, s) => a + s.tokens, 0);
+      let cost = 0, seen = false, currency = null;
+      for (const s of summaries) {
+        if (s.cost == null) continue;
+        seen = true;
+        cost += s.cost;
+        currency = s.currency;
+      }
+      document.getElementById("hero-tokens").textContent = fmt.format(totalTokens);
+      document.getElementById("window-label").textContent = WINDOW_LABEL[currentWindow];
+      document.getElementById("trend-window").textContent = currentWindow;
+
+      const costEl = document.getElementById("hero-cost");
+      if (!seen) {
+        costEl.textContent = "";
+        costEl.classList.add("is-empty");
+      } else {
+        costEl.textContent = "· " + fmtCost(cost) + " " + currency;
+        costEl.classList.remove("is-empty");
+      }
+
+      document.getElementById("agent-count").textContent =
+        `${summaries.filter((s) => !s.is_idle).length} 活跃 / ${summaries.length}`;
+    }
+
+    function renderDetail() {
+      const list = document.getElementById("detail-list");
+      const summaries = AgentUsageMock.buildAgentSummaries(currentWindow);
+      list.innerHTML = "";
+      for (const s of summaries) {
+        const li = document.createElement("li");
+        const meta = AgentUsageMock.AGENT_META[s.agent_id] || {};
+        const name = document.createElement("div");
+        name.className = "name";
+        name.textContent = s.agent_id;
+        if (s.is_idle) {
+          const tag = document.createElement("span");
+          tag.className = "idle-tag";
+          tag.textContent = "空闲";
+          name.appendChild(tag);
+        }
+        const tokens = document.createElement("div");
+        tokens.className = "tokens";
+        tokens.textContent = s.is_idle ? "—" : fmtTokens(s.tokens);
+        const cost = document.createElement("div");
+        cost.className = "cost";
+        if (s.cost == null) {
+          cost.textContent = "";
+          cost.classList.add("is-empty");
+        } else {
+          cost.textContent = fmtCost(s.cost) + " " + s.currency;
+        }
+        li.append(name);
+        li.append(tokens);
+        li.append(cost);
+        list.appendChild(li);
+      }
+    }
+
+    function renderSplit() {
+      const s = AgentUsageMock.buildSplit(currentWindow);
+      const total = s.total || 1;
+      const hitP = (s.input_cache_hit / total) * 100;
+      const missP = (s.input_cache_miss / total) * 100;
+      const outP = (s.output / total) * 100;
+      document.getElementById("seg-hit").style.width = hitP + "%";
+      document.getElementById("seg-miss").style.width = missP + "%";
+      document.getElementById("seg-out").style.width = outP + "%";
+      document.getElementById("split-pct").textContent =
+        `${hitP.toFixed(1)} / ${missP.toFixed(1)} / ${outP.toFixed(1)}`;
+      const hitEl = document.getElementById("pct-hit-compact");
+      const missEl = document.getElementById("pct-miss-compact");
+      const outEl = document.getElementById("pct-out-compact");
+      if (hitEl) hitEl.textContent = hitP.toFixed(0) + "%";
+      if (missEl) missEl.textContent = missP.toFixed(0) + "%";
+      if (outEl) outEl.textContent = outP.toFixed(0) + "%";
+    }
+
+    function cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+    function themeColors() {
+      return {
+        fg: cssVar("--fg"),
+        fgDim: cssVar("--fg-dim"),
+        border: cssVar("--border"),
+        bg: cssVar("--bg"),
+        bgElev: cssVar("--bg-elev"),
+        accent: cssVar("--accent"),
+      };
+    }
+
+    function renderCharts() {
+      const c = themeColors();
+      Chart.defaults.color = c.fgDim;
+      Chart.defaults.font.family = '"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+      Chart.defaults.font.size = 10;
+
+      const trendBuckets = AgentUsageMock.buildTrend(currentWindow);
+      const labels = trendBuckets.map((b) => b.label);
+      const values = trendBuckets.map((b) => b.tokens);
+
+      const trendCtx = document.getElementById("chart-trend").getContext("2d");
+      if (charts.trend) charts.trend.destroy();
+      charts.trend = new Chart(trendCtx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "tokens",
+            data: values,
+            backgroundColor: c.accent + "cc",
+            borderColor: c.accent,
+            borderWidth: 1,
+            borderRadius: 4,
+            maxBarThickness: 24,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { bottom: 0 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => fmt.format(ctx.parsed.y) + " tokens" } },
+          },
+          scales: {
+            x: {
+              grid: { color: c.border + "55", display: false },
+              ticks: { color: c.fgDim, font: { size: 10 }, maxRotation: 0, autoSkipPadding: 12 },
+            },
+            y: {
+              grid: { color: c.border + "55" },
+              ticks: { color: c.fgDim, font: { size: 10 }, callback: (v) => fmtTokens(v) },
+              beginAtZero: true,
+            },
+          },
+        },
+      });
+
+      const dist = AgentUsageMock.buildModelDistribution(currentWindow);
+      const modelCtx = document.getElementById("chart-model").getContext("2d");
+      if (charts.model) charts.model.destroy();
+      const palette = ["#4f8cff", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#0ea5e9", "#facc15"];
+      charts.model = new Chart(modelCtx, {
+        type: "doughnut",
+        data: {
+          labels: dist.map((d) => d.model),
+          datasets: [{
+            data: dist.map((d) => d.tokens),
+            backgroundColor: dist.map((_, i) => palette[i % palette.length]),
+            borderColor: c.bgElev,
+            borderWidth: 2,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "60%",
+          plugins: {
+            legend: {
+              position: "right",
+              labels: { boxWidth: 8, color: c.fg, padding: 4, font: { size: 10 } },
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                  const pct = total === 0 ? 0 : (ctx.parsed / total) * 100;
+                  return `${ctx.label}: ${fmtTokens(ctx.parsed)} (${pct.toFixed(1)}%)`;
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    function renderAll() {
+      renderHero();
+      renderDetail();
+      renderSplit();
+      renderCharts();
+    }
+
+    document.querySelectorAll("#theme button").forEach((b) => {
+      b.addEventListener("click", () => setTheme(b.dataset.theme));
+    });
+
+    // 画布等比缩放: 900×600 设计稿适配不同视口(竖屏720x900 横屏900x600 都居中显示)
+    function fitCanvas() {
+      const canvas = document.getElementById("canvas");
+      const wrapper = document.getElementById("scale");
+      const cw = 900, ch = 600;
+      const ww = wrapper.clientWidth;
+      const wh = wrapper.clientHeight;
+      const scale = Math.min(ww / cw, wh / ch, 1); // 不放大, 只缩小
+      canvas.style.transform = `scale(${scale})`;
+    }
+    window.addEventListener("resize", fitCanvas);
+    fitCanvas();
+
+    renderTabs();
+    renderAll();
+  </script>
+</body>
+</html>

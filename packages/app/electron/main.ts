@@ -16,8 +16,14 @@
  *   面板出错误卡是预期行为, 不许静默空返回
  * - E2 http 通道接真: host-http.ts(undici fetch + AbortController 超时,
  *   返回 {status, body 脱敏}, 非 2xx 不抛由引擎分类 — 对齐旧 Rust 实现)
+ *
+ * D-055 MCP daemon 托管(t_4bd214de): registerMcpIpc 在文件下方 registerIpc() 内调用,
+ * 注入 9 通道(probe / start / stop / restart / get_config / gen_key / set_autostart /
+ * get_autostart / get_guide) — 注: round-1 自述 7 通道, round-2 增 mcp_restart 编排
+ * 通道用于 key regen 后真实停启 daemon(BLOCKING-1 修复)。
  */
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from "electron";
+import type { IpcMainInvokeEvent } from "electron";
 import { autoUpdater } from "electron-updater";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -31,11 +37,14 @@ import { runCommandFetch, type CommandRunPayload } from "./command-run";
 import {
   abortAllAuthSessions,
   cancelAuthSession,
+  detectPathHint,
   finishAuthSession,
   startAuthSession,
+  type AuthFailureKind,
 } from "./auth-session";
 import { authDefFor } from "./auth-defs";
 import { AppUpdaterController } from "./updater";
+import { registerMcpIpc } from "./mcp-ipc";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
@@ -98,6 +107,10 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 /** 托盘菜单"退出"置位后才允许真退出; 否则关闭按钮=隐藏到托盘(D-003) */
 let allowQuit = false;
+/** t_185002af: Agent 用量详情大屏独立窗口单例。D-024 家族观感(frame:false +
+ *  transparent:true, .panel 悬浮圆角卡片同源), URL 携带 ?view=agent-dashboard&standalone=1。
+ *  singleton: 已开则聚焦不重开。 */
+let agentDashboardWindow: BrowserWindow | null = null;
 
 function showMainWindow(): void {
   if (!mainWindow) return;
@@ -190,6 +203,93 @@ function createWindow(): void {
   }
 }
 
+/** t_185002af: 大屏详情独立窗口升级 D-024 家族观感 — frame:false + transparent:true +
+ *  thickFrame:false, 与主窗同源(.panel 悬浮圆角卡片, body 透明)。round-1 曾以同组合真壳
+ *  开窗验证过可行性; round-2 暂回系统边框是「最小可用优先」的过渡态, 本卡完成回切。
+ *  拖拽/最小化/关闭由渲染层窗口 chrome(.dash-chrome) 承担: 拖拽走 -webkit-app-region:drag,
+ *  最小化/关闭走既有 win_minimize / win_close IPC(main 进程按 sender 分流到本窗口,
+ *  通道名逐字保全零新增)。URL 携带 ?view=agent-dashboard&standalone=1 双参数,
+ *  渲染层 App.tsx 据此进 dashboard 视图 + 挂独立窗 chrome(返回键语义=关窗)。 */
+function createAgentDashboardWindow(): void {
+  if (agentDashboardWindow && !agentDashboardWindow.isDestroyed()) {
+    agentDashboardWindow.show();
+    agentDashboardWindow.focus();
+    return;
+  }
+  // t_4b7984d9 round-4 ②: 高度 640(原 600 内容区仅 ~570 底部截断), useContentSize 让
+  // width/height 描述内容区; autoHideMenuBar 去掉菜单栏横条占高。无边框窗本无菜单/标题栏,
+  // 保留这三项配置对 frame:false 无副作用, 后续若回退系统边框仍是正确形态。
+  // t_e83ad982(问题 4, 底部空白回收): 640→560 高度预算法(comment 1497) —
+  // 改版前基线截图实测内容只填到 y≈515, 底部空白 ~110px ≈ 17%; 密度改版后内容预算
+  // 516px(chrome 33 + padding 8 + head 16 + hero 88 + 网格 2×188 + footer 16, gap 4×4)
+  // → 窗 560 内容区 527, 内容 516/527 = 98% 占满。900×560 均 8px 网格整数。
+  agentDashboardWindow = new BrowserWindow({
+    width: 900,
+    height: 560,
+    useContentSize: true,
+    autoHideMenuBar: true,
+    // 设计基准 900×560, 内容自适应, 不强制最大化(t_a76b2621: t_e83ad982 已把窗高 640→560, 注释同步)
+    minWidth: 600,
+    minHeight: 480,
+    maximizable: true,
+    // t_185002af: D-024 家族无边框透明观感(与主窗 createWindow 同源组合)。
+    frame: false,
+    transparent: true,
+    thickFrame: false,
+    title: "token-wallet · Agent 用量详情",
+    parent: mainWindow ?? undefined, // 隶属主窗口, 主窗最小化/隐藏不影响 dashboard
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  // dashboard 窗的关闭按钮 = 直接销毁(不挂托盘, 用户拍板"带系统边框先交付, 标注后续美化")
+  agentDashboardWindow.on("closed", () => {
+    agentDashboardWindow = null;
+  });
+  // t_4b7984d9 round-4 ② 居中修复: 旧版用 mainWindow 居中(main.x + (main.width - 900)/2),
+  // 当主窗 360 宽时 main.width - 900 = -540 ⇒ dashboard 左缘跑到主窗左侧 270px(可能负偏移出屏)。
+  // 正解: 屏幕 workArea 居中(900×560 dashboard 居中于屏幕,与主窗位置无关,层次感清晰)。
+  try {
+    const { screen } = require("electron");
+    const display = screen.getPrimaryDisplay();
+    const wa = display.workArea;
+    const dash = agentDashboardWindow.getBounds();
+    agentDashboardWindow.setBounds({
+      x: Math.round(wa.x + (wa.width - dash.width) / 2),
+      y: Math.round(wa.y + (wa.height - dash.height) / 2),
+      width: dash.width,
+      height: dash.height,
+    });
+  } catch {
+    /* screen 模块不可用时 fallback 主窗居中(老逻辑,但加了 dash.width > main.width 防护) */
+    if (mainWindow) {
+      const main = mainWindow.getBounds();
+      const dash = agentDashboardWindow.getBounds();
+      const dx = Math.max(0, Math.round((main.width - dash.width) / 2));
+      const dy = Math.max(0, Math.round((main.height - dash.height) / 2));
+      agentDashboardWindow.setBounds({
+        x: main.x + dx,
+        y: main.y + dy,
+        width: dash.width,
+        height: dash.height,
+      });
+    }
+  }
+  if (isDev) {
+    const url = new URL(process.env.ELECTRON_RENDERER_URL as string);
+    url.searchParams.set("view", "agent-dashboard");
+    url.searchParams.set("standalone", "1");
+    void agentDashboardWindow.loadURL(url.toString());
+  } else {
+    void agentDashboardWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"), {
+      search: "?view=agent-dashboard&standalone=1",
+    });
+  }
+}
+
 // ---------------- IPC: 通道名与契约保全(与换壳前逐字一致) ----------------
 
 function registerIpc(): void {
@@ -264,12 +364,22 @@ function registerIpc(): void {
     tray.setToolTip(String(payload?.tooltip ?? "token-wallet"));
   });
 
-  // 窗口控制: HTML TitleBar 的 min/close(E1 新增)
-  ipcMain.handle("win_minimize", () => {
-    mainWindow?.minimize();
+  // 窗口控制: HTML TitleBar 的 min/close(E1 新增)。
+  // t_185002af: sender-aware — 调用方窗口自己受效(主窗 TitleBar / dashboard 独立窗
+  // .dash-chrome 都走这两个通道, channel 名逐字保全零新增)。无 sender(异常)回退主窗,
+  // 保持旧行为兼容。
+  ipcMain.handle("win_minimize", (event: IpcMainInvokeEvent) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+    win?.minimize();
   });
-  ipcMain.handle("win_close", () => {
-    mainWindow?.hide(); // 关闭 = 隐藏到托盘(D-003)
+  ipcMain.handle("win_close", (event: IpcMainInvokeEvent) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+    if (!win) return;
+    if (win === mainWindow) {
+      win.hide(); // 主窗关闭 = 隐藏到托盘(D-003)
+    } else {
+      win.close(); // 其他窗(dashboard 独立窗)关闭 = 直接销毁(不挂托盘)
+    }
   });
 
   // 窗口置顶开关(P1): 用户可切换, 默认关; 切换即 RMW 落 settings.json(重启不丢)。
@@ -385,6 +495,8 @@ function registerIpc(): void {
   //   "code"(arkcli): 设备码协议, 浏览器页面显示 code → 用户粘贴 → spawn 新进程 --code 回喂, 解析 ok
   //   "callback"(bl): localhost 自闭环, 浏览器授权后 302 回跳 CLI 自收 code, 等 close(0) 免回喂
   // CLI 名从 renderer 的 setup_hint 提取(ep: arkcli/bl)。返回 finishMode 供 UI 分流渲染。
+  // 2026-09-11 P0 补: catch 时提取 err.kind(CliMissingKind → 引导文案)+ err.pathHint(npm prefix 不在 PATH)。
+  // 这两类信息由 waitForUrl / completeWithCode 写在 throw 的 Error 对象上(见 auth-session.ts)。
   ipcMain.handle(
     "command_auth_start",
     async (_event, payload: { cli?: string } | undefined) => {
@@ -396,14 +508,36 @@ function registerIpc(): void {
         });
         return { ok: true, sessionId, url, finishMode };
       } catch (err) {
-        return { ok: false, message: `授权启动失败: ${String(err)}` };
+        const typed = err as { kind?: AuthFailureKind; message?: string };
+        const baseMsg = typed.message ?? String(err);
+        const result: {
+          ok: false;
+          message: string;
+          kind?: AuthFailureKind;
+          pathHint?: { npmPrefix: string };
+        } = { ok: false, message: baseMsg.startsWith("授权") ? baseMsg : `授权启动失败: ${baseMsg}` };
+        if (typed.kind) result.kind = typed.kind;
+        if (typed.kind === "cli_missing") {
+          // L2 PATH 自检: 命中 npm prefix 不在 PATH 时附 pathHint, renderer 渲染额外引导
+          result.pathHint = await detectPathHint(def.command);
+        }
+        return result;
       }
     },
   );
   ipcMain.handle(
     "command_auth_finish",
-    (_event, payload: { sessionId?: string; code?: string } | undefined) =>
-      finishAuthSession(String(payload?.sessionId ?? ""), String(payload?.code ?? "")),
+    async (_event, payload: { sessionId?: string; code?: string } | undefined) => {
+      const result = await finishAuthSession(
+        String(payload?.sessionId ?? ""),
+        String(payload?.code ?? ""),
+      );
+      // finish 阶段的 cli_missing 也补一次 pathHint(保持 L2 引导一致)
+      if (!result.ok && result.kind === "cli_missing" && result.cli) {
+        result.pathHint = await detectPathHint(result.cli);
+      }
+      return result;
+    },
   );
   // 取消进行中的授权会话(浏览器等待中放弃; bl callback 模式进程保持存活, 必须有取消出口 kill 掉防残留)
   ipcMain.handle("command_auth_cancel", (_event, payload: { sessionId?: string } | undefined) => {
@@ -418,6 +552,33 @@ function registerIpc(): void {
   ipcMain.handle("updater_download", () => appUpdater.download());
   ipcMain.handle("updater_install", () => {
     appUpdater.install();
+  });
+
+  // ---- t_4b7984d9 C: 详情大屏独立窗口 IPC(真壳路径, 浏览器降级走 portal 模态) ----
+  // 主窗口 Agent 卡点 [详情→] → 触发此通道 → 主进程 createAgentDashboardWindow 开
+  // 900×600 frame:false transparent 窗口, URL 携带 ?view=agent-dashboard, 渲染层自动进入 dashboard
+  ipcMain.handle("open_agent_dashboard", () => {
+    createAgentDashboardWindow();
+    return { ok: true };
+  });
+
+  // ---- D-055: MCP daemon 托管 11 通道(t_4bd214de + t_9255cb63) ----
+  // 主进程持有 daemon 真实生命周期: probe / start / stop / restart / config / key /
+  // autostart / guide — round-2 增 restart 通道编排 key regen 后真实停启。
+  // t_9255cb63 增 mcp_usage_summary / mcp_usage_report_echo 读数据桥 —
+  // 主页 Agent 卡 + 大屏方案 C 数据源。
+  // 全部 shim 在 mcp-daemon.ts 注入便于测试, 真运行时用 defaultSpawnShim/defaultPathShim
+  // + 简易 fetch 实现 defaultHttpShim(POST /mcp initialize, 卡体钉死不裸 TCP)
+  registerMcpIpc({
+    isPackaged: app.isPackaged,
+    appRoot: app.getAppPath(),
+    platform: process.platform,
+    storagePathsFn: () => storagePaths(),
+    settingsFilePathFn: () => settingsFilePath(),
+    app: {
+      setLoginItemSettings: (opts: { openAtLogin: boolean }) => app.setLoginItemSettings(opts),
+      getLoginItemSettings: () => app.getLoginItemSettings(),
+    },
   });
 }
 

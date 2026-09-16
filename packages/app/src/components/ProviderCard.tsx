@@ -80,6 +80,14 @@ export function extractCliFromHint(hint: string): string {
   return cmd.trim().split(/\s+/)[0] ?? "";
 }
 
+/** t_fb8c44d8 配套: 由 CLI 名 → 安装命令(2026-09-11 真机实证 npm 全局陷阱)。
+ * 当前 command 通道: arkcli / bl。arkcli 官方包名 @volcengine/ark-cli; bl 阿里云官方文档明示
+ * (此处仅 user-visible copy, 实际安装由用户复制命令到 shell 执行, app 不代装)。 */
+const CLI_INSTALL_CMD: Record<string, string> = {
+  arkcli: "npm i -g @volcengine/ark-cli",
+  bl: "npm i -g @alicloud/bl",
+};
+
 function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerId: string; onRefresh?: (id: string) => void }) {
   const [stage, setStage] = useState<"idle" | "starting" | "waiting" | "done" | "error">("idle");
   const [finishMode, setFinishMode] = useState<"code" | "callback" | undefined>(undefined);
@@ -87,6 +95,10 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
   const [code, setCode] = useState("");
   const [url, setUrl] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  // t_12bdc277 P0 L1: cli_missing 错误分类 — 渲染专属安装引导 vs 通用错误
+  const [errorKind, setErrorKind] = useState<"cli_missing" | "exec_error" | undefined>(undefined);
+  // t_12bdc277 P0 L2: npm prefix 不在 PATH 时填充, 渲染额外 PowerShell 修复命令
+  const [pathHint, setPathHint] = useState<{ npmPrefix: string } | undefined>(undefined);
   // 取消/重开时递增, 使 in-flight 的 start/finish promise 回调失效, 防旧结果覆盖新 UI
   const runGen = useRef(0);
   const cli = extractCliFromHint(hint);
@@ -96,12 +108,16 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
     const gen = ++runGen.current;
     setStage("starting");
     setErrorMsg("");
+    setErrorKind(undefined);
+    setPathHint(undefined);
     setCode("");
     setFinishMode(undefined);
     void commandAuthStart(cli).then((res) => {
       if (runGen.current !== gen) return; // 已被取消/重开
       if (!res.ok || !res.sessionId) {
         setErrorMsg(res.message ?? "授权启动失败");
+        setErrorKind(res.kind);
+        setPathHint(res.pathHint);
         setStage("error");
         return;
       }
@@ -118,6 +134,8 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
             setStage("done");
           } else {
             setErrorMsg(fr.message ?? "授权失败");
+            setErrorKind(fr.kind);
+            setPathHint(fr.pathHint);
             setStage("error");
           }
         });
@@ -130,6 +148,8 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
     const gen = runGen.current;
     setStage("starting");
     setErrorMsg("");
+    setErrorKind(undefined);
+    setPathHint(undefined);
     void commandAuthFinish(sessionId, code.trim()).then((res) => {
       if (runGen.current !== gen) return;
       if (res.ok) {
@@ -137,6 +157,8 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
         setCode("");
       } else {
         setErrorMsg(res.message ?? "授权失败");
+        setErrorKind(res.kind);
+        setPathHint(res.pathHint);
         setStage("error");
       }
     });
@@ -240,7 +262,58 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
       ) : null}
       {stage === "error" ? (
         <div className="oneclick-auth-error" data-testid="oneclick-auth-error">
-          {errorMsg}
+          {errorKind === "cli_missing" ? (
+            // t_12bdc277 P0 L1: CLI 缺失 — 专属引导, 不只是「重启试试」
+            <div className="oneclick-auth-cli-missing" data-testid="oneclick-auth-cli-missing">
+              <div className="oneclick-auth-cli-missing-title">
+                {t("card.authCliMissingTitle", { cli })}
+              </div>
+              <div className="oneclick-auth-cli-missing-row">
+                <code className="oneclick-auth-cli-missing-cmd" data-testid="oneclick-auth-cli-missing-cmd">
+                  {t("card.authCliMissingInstall", { cmd: CLI_INSTALL_CMD[cli] ?? `npm i -g ${cli}` })}
+                </code>
+                <button
+                  type="button"
+                  className="btn btn-sm oneclick-auth-cli-missing-copy"
+                  data-testid="oneclick-auth-cli-missing-copy"
+                  onClick={() => {
+                    void copyText(CLI_INSTALL_CMD[cli] ?? `npm i -g ${cli}`);
+                  }}
+                >
+                  {t("card.copy")}
+                </button>
+              </div>
+              <div className="oneclick-auth-cli-missing-note">{t("card.authCliMissingRestart")}</div>
+              {pathHint ? (
+                // t_12bdc277 P0 L2: npm prefix 不在 PATH 时, 附 PowerShell 修复命令
+                <div className="oneclick-auth-path-hint" data-testid="oneclick-auth-path-hint">
+                  <div className="oneclick-auth-path-hint-title">
+                    {t("card.authCliMissingPathHintTitle", { prefix: pathHint.npmPrefix })}
+                  </div>
+                  <div className="oneclick-auth-path-hint-desc">
+                    {t("card.authCliMissingPathHintDesc")}
+                  </div>
+                  <div className="oneclick-auth-path-hint-row">
+                    <code className="oneclick-auth-path-hint-cmd" data-testid="oneclick-auth-path-hint-cmd">
+                      {t("card.authCliMissingPathHintCmd", { prefix: pathHint.npmPrefix })}
+                    </code>
+                    <button
+                      type="button"
+                      className="btn btn-sm oneclick-auth-path-hint-copy"
+                      data-testid="oneclick-auth-path-hint-copy"
+                      onClick={() => {
+                        void copyText(t("card.authCliMissingPathHintCmd", { prefix: pathHint.npmPrefix }));
+                      }}
+                    >
+                      {t("card.copy")}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <span>{errorMsg}</span>
+          )}
           <button
             type="button"
             className="btn btn-sm oneclick-auth-retry"
@@ -257,8 +330,13 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
 
 /** 品牌色块(§6.1 第 4 条): 16px 平台识别色 — P1(t_696ec820)起由内置单色 SVG 品牌图标(BrandLogo)取代 */
 
-/** 值为 i18n 键(渲染时经 t() 取文案, D-047) */
-const STATUS_TEXT: Record<string, string> = {
+/** 异常卡长文案(§2.1): 与 head 短徽章不同 —— head = statusBadge(单字原因, e.g. "采集失败"),
+ * 长文案 = 详细原因(对用户讲明白怎么了) —— 例如 auth_expired 长文案 = "登录态过期, 请重新授权"。
+ * 两者并存: head 一瞥可见红/黄状态, 卡内长文案给完整修复指引(为什么 + 怎么办)。
+ * 关键: 长文案 ≠ 徽章文字, 不算"重复渲染"(t_5d8c3c81 修的是 error 卡"采集失败"两行字面重复,
+ * 仍由 head 单独承担; 长文案保留 —— e2e 契约 + 完整错误原因)。
+ */
+const STATUS_DETAIL: Record<string, string> = {
   stale: "statusText.stale",
   auth_expired: "statusText.auth_expired",
   unsupported: "statusText.unsupported",
@@ -278,36 +356,87 @@ function agoText(fetchedAt: number): string {
  * - auth_expired: 亮黄灯(§2.1: 登录态失效非配额耗尽) + setup_hint 指引恢复
  * - stale / unsupported: 灰
  * - error: 红
+ *
+ * t_5d8c3c81 只读缓存语义(用户 9/9 拍板): 失败时保留旧数据(metrics 非空)。
+ * 异常卡分两态:
+ *   - 有旧数据(失败前采到过 ok 快照, metrics 非空)
+ *     → 渲染正常卡形态(getTemplateFor 跑 BarsTemplate/TickerTemplate 等),
+ *       头部已显状态徽章, 此处只补「数据时效标注」(失败时旧 fetched_at)+ 错误原因行
+ *     → 用户看到: 进度条/余额 + 「采集失败」徽章 + 「数据来自 N 分钟前」 + 「为什么失败」
+ *   - 无旧数据(首次就失败 / metrics 空)
+ *     → 整卡文字(原状, 无假数据原则不变) + setup_hint 授权引导(若 auth_expired)
+ *
+ * 状态徽章(card-status-text)由 card-head 统一承担, 此处不再重复渲染。
  */
 function AbnormalBody({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: string) => void }) {
-  const health = providerHealth(p);
-  return (
-    <div className="abnormal-body" data-testid="abnormal-body">
-      <div className={`card-status-text text-${health}`}>
-        {p.status === "auth_expired" && (
-          <span className="lamp" data-lamp="auth_expired" title={t("card.lampAuthTitle")} aria-label={t("card.lampAuthAria")}>
-            ●
-          </span>
-        )}
-        {STATUS_TEXT[p.status] ? t(STATUS_TEXT[p.status] as Parameters<typeof t>[0]) : p.status}
-      </div>
-      {p.status === "auth_expired" && p.setup_hint && (
-        <div className="setup-hint" data-testid="setup-hint">
-          <span className="setup-hint-text">⚑ {p.setup_hint}</span>
-          {/* t_66b67453 契约4: 一键复制授权命令(反引号内完整原文), 免手抄易错 */}
-          <HintCopyButton hint={p.setup_hint} />
-          {/* t_fb8c44d8: command 通道一键授权 — 自动开浏览器 + 粘贴 code 回喂, 消灭开终端 */}
-          <OneClickAuth hint={p.setup_hint} providerId={p.provider_id} onRefresh={onRefresh} />
+  const hasStaleData = p.metrics.length > 0;
+  if (hasStaleData) {
+    // 有旧数据的异常卡: 渲染正常模板 + 数据时效标注 + 错误原因。
+    // 状态徽章已由 card-head 渲染(无重复)。
+    // t_5d8c3c81 round-2: auth_expired 额外补 setup_hint/OneClickAuth — command 通道过期信号
+    // 常见(bl/arkcli), 若该 provider 之前采到过 ok, 过期后看到旧进度条+黄徽章无任何重授权入口
+    // 只能刷新=再次 auth_expired 死循环。补 setup_hint 行与 no-data 分支同构, 一键授权落地点保留。
+    const Template = getTemplateFor(p).component;
+    return (
+      <div className="abnormal-body abnormal-body--stale-data" data-testid="abnormal-body">
+        <Template p={p} />
+        <div className="abnormal-body-stale-note" data-testid="stale-fetched-note">
+          {t("card.staleFetchedAgo", { ago: agoText(p.fetched_at) })}
         </div>
-      )}
-      <div className="card-error-note">
-        {t("card.lastUpdate", { ago: agoText(p.fetched_at) })}
-        {p.alerts.length > 0 ? ` — ${p.alerts.map((a) => a.message).join("; ")}` : ""}
-        {p.error_message && p.error_message !== p.alerts.map((a) => a.message).join("; ") ? ` · ${p.error_message}` : ""}
+        {p.status === "auth_expired" && p.setup_hint ? (
+          <div className="setup-hint" data-testid="setup-hint">
+            <span className="lamp" data-lamp="auth_expired" title={t("card.lampAuthTitle")} aria-label={t("card.lampAuthAria")}>
+              ●
+            </span>
+            <span className="setup-hint-text">⚑ {p.setup_hint}</span>
+            <HintCopyButton hint={p.setup_hint} />
+            <OneClickAuth hint={p.setup_hint} providerId={p.provider_id} onRefresh={onRefresh} />
+          </div>
+        ) : null}
+        {p.error_message ? (
+          <div className="abnormal-body-error-reason text-error" data-testid="abnormal-error-reason">
+            {p.error_message}
+          </div>
+        ) : null}
       </div>
-    </div>
-  );
-}
+    );
+  }
+  // 无旧数据(首次就失败 / 整卡 metrics 空): 整卡文字形态(§2.1 无假数据原则)
+  // t_5d8c3c81 round-2: error 状态不再渲染 abnormal-status-detail 行 —
+  // statusText.error 字面 == statusBadge.error("采集失败"), 渲染=字面重复(头徽章已呈)。
+  // 错误原因已由下方 card-error-note 行(`... · error_message`)承载, 此行零信息增量。
+  // stale / unsupported 同 statusText ≠ statusBadge(已陈旧/未接入), 仍保留 abnormal-status-detail 提供详细原因。
+  // auth_expired 状态保留(statusText="登录态过期, 请重新授权" ≠ statusBadge="待授权", 二者语义互补)。
+  const health = providerHealth(p);
+  const showStatusDetail = p.status !== "error";
+  return (
+    <div className="abnormal-body abnormal-body--no-data" data-testid="abnormal-body">
+        {showStatusDetail ? (
+          <div className={`abnormal-status-detail text-${health}`} data-testid="abnormal-status-detail">
+            {STATUS_DETAIL[p.status] ? t(STATUS_DETAIL[p.status] as Parameters<typeof t>[0]) : p.status}
+          </div>
+        ) : null}
+        {p.status === "auth_expired" && p.setup_hint ? (
+          <div className="setup-hint" data-testid="setup-hint">
+            {/* lamp 单独在 setup_hint 行(引导感更强), task body 明示 auth_expired 的 lamp + setup_hint 授权引导保留 */}
+            <span className="lamp" data-lamp="auth_expired" title={t("card.lampAuthTitle")} aria-label={t("card.lampAuthAria")}>
+              ●
+            </span>
+            <span className="setup-hint-text">⚑ {p.setup_hint}</span>
+            {/* t_66b67453 契约4: 一键复制授权命令(反引号内完整原文), 免手抄易错 */}
+            <HintCopyButton hint={p.setup_hint} />
+            {/* t_fb8c44d8: command 通道一键授权 — 自动开浏览器 + 粘贴 code 回喂, 消灭开终端 */}
+            <OneClickAuth hint={p.setup_hint} providerId={p.provider_id} onRefresh={onRefresh} />
+          </div>
+        ) : null}
+        <div className="card-error-note">
+          {t("card.lastUpdate", { ago: agoText(p.fetched_at) })}
+          {p.alerts.length > 0 ? ` — ${p.alerts.map((a) => a.message).join("; ")}` : ""}
+          {p.error_message && p.error_message !== p.alerts.map((a) => a.message).join("; ") ? ` · ${p.error_message}` : ""}
+        </div>
+      </div>
+    );
+  }
 
 /**
  * Provider 卡片。
@@ -425,6 +554,8 @@ export function ProviderCard({
         )}
       </div>
       {p.status === "ok" ? <Template p={p} /> : <AbnormalBody p={p} onRefresh={onRefresh} />}
+      {/* 异常卡形态分两态由 AbnormalBody 内部决定(有旧数据 → 正常模板 + 时效标注; 无旧数据 → 整卡文字),
+          此处不再做条件分支(t_5d8c3c81 只读缓存语义: 失败时保留旧 metrics)。 */}
     </section>
   );
 }

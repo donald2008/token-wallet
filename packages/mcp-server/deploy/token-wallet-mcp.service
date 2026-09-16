@@ -1,0 +1,33 @@
+# token-wallet-mcp systemd user unit — 照 kanban-mcp-server-ops 模式。
+# 部署 (njbx02, 老大执行):
+#   cp deploy/token-wallet-mcp.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now token-wallet-mcp
+#   loginctl enable-linger $(whoami)   # 未登录也常驻
+# key 注入: EnvironmentFile 指向的 env 文件由 Consul KV
+#   ai-hermes/security/providers/token-wallet-mcp-key 渲染 (consul-template 或手工),
+#   不要把 key 写进本 unit 文件。
+
+[Unit]
+Description=token-wallet MCP data-plane daemon (D-055, :9131)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 防误杀 (kanban-mcp-server 同款): 失败才重启, 30s 退避, 停机宽限 180s
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=180
+Environment=TOKEN_WALLET_PORT=9131
+Environment=TOKEN_WALLET_HOST=0.0.0.0
+Environment=USAGE_TTL_DAYS=90
+# TOKEN_WALLET_MCP_KEY 必须由此文件提供 (Consul 渲染), 无缺省 fallback:
+EnvironmentFile=-%h/.config/token-wallet/mcp.env
+# 工作目录即仓库内包目录; venv 路径按部署机实际调整
+WorkingDirectory=%h/token-wallet/packages/mcp-server
+ExecStart=%h/token-wallet/packages/mcp-server/.venv/bin/python -m mcp_server
+# 环境零硬编码: key 只从 env 来; 缺 key 时进程 fail-fast 拒启
+
+[Install]
+WantedBy=default.target
