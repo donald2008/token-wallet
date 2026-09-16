@@ -188,7 +188,7 @@ export class RuntimeEngine {
           try {
             return await adapter.fetchSnapshot(descriptor, coreInstance, adapterCtx);
           } catch (err) {
-            return RuntimeEngine.errorSnapshot(inst, descriptor.plan_type, err, descriptor.logo);
+            return RuntimeEngine.errorSnapshot(inst, descriptor.plan_type, err);
           }
         },
         onResult: (snap) => void this.onResult(inst.id, snap),
@@ -198,15 +198,8 @@ export class RuntimeEngine {
 
   /** 装配层兜底(t_5b52b633): 适配器/凭据解析意外抛错 → 显式 error 快照。
    *  抛异常会被调度器当作「无结果」静默蒸发 → 面板整卡缺失(本卡根因链最后一环);
-   *  P0-8 纪律「不允许静默跳过」的运行时保险丝。
-   *  t_5d8c3c81: logo 必带(品牌固有属性, 不随采集成败消失) —— ProviderCard BrandLogo 据此渲染内置单色 SVG,
-   *  不再退回 provider_id(找不到品牌 key → 渲染空占位灰块)。 */
-  private static errorSnapshot(
-    inst: InstanceConfig,
-    planType: ProviderSnapshot["plan_type"],
-    err: unknown,
-    logo?: string,
-  ): ProviderSnapshot {
+   *  P0-8 纪律「不允许静默跳过」的运行时保险丝。 */
+  private static errorSnapshot(inst: InstanceConfig, planType: ProviderSnapshot["plan_type"], err: unknown): ProviderSnapshot {
     const message = err instanceof Error ? err.message : String(err);
     return {
       provider_id: inst.id,
@@ -217,7 +210,6 @@ export class RuntimeEngine {
       metrics: [],
       alerts: [{ level: "critical", message, code: "adapter_threw" }],
       error_message: message,
-      logo,
     };
   }
 
@@ -251,7 +243,7 @@ export class RuntimeEngine {
             timeoutMs: ctx.timeoutMs,
           });
         } catch (err) {
-          return RuntimeEngine.errorSnapshot(inst, descriptor.plan_type, err, descriptor.logo);
+          return RuntimeEngine.errorSnapshot(inst, descriptor.plan_type, err);
         }
         if (snap === null) {
           return {
@@ -271,13 +263,7 @@ export class RuntimeEngine {
     });
   }
 
-  /** 一次采集结果: 落库 → 速率附着 → 通知面板。
-   *  t_5d8c3c81 只读缓存语义: 失败采集不可抹掉旧的好数据(metrics/fetched_at)。
-   *  - snap.status === "ok" → 正常替换 latest + 落库
-   *  - 失败(error/stale/auth_expired) 且 latest 已有该 provider 的 ok 快照
-   *      → 保留旧 metrics + 旧 fetched_at + 旧 display_name/plan_type/logo 等骨架字段,
-   *        仅覆盖 status / alerts / error_message; 库里的成功快照也不动(只读缓存)
-   *  - 失败且无旧 ok 快照(首次就失败) → 整卡 error(原状, metrics 空可接受; 由 errorSnapshot 兜底带 logo) */
+  /** 一次采集结果: 落库 → 速率附着 → 通知面板 */
   private async onResult(providerId: string, snap: ProviderSnapshot): Promise<void> {
     // B-3 写库守卫(引擎层, 契约「先停源」): 三种情况的迟到响应静默丢弃 ——
     // ① 引擎已 stop(实例集合变更, 本引擎已被 React 废弃) ② provider 不在构造时的实例集合
@@ -291,47 +277,23 @@ export class RuntimeEngine {
       void this.backfillKeyFingerprint(providerId);
     }
 
-    // t_5d8c3c81 只读缓存合并: 失败采集不可抹掉旧 ok 快照的 metrics/fetched_at 等数据骨架。
-    // latest 已有该 provider 的 ok 快照 → 保留骨架, 仅覆盖失败相关字段(status/alerts/error_message/setup_hint)。
-    // 骨架字段定义: metrics/fetched_at/display_name/plan_type/provider_id/logo —— 这些是"上次成功采集的事实",
-    // 失败覆盖它们 = 违反"只读缓存"(缓存价值=失败时仍能看旧数)。
-    // 注意: auth_expired 通常由适配器产出 setup_hint 指引(火山 bl auth login 等), 该字段一并保留(成功快照通常无 setup_hint,
-    // 所以即使覆盖也是空→有, 不影响骨架保留语义)。
-    const previous = this.latest.get(providerId);
-    const isFailure = snap.status !== "ok";
-    const hasPreviousOk = previous?.status === "ok";
-    const mergedSnap: ProviderSnapshot = isFailure && hasPreviousOk
-      ? {
-          ...previous!, // 骨架字段全部保留(metrics/fetched_at/display_name/plan_type/logo)
-          status: snap.status,
-          alerts: snap.alerts,
-          error_message: snap.error_message,
-          setup_hint: snap.setup_hint, // 失败可能带 setup_hint(覆盖空值不破坏骨架)
-          // 失败时 fetched_at 不变(用旧值, "当前数据为 N 分钟前采集"语义)
-        }
-      : snap;
-
     // 落库(cache-first 的写侧; 面板永远读内存 latest, 启动时从库恢复)
-    // t_5d8c3c81: 失败且有旧 ok 快照 → 不落库(库内保留旧的成功快照,符合只读缓存语义)
-    if (!(isFailure && hasPreviousOk)) {
-      try {
-        await this.storage.init();
-        await this.storage.saveSnapshot(mergedSnap);
-      } catch (err) {
-        // 落库失败不阻塞 UI; 记一次(不含凭据)
-        // eslint-disable-next-line no-console
-        console.warn(`[engine] 落库失败 ${providerId}:`, err instanceof Error ? err.message : err);
-      }
+    try {
+      await this.storage.init();
+      await this.storage.saveSnapshot(snap);
+    } catch (err) {
+      // 落库失败不阻塞 UI; 记一次(不含凭据)
+      // eslint-disable-next-line no-console
+      console.warn(`[engine] 落库失败 ${providerId}:`, err instanceof Error ? err.message : err);
     }
 
     // 近 7 天速率: 用历史快照(含本次)算 daily_rate, 附着到 balance 指标
-    // t_5d8c3c81: 仅对 ok 快照做速率附着(失败时骨架沿用旧值, 速率已在前次 ok 附着过, 无需重算)
-    if (mergedSnap.status === "ok") {
+    if (snap.status === "ok") {
       try {
         const history = await this.storage.history(providerId, Math.floor(Date.now() / 1000) - 7 * 86_400, 200);
-        const rate = dailyRateFromHistory([...history, mergedSnap]);
+        const rate = dailyRateFromHistory([...history, snap]);
         if (rate !== null) {
-          mergedSnap.metrics = mergedSnap.metrics.map((m) =>
+          snap.metrics = snap.metrics.map((m) =>
             m.kind === "balance" ? { ...m, daily_rate: rate } : m,
           );
         }
@@ -340,7 +302,7 @@ export class RuntimeEngine {
       }
     }
 
-    this.latest.set(providerId, mergedSnap);
+    this.latest.set(providerId, snap);
     this.emit();
   }
 

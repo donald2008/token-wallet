@@ -64,47 +64,15 @@ function extractFirstUrl(stdout: string): string | null {
   return m?.[0] ?? null;
 }
 
-/**
- * ANSI 转义码剥离(2026-09-11 真机实证, t_x 用户 9/11 三连 P0):
- * arkcli 1.0.27 输出含 Rust 风格 RGB 颜色码 `\x1b[38;2;R;G;Bm` 与 SGR 重置 `\x1b[0m`,
- * 不 strip 落 UI 会出现 `□[38;2;22;100;255m▶ 正在交换访问令牌…` 乱码。
- * 实现仅匹配 SGR 序列(CSI `[` + 数字/分号参数 + 末尾字母), 不动 OSC 等其他 ANSI;
- * 满足 arkcli/bl 实际输出形态, 不会误伤正常文本。
- */
-export function stripAnsi(text: string): string {
-  return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
-}
-
-/**
- * arkcli phase2 / refresh 同账号分支 — 三层判据(按优先级, 2026-09-11 真机实证):
- *   ① JSON `ok===true`(1.0.23 契约, 老 fixture 不动)
- *   ② JSON 含 `auth_method` 且无 `error` 字段(1.0.27 同账号 refresh 新分支:
- *      输出仅文本「√ 火山 SSO 认证成功!」+ [arkcli] ✓ 同账号 SSO refresh, profile 保留
- *      + {"auth_method": "sso_no_browser", "path": "same"}, 无 ok 字段)
- *   ③ strip ANSI 后文本匹配「SSO 认证成功」/「同账号 SSO refresh」(文本兜底,
- *      防后续 CLI 版本漂移再次漏判)
- * 任一命中即认为成功(用户已实测三形态都=真授权成功, 旧版判失败是误判)。
- */
-export function arkParseOk(rawOut: string): boolean {
-  const out = stripAnsi(rawOut);
-  // ① + ②: 解析所有 JSON 对象(混排文本中可能有多个, 任一满足即成功)
-  const jsonObjects = extractJsonObjects(out);
-  for (const s of jsonObjects) {
-    let parsed: { ok?: unknown; auth_method?: unknown; error?: unknown };
+/** arkcli phase2 成败判定: 解析 JSON 的 ok 字段(任一对象 ok===true 即成功; 不信 exit code) */
+function arkParseOk(out: string): boolean {
+  return extractJsonObjects(out).some((s) => {
     try {
-      parsed = JSON.parse(s) as { ok?: unknown; auth_method?: unknown; error?: unknown };
+      return (JSON.parse(s) as { ok?: unknown }).ok === true;
     } catch {
-      continue;
+      return false;
     }
-    if (parsed.ok === true) return true;
-    // ② 1.0.27 同账号 refresh 分支: 有 auth_method(成功凭证) + 无 error(未失败)
-    if (typeof parsed.auth_method === "string" && parsed.auth_method.length > 0 && parsed.error === undefined) {
-      return true;
-    }
-  }
-  // ③ 文本兜底: 真实 1.0.27 输出含「√ 火山 SSO 认证成功!」+「✓ 同账号 SSO refresh」原文
-  // strip ANSI 后原文匹配(防未来 JSON 形态再漂移, 兜底用文本关键词)
-  return /SSO\s*认证成功|同账号\s*SSO\s*refresh/i.test(out);
+  });
 }
 
 /** 按 CLI 命令名注册(renderer 从 setup_hint 提取命令首词 → 主进程查表) */

@@ -7,14 +7,11 @@ import {
   getPersistedLang,
   getSortConfig,
   getStoragePaths,
-  openAgentDashboard,
   persistConsent,
   setSortConfig as persistSortConfig,
   updateTrayStatus,
-  winClose,
   winGetAlwaysOnTop,
   winSetAlwaysOnTop,
-  winMinimize,
 } from "./ipc";
 import { selectPanelProviders } from "./panelProviders";
 import type { ScenarioId } from "./mockData";
@@ -38,11 +35,8 @@ import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { AddProviderWizard } from "./components/AddProviderWizard";
 import { QuotaGallery } from "./components/QuotaGallery";
+import { LocalAgentSection } from "./components/LocalAgentSection";
 import { FilterIcons, DEFAULT_FILTER, matchesFilter, type FilterSel } from "./components/FilterChips";
-import { AgentCard, AgentCardEmpty } from "./components/AgentCard";
-import { AgentDashboardC } from "./components/AgentDashboardC";
-import { mcpUsageSummary, type McpQueryResult } from "./mcpQuery";
-import type { UsageSummaryOutput } from "./mcpQueryTypes";
 import type { InstanceConfig } from "./instances/schema";
 import { getSharedKeyring, getSharedStore, loadPersistedInstances, useInstances, usePersistError } from "./instances/store";
 import { useDismissibleError } from "./instances/useDismissibleError";
@@ -91,15 +85,6 @@ export default function App() {
   );
 }
 
-
-/** round-7: daemon generated_at ISO8601 → 短格式「MM-DD HH:mm」(原始微秒串直出不可读)。 */
-function fmtGeneratedAt(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return `数据 ${iso}`;
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `数据 ${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
 function AppShell() {
   const { mode: themeMode, setMode: setThemeMode, glass, setGlass, glassAlpha, setGlassAlpha } = useTheme();
   // Phase B: 启动读回持久化语言(真壳 settings.json → setLang 对齐模块级+重渲染; 浏览器=/mock 同语义)
@@ -123,28 +108,8 @@ function AppShell() {
   const [sortConfig, setSortConfig] = useState<SortConfig>(DEFAULT_SORT_CONFIG);
   // P1(t_6484ecc6): 主页过滤 chips 选中态(单选, 默认「全部」= 现状零变化; 重启回「全部」)
   const [filter, setFilter] = useState<FilterSel>(DEFAULT_FILTER);
-  // 页内导航仅留给首开向导 + 方案页(D-021 一次性引导 view="add"; theme-glass 实验 view="quota";
-  // t_9255cb63: view="agent-dashboard" = 主页 Agent 卡详情(大屏方案 C))
-  const [view, setView] = useState<"panel" | "add" | "quota" | "agent-dashboard">("panel");
-  // t_4b7984d9 round-2 P0 fix: 独立窗口 query param 自动跳转。 main.ts createAgentDashboardWindow
-  // 在 loadURL/loadFile 写入 ?view=agent-dashboard, 渲染层启动读 window.location.search 据此 setView。
-  // 浏览器路径(主窗 / e2e)无此 param, view 保持初始 panel 不受影响。
-  // t_185002af: standalone=1 = 主进程开的无边框独立窗(D-024 家族观感)。独立窗没有系统
-  // 标题栏, 渲染层自绘窗口 chrome(dash-chrome: 拖拽条 + ◨/✕); 返回键语义=关窗(win_close
-  // 主进程 sender-aware 按 sender 销毁 dashboard 窗)。主窗与 e2e/浏览器路径恒 false。
-  const [standalone, setStandalone] = useState(false);
-  useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      const v = sp.get("view");
-      if (v === "agent-dashboard" || v === "add" || v === "quota" || v === "panel") {
-        setView(v);
-      }
-      if (sp.get("standalone") === "1") setStandalone(true);
-    } catch {
-      // 解析失败 fallback 初始 panel, 不阻塞渲染
-    }
-  }, []);
+  // 页内导航仅留给首开向导 + 方案页(D-021 一次性引导 view="add"; theme-glass 实验 view="quota")
+  const [view, setView] = useState<"panel" | "add" | "quota">("panel");
   // D-038: 设置弹窗(纯偏好) 与 添加向导弹窗(侧栏 ＋) 是两个独立模态
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -152,61 +117,6 @@ function AppShell() {
   const instances = useInstances();
   const { engine, output } = useRealEngine(instances);
   const hasInstances = instances.length > 0;
-
-  // t_9255cb63: 拉 daemon usage_summary(group_by=["agent"]) — 主页 Agent 卡 + 大屏方案 C 数据源。
-  // 启动拉一次 + 每 30s 刷新;daemon 不可达时 mcpSummary.result.ok=false → 主页 Agent 卡区显式空态,
-  // 不静默吞成 0(任务卡边界硬要求)。
-  const [mcpSummary, setMcpSummary] = useState<McpQueryResult<UsageSummaryOutput>>({
-    ok: false,
-    reason: "unavailable",
-  });
-  // t_12c28686: 大屏多维数据面 — Model 分布(group_by=["agent","model"]) + 趋势(group_by=["day"])
-  // 两个附加查询, 与单维查询同一 tick 并行发起(3 次 invoke 而非 4 次; 明细/三分项从单维 summary 取)。
-  // 独立 state: 主页 Agent 卡区只消费单维结果, 大屏消费三维 — 失败域互不拖累(模块级空态+重试)。
-  const [mcpModelSummary, setMcpModelSummary] = useState<McpQueryResult<UsageSummaryOutput>>({
-    ok: false,
-    reason: "unavailable",
-  });
-  const [mcpTrendSummary, setMcpTrendSummary] = useState<McpQueryResult<UsageSummaryOutput>>({
-    ok: false,
-    reason: "unavailable",
-  });
-  const tick = useCallback(async () => {
-    // 并行 3 查: 单维(agent) / 二维(agent+model) / 单维(day); 每份独立落地, 单份失败不阻塞其余
-    // t_4b7984d9 round-7(用户真机 9/14): 查询存在间歇性失败(成功 7ms / 失败 unreachable 交替),
-    // 失败一拍 UI 就闪回「daemon 未连接」空态 — 抖动期间数据明明刚取到过。
-    // 修复: 失败且已有上一次成功数据时, 保留旧数据继续展示(不覆盖为失败空态),
-    // 仅在从未成功过时才落到空态。三份独立处理。
-    // round-9(2026-09-14): trend 查询显式 since=7 天前 — 此前不传 since 落进 daemon
-    // 默认「今天 00:00」窗口 → day 桶永远只有 1 个 → 趋势图永远显示『数据积累中』
-    // (t_12c28686 遗留 bug: 趋势图在全历史数据下也永不工作)。
-    // t_e83ad982(窗口口径统一, comment 1495 顺带修): 三查全部挂同一显式 7 天窗 —
-    // 此前单维/二维查询不传 since = daemon 默认「今天」窗, 与 trend 7 天窗同屏矛盾
-    // (趋势 max 81M vs hero 526K)。现 hero/三分项/明细/Model 分布/趋势同窗口,
-    // 窗口范围由组件读 summary.window 显示在 hero「窗」指标 + 页脚。
-    const trendSince = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-    const [r, rm, rt] = await Promise.all([
-      mcpUsageSummary({ group_by: ["agent"], since: trendSince }),
-      mcpUsageSummary({ group_by: ["agent", "model"], since: trendSince }),
-      mcpUsageSummary({ group_by: ["day"], since: trendSince }),
-    ]);
-    setMcpSummary((prev) => (r.ok || !prev.ok ? r : prev));
-    setMcpModelSummary((prev) => (rm.ok || !prev.ok ? rm : prev));
-    setMcpTrendSummary((prev) => (rt.ok || !prev.ok ? rt : prev));
-  }, []);
-  useEffect(() => {
-    let alive = true;
-    const guardedTick = async () => {
-      if (!alive) return;
-      await tick();
-    };
-    void guardedTick();
-    const timer = window.setInterval(() => void guardedTick(), 30_000);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
-  }, [tick]);
 
   // 首开判定(§10, P0-7 接真): Rust get_bootstrap 读 settings.json consent;
   // 并行加载 instances.yaml → 预填内存 store(面板重启后实例仍在)
@@ -289,9 +199,6 @@ function AppShell() {
 
   // P1(t_6484ecc6): 一层 filter(chips 选中态 → 命中子集), 排序仍走 sortProviders 原排序器。
   //   过滤在排序之前(先缩小视角再按配置排), 不改变排序器语义; 默认「全部」= 原 providers 全集。
-  // t_4b7984d9 round-4 ④: 主页 tab 分离(「用量」vs「本地 Agent」), 默认 usage;
-  //   t_4b7984d9 round-6: LocalAgentSection 占位已删除,「本地 Agent」tab 直接挂 agent-card-section
-  const [mainTab, setMainTab] = useState<"usage" | "local-agent">("usage");
   const filteredProviders = useMemo(
     () => (providers ?? []).filter((p) => matchesFilter(p, filter)),
     [providers, filter],
@@ -380,18 +287,6 @@ function AppShell() {
     getSharedStore().remove(id, getSharedKeyring());
   }, []);
 
-  // t_4b7984d9 C: 详情按钮回调 → 真壳路径调 openAgentDashboard() 开 900×600 独立窗口
-  // (主进程 open_agent_dashboard IPC), 浏览器降级(e2e / 纯 dev)回到 setView 切页内视图,
-  // 复用既有的 AgentDashboardC 渲染, e2e 兼容性不变。同一回调双分支 = 数据契约 + UI 一致。
-  const onAgentCardDetail = useCallback(async () => {
-    const r = await openAgentDashboard();
-    if (!r.ok) {
-      // 浏览器无桥降级: 切到页内 dashboard 视图(与原 view="agent-dashboard" 路径同形态)
-      setView("agent-dashboard");
-    }
-    // 真壳 ok=true 时主进程已开窗, 此处 no-op(独立窗口自己 mcpUsageSummary)
-  }, []);
-
   // 真实实例集合: 仅真实实例卡渲染删除钮(dev 场景 mock 预览卡不给无效按钮)
   const realInstanceIds = useMemo(() => new Set(instances.map((i) => i.id)), [instances]);
 
@@ -416,18 +311,6 @@ function AppShell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [settingsOpen, addOpen, closeSettings, closeAddModal]);
-
-  // t_185002af: 大屏返回键语义分流(standalone=关窗, 否则=切页视图)。
-  // ⚠️ 必须挂在所有早退 return 之前(Rules of Hooks) — consent/向导/方案页分支
-  // 都会提前 return, hook 若在其后首次渲染(未 consent)不会被调用, 下次渲染钩子数
-  // 变化直接崩整个 App(e2e 全量红的第一现场)。
-  const dashboardBack = useCallback(() => {
-    if (standalone) {
-      void winClose();
-      return;
-    }
-    setView("panel");
-  }, [standalone]);
 
   if (!bootstrap) {
     return (
@@ -475,72 +358,6 @@ function AppShell() {
     );
   }
 
-  // t_9255cb63: 大屏方案 C — 主页 Agent 卡点 [详情→] 触发。需要 usage_summary 真数据,
-  // daemon 未连时降级提示(不静默吞成 0, 任务卡边界)。
-  // t_185002af: standalone=true 时本视图跑在主进程开的无边框独立窗里(900×640),
-  // 返回键语义 = 关窗(win_close, main 进程 sender-aware 销毁本窗); 非 standalone
-  // (主窗内嵌 / e2e / 浏览器)维持 setView 切页视图原语义(dashboardBack 定义在上方
-  // 早退 return 之前, Rules of Hooks)。窗口 chrome 条只在 standalone 挂载。
-  if (view === "agent-dashboard") {
-    if (mcpSummary.ok) {
-      return (
-        <div className="panel" data-standalone={standalone ? "1" : undefined}>
-          {standalone && (
-            <div className="dash-chrome" data-testid="dash-chrome">
-              <span className="dash-chrome-title">Agent 用量详情</span>
-              <span className="spacer" />
-              <button
-                type="button"
-                className="btn btn-icon"
-                data-testid="dash-chrome-min"
-                title="最小化"
-                aria-label="最小化"
-                onClick={() => void winMinimize()}
-              >
-                🗕
-              </button>
-              <button
-                type="button"
-                className="btn btn-icon"
-                data-testid="dash-chrome-close"
-                title="关闭"
-                aria-label="关闭"
-                onClick={() => void winClose()}
-              >
-                ✕
-              </button>
-            </div>
-          )}
-          <AgentDashboardC
-            summary={mcpSummary.data}
-            modelSummary={mcpModelSummary}
-            trendSummary={mcpTrendSummary}
-            generatedAt={mcpSummary.generatedAt}
-            onBack={dashboardBack}
-            onRetry={() => void tick()}
-          />
-        </div>
-      );
-    }
-    // daemon 未连接空态: 用 AgentCardEmpty 复用样式保持视觉一致
-    // round-7: reason 文案映射统一到 agentEmptyReasonText(组件层单点)
-    return (
-      <div className="panel">
-        <div className="agent-dashboard-c-empty" data-testid="agent-dashboard-c-empty">
-          <AgentCardEmpty reason={mcpSummary.reason} />
-          <button
-            type="button"
-            className="agent-dashboard-c-back"
-            onClick={dashboardBack}
-            data-testid="agent-dashboard-c-empty-back"
-          >
-            ← 返回
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="panel">
       {/* 标题栏独占第一行(全宽, t_66b67453 契约1 语义保留) */}
@@ -560,129 +377,46 @@ function AppShell() {
             // W3: 写盘失败顶部错误条(内存态仍可用, 可关闭; 恢复后同消息再失败会重弹)
             <PersistErrorBar error={visiblePersistError} onDismiss={dismissPersistError} />
           )}
-          {/* t_4b7984d9 round-6: tab 分离 — 决定下方 agent-card-section(本地 Agent 用量)哪个挂载 */}
-          <nav className="main-tabs" data-testid="main-tabs" aria-label="主页视图切换">
-            <button
-              type="button"
-              className={`main-tab${mainTab === "usage" ? " active" : ""}`}
-              data-testid="main-tab-usage"
-              aria-pressed={mainTab === "usage"}
-              onClick={() => setMainTab("usage")}
-            >
-              用量
-            </button>
-            <button
-              type="button"
-              className={`main-tab${mainTab === "local-agent" ? " active" : ""}`}
-              data-testid="main-tab-local-agent"
-              aria-pressed={mainTab === "local-agent"}
-              onClick={() => setMainTab("local-agent")}
-            >
-              本地 Agent
-            </button>
-          </nav>
-          {mainTab === "usage" && (
-            <>
-              {providers === null ? (
-                <LoadingState />
-              ) : collecting ? (
-                // P0-8: 已配置实例但快照未到 → "数据采集中", 不显示 EmptyState 误导
-                <CollectingState />
-              ) : providers.length === 0 ? (
-                <EmptyState onAdd={openAddProvider} />
+          {providers === null ? (
+            <LoadingState />
+          ) : collecting ? (
+            // P0-8: 已配置实例但快照未到 → "数据采集中", 不显示 EmptyState 误导
+            <CollectingState />
+          ) : providers.length === 0 ? (
+            <EmptyState onAdd={openAddProvider} />
+          ) : (
+            // P1(t_9639078b): 过滤三枚 icon 钮浮在卡片列表右上角 —— 与卡片列表同容器(绝对定位),
+            // 随内容滚动运动(不吸顶), 因此滚动内容不会与钮组重叠(修 v0.1.2 平台 chips 被卡片盖住)。
+            // 过滤后命中为空(如仅剩异常) → 居中「无匹配实例」(钮组仍在, 可点回其他视角)。
+            // t_f7d1beeb 9/7 修订 E: 用户反馈「主页上层的筛选按钮先隐藏, 感觉比较占地方」——
+            // 先隐藏(不删代码), filter state 管线(DEFAULT_FILTER/matchesFilter/filteredProviders)
+            // 全部保留, 后续要恢复时把下方 false 改 true 即可。e2e filter-icons 不再断言可见。
+            <main className="card-list" data-testid="card-list">
+              {false && <FilterIcons value={filter} onChange={setFilter} />}
+              {filteredProviders.length === 0 ? (
+                <NoMatchState />
               ) : (
-                // P1(t_9639078b): 过滤三枚 icon 钮浮在卡片列表右上角 —— 与卡片列表同容器(绝对定位),
-                // 随内容滚动运动(不吸顶), 因此滚动内容不会与钮组重叠(修 v0.1.2 平台 chips 被卡片盖住)。
-                // 过滤后命中为空(如仅剩异常) → 居中「无匹配实例」(钮组仍在, 可点回其他视角)。
-                // t_f7d1beeb 9/7 修订 E: 用户反馈「主页上层的筛选按钮先隐藏, 感觉比较占地方」——
-                // 先隐藏(不删代码), filter state 管线(DEFAULT_FILTER/matchesFilter/filteredProviders)
-                // 全部保留, 后续要恢复时把下方 false 改 true 即可。e2e filter-icons 不再断言可见。
-                <main className="card-list" data-testid="card-list">
-                  {false && <FilterIcons value={filter} onChange={setFilter} />}
-                  {filteredProviders.length === 0 ? (
-                    <NoMatchState />
-                  ) : (
-                    <>
-                      {/* D-039 落点指示线(拖动中显示): 绝对定位在插入边界 */}
-                      {drag && indicatorY !== null && (
-                        <div className="drop-line" data-testid="drop-line" style={{ top: indicatorY }} />
-                      )}
-                      {sortedCards.map((p) => (
-                        <ProviderCard
-                          key={p.provider_id}
-                          p={p}
-                          onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
-                          onRefresh={realInstanceIds.has(p.provider_id) ? onRefreshProvider : undefined}
-                          dragHandle={makeHandleProps(p.provider_id)}
-                          dragging={drag?.id === p.provider_id}
-                          dragDy={drag ? drag.dy : 0}
-                        />
-                      ))}
-                    </>
+                <>
+                  {/* D-039 落点指示线(拖动中显示): 绝对定位在插入边界 */}
+                  {drag && indicatorY !== null && (
+                    <div className="drop-line" data-testid="drop-line" style={{ top: indicatorY }} />
                   )}
-                </main>
+                  {sortedCards.map((p) => (
+                    <ProviderCard
+                      key={p.provider_id}
+                      p={p}
+                      onDelete={realInstanceIds.has(p.provider_id) ? onDeleteProvider : undefined}
+                      onRefresh={realInstanceIds.has(p.provider_id) ? onRefreshProvider : undefined}
+                      dragHandle={makeHandleProps(p.provider_id)}
+                      dragging={drag?.id === p.provider_id}
+                      dragDy={drag ? drag.dy : 0}
+                    />
+                  ))}
+                </>
               )}
-            </>
+            </main>
           )}
-          {/* t_9255cb63: 主页 Agent 卡区 — 来自 daemon usage_summary(group_by=["agent"]),
-             与 ProviderCard 同构(.card/.card-head 共享), 数据源是 MCP daemon, 非 mock。
-             daemon 不可达/401/协议错 → 显式 AgentCardEmpty(不静默吞成 0)。
-             t_12bdc277 round-2 修复: 解绑 providers 门禁 — 零 provider 实例下, Agent 区也应可见
-             (数据源是 daemon, 与 provider 实例数无因果)。仅 providers===null(引擎加载中)
-             不渲染,避免半初始化闪态。其余一律渲染: mcpSummary.ok → AgentCard 列表;
-             !ok → AgentCardEmpty 按 reason 显式提示。同 D-036「选得到即采得到」精神。
-             t_4b7984d9 round-6(用户真机拍板): agent-card-section 迁入「本地 Agent」tab —
-             信息架构 = 用量 tab 看 provider 卡(云 API 套餐), 本地 Agent tab 看 agent 卡
-             (本地 worker 调用量)。LocalAgentSection 占位组件(「即将推出」)整体删除。*/}
-          {mainTab === "local-agent" && providers !== null && (
-            <section className="agent-card-section" data-testid="agent-card-section">
-              <header className="agent-card-section-head">
-                <span className="agent-card-section-title">Agent 用量</span>
-                {mcpSummary.ok && (
-                  <span className="agent-card-section-meta" data-testid="agent-card-section-meta">
-                    {fmtGeneratedAt(mcpSummary.generatedAt)}
-                  </span>
-                )}
-              </header>
-              <div className="agent-card-list" data-testid="agent-card-list">
-                {mcpSummary.ok ? (
-                  mcpSummary.data.rows.length === 0 ? (
-                    /* t_4b7984d9 round-7: rows=[] 渲染盲区 — daemon 连接成功但窗口内
-                     * 零上报时, map 空数组导致区域整体空白(9/14 用户真机实锤)。
-                     * 显式空态: 说明连接正常、缺的是上报数据源。 */
-                    <div className="agent-rows-empty" data-testid="agent-rows-empty">
-                      <p className="agent-rows-empty-title">暂无 Agent 上报数据</p>
-                      <p className="agent-rows-empty-hint">
-                        daemon 连接正常。窗口内还没有任何 agent 上报用量 —
-                        需要先在 agent 侧（如 njbx02 的 hook 插件）接入上报。
-                      </p>
-                    </div>
-                  ) : (
-                  mcpSummary.data.rows.map((row) => {
-                    const activity: "active" | "idle" | "no_report_today" =
-                      row.calls === 0
-                        ? "no_report_today"
-                        : row.by_status.completed === 0
-                          ? "idle"
-                          : "active";
-                    return (
-                      <AgentCard
-                        key={row.group}
-                        agentId={row.group}
-                        row={row}
-                        activity={activity}
-                        generatedAt={mcpSummary.generatedAt}
-                        onOpenDetail={onAgentCardDetail}
-                      />
-                    );
-                  })
-                  )
-                ) : (
-                  <AgentCardEmpty reason={mcpSummary.reason} />
-                )}
-              </div>
-            </section>
-          )}
+          <LocalAgentSection />
           {!hasInstances && <ScenarioBar scenario={scenario} onChange={setScenario} />}
         </div>
       </div>

@@ -24,8 +24,7 @@ CREATE TABLE IF NOT EXISTS usage_records (
   window_end INTEGER NOT NULL,
   tokens REAL,
   credits REAL,
-  cost_cny REAL,
-  source TEXT NOT NULL DEFAULT 'cloud'
+  cost_cny REAL
 );
 CREATE INDEX IF NOT EXISTS idx_usage_provider_time
   ON usage_records(provider_id, window_start);

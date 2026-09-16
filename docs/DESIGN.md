@@ -434,12 +434,10 @@ Windows 人肉只留"桌面外壳本身"(安装/托盘/WebView2)。
 |----|--------|------|------|--------|
 | L1 单元 | core: schema/registry/credential/store/调度器(D-027 语义) | vitest | 任何机 | ✅ 全自动 |
 | L2 前端 E2E | app 交互全流程: 首开向导/设置表单/测试连接/面板模板/排序 | **Playwright browser 模式**(mock 桌面桥 IPC) | Linux/CI | ✅ 全自动 |
-| L2.5 真壳视觉 | 真窗口几何/主题真渲染/互斥交互(D-030a, t_2520e5f1) | **Playwright `_electron.launch`**(dist-electron/main.cjs) | Windows 本机 | ⚠️ 半自动(启动需本机, 断言全自动) |
 | L3 真通道 | 真 API + 真余额(敏感 key 不落库) | 手动触发 + golden sample 防接口变动 | 我们的机器 | ⚠️ 半自动 |
 | L4 Windows 冒烟 | 安装包/托盘/WebView2/首开真实打开 | 手动 | Windows 本机 | ❌ 人肉 |
 
 - **L2 技术前提**(D-033 起): e2e/fixtures.ts 自家轻量 harness 注入 `window.tokenWallet` mock 桥(与 Electron preload 同形态), 零额外测试依赖
-- **L2.5 定位**(t_2520e5f1, 9/11 复盘): L2 用 Desktop Chrome 默认 1280 视口 + mock 桥, 360 部件的**真实窗口几何/主题真渲染/互斥交互**缺陷在该模式不触发(三连返工假绿实证)。L2.5 用 `_electron.launch` 驱动真壳在 360×720 真窗口下做几何探针(scrollWidth/clientWidth/getBoundingClientRect)+ 三主题截图, 断言全自动不依赖 vision; 人肉只留 L4 最后一公里。运行与证据落位见 `TESTING.md` L2.5 节
 - 每条 P0 卡内嵌 L1/L2 测试, 证据链 = 测试跑绿 + commit hash, 无测试 review 打回
 - CI: P0~P2 worker 内测; P4 上 gitee Actions/自建 runner 全自动
 - 测试矩阵详见根目录 `TESTING.md`
