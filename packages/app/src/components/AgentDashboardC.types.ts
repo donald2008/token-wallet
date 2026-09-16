@@ -20,8 +20,6 @@ export interface ModelSlice {
   hit: number;
   miss: number;
   out: number;
-  /** t_f6c85da6: 该行代表几个模型 — Top 6 正色行=1; 「其他」聚合行=N-6(表格副行显 N-6) */
-  models: number;
 }
 
 export interface DetailRow {

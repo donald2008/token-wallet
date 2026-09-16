@@ -2640,16 +2640,14 @@ body {
 /* ---- t_185002af: 独立大屏窗口自绘 chrome(无边框窗拖拽条 + 最小化/关闭) ----
  * 仅 standalone(主进程开的 900×640 无边框透明窗)渲染此条; 主窗内嵌/e2e/浏览器不渲染。
  * 拖拽区=整条(.dash-chrome), 按钮经 .btn no-drag 排除 — 与主窗 .titlebar 同语法。
- * t_f6c85da6(round-3): 高度 32→40px(上下 padding 各 +4, 8px 网格) — 用户实锤「返回/
- * 主题切换贴上下边界」, 40px 给控件上下各留 4px 呼吸; 下缘 1px 不变(D-024 家族克制观感)。
- * 联动: 紧凑视口段 .agent-dashboard-c padding 4→0 全额消化(见 @media max-height 段)。 */
+ * 32px 高(var(--space-32))+ 1px 下缘, 与主窗标题栏同族克制观感(D-024 家族)。 */
 .dash-chrome {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--gap, 8px);
-  height: var(--space-40, 40px);
-  padding: var(--space-4, 4px) var(--space-12, 12px);
+  height: var(--space-32, 32px);
+  padding: 0 var(--space-12, 12px);
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
   flex: 0 0 auto;
@@ -2789,9 +2787,7 @@ body {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-/* t_e83ad982(问题 2): Model 卡两列 — 左环缩小 + 右迷你数据表。
- * t_f6c85da6(round-3): 表格包进 .model-table-scroll — 横向 overflow-x:auto 兜底,
- * 极端最小内容宽下表可滚而不再顶破窗口右缘(基线探针: tableRight 899.5 > 容器右缘 875)。 */
+/* t_e83ad982(问题 2): Model 卡两列 — 左环缩小 + 右迷你数据表 */
 .agent-dashboard-c .model-duo {
   display: flex;
   align-items: stretch;
@@ -2799,16 +2795,6 @@ body {
   gap: var(--space-12, 12px);
   flex: 1;
   min-height: 0;
-}
-.agent-dashboard-c .model-table-scroll {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
 }
 .agent-dashboard-c .chart-wrap-model {
   /* 200px = 25×8, 环缩小的定宽容器(4/8 网格字面值, 同 chart-wrap 140px 先例) */
@@ -2819,7 +2805,7 @@ body {
 .agent-dashboard-c .model-table {
   flex: 1;
   min-width: 0;
-  align-self: flex-start;
+  align-self: stretch;
   border-collapse: collapse;
   font-size: var(--font-11, 11px);
   color: var(--fg);
@@ -2857,11 +2843,6 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 160px;
-}
-/* t_f6c85da6: 「其他」聚合行 — 去强调(名称 dim + 底色弱化), 与 Top 6 正色行区分 */
-.agent-dashboard-c .model-table tr.agg td {
-  color: var(--fg-dim);
-  background: color-mix(in srgb, var(--bg-hover) 45%, transparent);
 }
 /* t_e83ad982(问题 3): 明细扩列 — 一行多列(名称/tokens/调用/三分项/占比/模型数) */
 .agent-dashboard-c .detail-list li {
@@ -2956,10 +2937,8 @@ body {
    * 观感仍克制, 宽松视口(>680px)不命中, 布局不变。 */
   .agent-dashboard-c {
     gap: var(--space-4, 4px);
-    /* t_5cf22ba4(一屏方案 B): 容器外缘 padding 12→4(全边, 边缘同线), 内容区 +16px。
-     * t_f6c85da6(round-3): 4→0 — dash-chrome 32→40 多吃 8px, 紧凑段全额回收
-     * (chrome 条自带全宽背景, 外缘留白在 standalone 下本就不可见, 0 不损观感)。 */
-    padding: 0;
+    /* t_5cf22ba4(一屏方案 B): 容器外缘 padding 12→4(全边, 边缘同线), 内容区 +16px */
+    padding: var(--space-4, 4px);
   }
   .agent-dashboard-c .hero-strip {
     /* t_5cf22ba4(一屏方案 B): 上下 padding 8→4, 再省 8px */
@@ -2995,7 +2974,6 @@ body {
   .agent-dashboard-c .detail-list .d-label,
   .agent-dashboard-c .detail-list .d-val,
   .agent-dashboard-c .model-table,
-  .agent-dashboard-c .model-table-scroll,
   .agent-dashboard-c .model-table th,
   .agent-dashboard-c .model-table td,
   .agent-dashboard-c .idle-tag,

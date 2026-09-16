@@ -474,66 +474,6 @@ describe("AgentDashboardC(t_5cf22ba4 展示品质回归锁)", () => {
     expect(c.querySelector('[data-testid="agent-dashboard-c-hit-rate"]')?.textContent).toBe("—");
   });
 
-  it("t_f6c85da6(round-3): 8 模型 → 表 7 行(Top6+其他), 其他行聚合口径, 0 值模型不占行", () => {
-    // 8 模型 mock: glm/deepseek/kimi/qwen/claude/gemini(正色 Top6) + minimax/grok(第 7/8)
-    // grok = 0 值模型(0 值不画弧; tokens=0 不占聚合占比但 calls 并入其他行合计如实)。
-    const mk = (model: string, hit: number, miss: number, out: number, calls: number): SummaryRow => ({
-      group: `njbx02|${model}`,
-      calls,
-      input_cache_hit_tokens: hit,
-      input_cache_miss_tokens: miss,
-      output_tokens: out,
-      cost_total: null,
-      currency: null,
-      by_status: { completed: calls, partial: 0, unknown: 0 },
-    });
-    const rows8 = [
-      mk("glm-5.3-flash", 20000, 5000, 1000, 3000),
-      mk("deepseek-v3.1", 11000, 3000, 1000, 1800),
-      mk("kimi-k2", 6500, 2000, 500, 1200),
-      mk("qwen3-max", 4000, 1500, 500, 900),
-      mk("claude-sonnet-4-5", 2500, 1200, 300, 600),
-      mk("gemini-2.5-pro", 2000, 1244, 500, 400),
-      mk("minimax-m2", 156, 60, 40, 80),
-      mk("grok-4", 0, 0, 0, 5), // 0 值模型
-    ];
-    const model8: McpQueryResult<UsageSummaryOutput> = {
-      ok: true,
-      data: { ...multiModelSummary, rows: rows8 },
-      generatedAt: "",
-    };
-    const { container: c } = mountDash(fakeSummary, model8);
-
-    // 表 7 行 = Top6 + 其他(minimax+grok 聚合, 行数钉死不撑高)
-    const bodyRows = c.querySelectorAll('[data-testid="agent-dashboard-c-model-table"] tbody tr');
-    expect(bodyRows.length).toBe(7);
-    // 聚合行 testid + 文案(合计口径: calls=85, tokens=256, 命中率=156/216=72.2%)
-    const other = c.querySelector('[data-testid="agent-dashboard-c-model-row-other"]');
-    expect(other).toBeTruthy();
-    expect(other?.textContent).toContain("其他（2 个模型）");
-    expect(other?.textContent).toContain("85");
-    expect(other?.textContent).toContain("256");
-    expect(other?.textContent).toContain("72.2%");
-    // grok 0 值: 无独立行(0 弧段无意义), 真实模型数仍按 rows 计数=8(非聚合后 7)
-    expect(c.querySelector('[data-testid="agent-dashboard-c-model-row-grok-4"]')).toBeNull();
-    expect(c.querySelector('[data-testid="agent-dashboard-c-models"]')?.textContent).toBe("8");
-    // 环形契约点: 0 值不画弧 → data-segments = 7(6 正色 + 其他)
-    expect(
-      c.querySelector('[data-testid="agent-dashboard-c-chart-model"]')?.getAttribute("data-segments"),
-    ).toBe("7");
-  });
-
-  it("t_f6c85da6(round-3): ≤6 模型不出现其他行(如实全量)", () => {
-    // 现有 multiModelSummary = njbx02 2 模型 → 无聚合行, 行数=模型数
-    const { container: c } = mountDash(fakeSummary, okResult);
-    expect(
-      c.querySelector('[data-testid="agent-dashboard-c-model-row-other"]'),
-    ).toBeNull();
-    expect(
-      c.querySelectorAll('[data-testid="agent-dashboard-c-model-table"] tbody tr').length,
-    ).toBe(2);
-  });
-
   it("t_e83ad982(问题 3): 明细行扩列 — 调用/Hit/Miss/Output/占比/模型数全在场", () => {
     const { container: c } = mountDash(fakeSummary, okResult);
     const row = c.querySelector('[data-testid="agent-dashboard-c-detail-njbx02"]');
