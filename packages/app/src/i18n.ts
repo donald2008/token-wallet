@@ -162,8 +162,6 @@ export const zh = {
   dash: {
     title: "Agent 用量",
     subtitle: "token 消耗 · 成本 · 缓存命中 · {window}",
-    themeGroup: "主题切换",
-    back: "← 返回",
     bannerTitle: "DAEMON 未连接",
     bannerSub: "三维查询全部失败 · 显示上次快照 · 数据截至 {stamp}",
     reconnect: "重新连接",
@@ -551,8 +549,6 @@ export const en: Dict = {
   dash: {
     title: "Agent Usage",
     subtitle: "token spend · cost · cache hit · {window}",
-    themeGroup: "Theme",
-    back: "← Back",
     bannerTitle: "DAEMON not connected",
     bannerSub: "all three queries failed · showing last snapshot · data as of {stamp}",
     reconnect: "Reconnect",

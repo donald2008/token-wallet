@@ -307,14 +307,21 @@
   min-height: 140px; /* 定值下限: chart.js responsive 尺寸循环锁死规避(t_5cf22ba4 实测) */
 }
 
-/* ---- Model(span4): 环形定容 + chips 表(S5/S7) ---- */
+/* ---- Model(span4): 环形定容 + chips 表(S5/S7) ----
+ * SL-08 修复①: 横排(donut 左 + 表右)在 span4(~283px)下表仅得 ~147px, 5 列完整千分位
+ * (fmtTokens 无 K/M 简写契约)数学上放不下 — 旧 auto 布局直接右溢 127px 被面板裁切
+ * (真机 900×640 实锤)。改纵向: donut 居中上浮, 表 100% 满宽在下方, 5 列 ~250px 可用。 */
 .dash-pbody-model {
   display: flex;
+  flex-direction: column;
   gap: var(--space-12, 12px);
   align-items: center;
-  flex-wrap: nowrap; /* span4 内不换行: 换行会把表顶出面板致 900×600 溢出(e2e 实测) */
   min-height: 0;
   overflow: hidden;
+  /* SL-08 修复②: grid-auto-rows:min-content 由面板内容最高者定行高 —
+   * 单 agent 数据时 Model 面板(donut+表)比 1 行明细高, 同排明细 span8 被拉伸出
+   * 30px+ 空行隙(真机撑高变形实锤)。min-height:0 解除内容定高, 行高由明细面板
+   * 自身行数决定, 明细行数变化不再被兄弟面板顶撑变形。 */
 }
 .dash-pbody-model .chart-wrap-model {
   position: relative;
@@ -346,13 +353,16 @@
   text-transform: uppercase;
 }
 .dash-model-table {
-  flex: 1 1 120px;
-  min-width: 120px;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
   align-self: center;
   border-collapse: collapse;
   font-size: var(--font-11, 11px);
   color: var(--fg);
-  table-layout: auto;
+  /* SL-08 修复①(配套): fixed 布局列宽由 CSS 决定 — 满宽 5 列(name 34% + 4 数值列 16.5%,
+   * 千分位 tokens ~64px 全可见), 长模型名截断省略不再顶爆表宽。 */
+  table-layout: fixed;
 }
 .dash-model-table th,
 .dash-model-table td {
@@ -370,9 +380,15 @@
 .dash-model-table td.name {
   text-align: left;
 }
+/* SL-08 修复①(配套): fixed 布局按列内容实宽分配 — tokens 9 位千分位(2,237,000 ≈ 60px)
+ * 是最宽内容列, 26% (~70px); name 27% 长模型名截断省略; 其余数值列 15~16.5%。 */
+.dash-model-table th:nth-child(1) { width: 27%; }
+.dash-model-table th:nth-child(2) { width: 15.5%; }
+.dash-model-table th:nth-child(3) { width: 26%; }
+.dash-model-table th:nth-child(4) { width: 15%; }
+.dash-model-table th:nth-child(5) { width: 16.5%; }
 .dash-model-table td.name {
   font-weight: 500;
-  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -390,6 +406,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-4, 4px);
+  /* SL-08 修复①(配套): flex 容器吃掉单元格 text-overflow, 截断下沉到内层 <b>(文本承载) */
+  min-width: 0;
+}
+.dash-model-table td.name b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- 明细(span8): agent 维全量, 24px 行高 + 右对齐成列(S4/S6) ---- */
@@ -416,6 +440,9 @@
 .dash-detail-table thead th:first-child {
   text-align: left;
   padding-left: 0;
+  /* SL-08 修复②(配套): agent 列定宽后 6 个数值列拿到均分以上宽度 —
+   * 9 位 tokens(4,474,000, ~75px)不再挤到行尾撑爆行高, 多行右对齐数字按列直读(S4/S6)。 */
+  width: 26%;
 }
 .dash-detail-table tbody td {
   height: 24px;
@@ -429,6 +456,8 @@
 .dash-detail-table tbody td:first-child {
   text-align: left;
   padding-left: 0;
+  /* SL-08 修复②(配套): 与 th:first-child 同宽, 保证列宽稳定 */
+  width: 26%;
   display: flex;
   align-items: center;
   gap: var(--space-4, 4px);
@@ -659,6 +688,52 @@
   .dash-pbody-trend .chart-wrap {
     min-height: 112px;
   }
+  /* SL-08 修复①(紧凑段): Model 面板改纵向后 donut 是行高原顶者, 112→96px 回收 16px
+   * 纵向预算(multi 场景 dashScrollH 612→608 一屏收口); 环形中心数字同步缩号。 */
+  .dash-pbody-model .chart-wrap-model {
+    width: 96px;
+    height: 96px;
+  }
+  .dash-donut-center b {
+    font-size: var(--font-12, 12px);
+  }
+  /* SL-08 紧凑段纵向预算②: 900×600 四象限门禁(detail bottom ≤ 600) — Model 面板纵向化
+   * 后第一行 min-content = donut 96 + 表(2 行)顶高 ~18px。收 donut 96→84 + 表体行高
+   * 16px 严格化, 让 min-content 落回预算; 640 宽松场景观感差异极小。 */
+  .dash-pbody-model .chart-wrap-model {
+    width: 84px;
+    height: 84px;
+  }
+  /* SL-08 紧凑段纵向预算③: SC-02 降级态 900×560 零滚动 — 横幅 28px 在场时可用高
+   * 528, Model min-content + trend min-height 是最后余量: trend 图表下限收 112→100,
+   * 降级态(is-snapshot)趋势冷失败空态 80(降级面板内容本就少, 观感不塌)。 */
+  .dash-pbody-trend .chart-wrap {
+    min-height: 100px;
+  }
+  .agent-dashboard-c.is-snapshot .dash-pbody-trend .chart-wrap {
+    min-height: 80px;
+  }
+  /* SL-08 紧凑段纵向预算④: 900×560(dash-chrome 32+titlebar 36+footer 20 在场, grid 可用
+   * ~464px)逐元素实测后做减法 — KPI 底 padding、明细 padding-top、Model 行内 gap 各收一档,
+   * 让「KPI 92 + 行2(model 纵向) + 行3(明细 167)」min-content 落回预算。 */
+  .dash-kpi-body {
+    padding: var(--space-8, 8px) var(--space-12, 12px);
+  }
+  .dash-pbody-detail {
+    padding-top: 0;
+  }
+  .dash-pbody-model {
+    gap: var(--space-4, 4px);
+  }
+  .dash-model-table th,
+  .dash-model-table td {
+    padding-top: var(--space-4, 4px);
+    padding-bottom: 0;
+  }
+  .dash-model-table .dash-chip {
+    width: 7px;
+    height: 7px;
+  }
   .dash-module-empty {
     min-height: 80px;
   }
@@ -708,6 +783,26 @@
   .dash-phead {
     min-height: 28px;
     padding: var(--space-4, 4px) var(--space-12, 12px);
+  }
+  /* SL-08 紧凑段纵向预算⑤(900×560 dash-chrome 在场): phead 28→26(两面板行 ×2 = -4),
+   * trend chart-wrap min-height 100→88(-12, 图表 flex:1 自适应缩放不受影响)。 */
+  /* SL-08 紧凑段纵向预算⑥: agent tabs 压缩刻度 — Model 面板头 tabs 4 个时允许 2×2 网格
+   * 收窄占位(max-width 让 phead 两行排布而不是把 h2 挤下去), 18px 行高紧凑刻度。 */
+  .dash-agent-tab {
+    line-height: 16px;
+    padding: 0 var(--space-4, 4px);
+    font-size: var(--font-10, 10px);
+  }
+  .dash-agent-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, auto));
+    gap: var(--space-4, 4px);
+  }
+  .dash-phead {
+    min-height: 26px;
+  }
+  .dash-pbody-trend .chart-wrap {
+    min-height: 88px;
   }
 }
 

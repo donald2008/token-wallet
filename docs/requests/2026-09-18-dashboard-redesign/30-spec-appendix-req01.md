@@ -22,6 +22,8 @@
 
 - KPI 带：summary.total（tokens/cost/currency/calls）+ 派生命中率 hit/(hit+miss)
 - 趋势：trendSummary rows day → buckets（label 中文星期，daemon 本地时区）+ 均值线 Σ/len
+- 趋势柱顶数值标签（SL-08 D-2 补契约，对稿 ops-wall `.bv`）：每根非零柱顶 10px muted 数值
+  （fmtTokens 千分位），0 高度桶不画；y 轴 grace 12% 为最高柱标签预留头部空间
 - Model 环形+表：modelSummary rows 按 activeAgent 过滤，TopN 按 tokens 降序（N 由面板高约束，余量「其他」聚合）
 - 明细表：summary rows（agent 维全量，一行一 agent，状态点 active/idle/无上报）
 - 三分项：summary 三分项 tokens + 占比

@@ -310,14 +310,14 @@ test("详情按钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明细�
   // footer 显示 daemon 时间戳(非 mock 拍脑袋)
   await pwExpect(page.getByTestId("agent-dashboard-c-meta")).toContainText("2026-09-09T12:34:56+08:00");
 
-  // 返回按钮 → 回主页
-  await page.getByTestId("agent-dashboard-c-back").click();
-  await pwExpect(page.getByTestId("agent-dashboard-c")).toHaveCount(0);
-  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
+  // SL-08 B③: 顶栏返回钮已删 — 大屏主题/返回交互移除, 冒烟以数据面板在场收尾
+  await pwExpect(page.getByTestId("agent-dashboard-c-back")).toHaveCount(0);
+  await pwExpect(page.getByTestId("agent-dashboard-c-theme-dark")).toHaveCount(0);
+  await pwExpect(page.getByTestId("agent-dashboard-c-theme-light")).toHaveCount(0);
 });
 
-/** L2 冒烟 3: 主题切换(深/浅) aria-pressed 同步 */
-test("大屏方案 C 主题切换 aria-pressed 同步 + html data-theme 同步", async ({ hostPage, page }) => {
+/** L2 冒烟 3(SL-08 B③ 翻转): 大屏顶栏无主题钮 — 主题跟随全局 html data-theme(设置页切换) */
+test("大屏方案 C 主题跟随全局 data-theme + 顶栏无主题钮(B③ 删减)", async ({ hostPage, page }) => {
   void hostPage;
   // 初始主题断言需要确定性起点: prePaintTheme(D-010) 默认 system → e2e 浏览器
   // prefers-color-scheme 默认 light, 若不锚定则初始 data-theme=light(非 dark),
@@ -332,14 +332,11 @@ test("大屏方案 C 主题切换 aria-pressed 同步 + html data-theme 同步",
   await page.getByTestId("agent-detail-njbx02").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
 
+  // 大屏渲染后 html data-theme 仍为 dark(全局主题, 组件不再内置切换)
   await pwExpect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await pwExpect(page.getByTestId("agent-dashboard-c-theme-dark")).toHaveAttribute("aria-pressed", "true");
-  await pwExpect(page.getByTestId("agent-dashboard-c-theme-light")).toHaveAttribute("aria-pressed", "false");
-
-  await page.getByTestId("agent-dashboard-c-theme-light").click();
-  await pwExpect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await pwExpect(page.getByTestId("agent-dashboard-c-theme-light")).toHaveAttribute("aria-pressed", "true");
-  await pwExpect(page.getByTestId("agent-dashboard-c-theme-dark")).toHaveAttribute("aria-pressed", "false");
+  // B③: 主题钮已删
+  await pwExpect(page.getByTestId("agent-dashboard-c-theme-dark")).toHaveCount(0);
+  await pwExpect(page.getByTestId("agent-dashboard-c-theme-light")).toHaveCount(0);
 });
 
 /** L2 冒烟 4: daemon 断连空态 — 主页 Agent 卡区显式 AgentCardEmpty */
@@ -541,39 +538,23 @@ test("t_185002af standalone: 直入大屏 + dash-chrome 渲染 + 主窗路径不
   await pwExpect(page.getByTestId("dash-chrome")).toHaveCount(0);
 });
 
-/** t_185002af 门禁 2: 独立窗返回键语义 = 关窗(win_close), 主窗路径 = 切页视图。
- *  无边框独立窗没有系统关闭钮, 「← 返回」必须走 win_close(主进程 sender-aware
- *  销毁 dashboard 窗); 非 standalone 保持 setView 回主页原语义(e2e 全量依赖)。 */
-test("t_185002af 返回键语义分流: standalone→win_close, 主窗→切页视图", async ({
-  hostPage,
-  page,
-}) => {
+/** t_185002af 门禁 2(SL-08 B③ 翻转): 顶栏返回钮已删 —
+ *  standalone/主窗路径均不再有「← 返回」交互; 契约改为反向锁定三 testid 不出街。
+ *  (dash-chrome 关窗钮仍在: standalone 窗口关闭语义由 chrome ✕ 承担。) */
+test("t_185002af+B③: 顶栏返回钮删除, 无返回交互路径", async ({ hostPage, page }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
   await seedAgentUsage(page, { ok: true, data: fakeSummary });
 
-  // standalone: 大屏「← 返回」→ invoke win_close(关窗), 页面不切回主页视图
+  // standalone: 顶栏无返回钮(反向锁), win_close 仅可由 dash-chrome 关窗钮触发
   await page.goto("?view=agent-dashboard&standalone=1");
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
-  await page.getByTestId("agent-dashboard-c-back").click();
-  const invokes = await getCapturedInvokes(page);
-  expect(
-    invokes.some((c) => c.cmd === "win_close"),
-    "standalone 返回键必须触发 win_close(关窗语义)",
-  ).toBe(true);
+  await pwExpect(page.getByTestId("agent-dashboard-c-back")).toHaveCount(0);
 
-  // 非 standalone(主窗内嵌/e2e 默认): 「← 返回」→ 回主页(视图切换语义不变)
+  // 主窗内嵌: 同样无返回钮
   await page.goto("?view=agent-dashboard");
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
-  await page.getByTestId("agent-dashboard-c-back").click();
-  // round-6: 回主页落在「用量」tab, agent-card-section 在「本地 Agent」tab
-  await page.getByTestId("main-tab-local-agent").click();
-  await pwExpect(page.getByTestId("agent-card-section")).toBeVisible();
-  const invokes2 = await getCapturedInvokes(page);
-  expect(
-    invokes2.some((c) => c.cmd === "win_close"),
-    "主窗路径返回键不得触发 win_close(应走视图切换)",
-  ).toBe(false);
+  await pwExpect(page.getByTestId("agent-dashboard-c-back")).toHaveCount(0);
 });
 
 /** t_04f75eae 集成门禁: standalone 大屏必须在窗口内收口(不被窗缘裁切)。

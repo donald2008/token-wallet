@@ -20,11 +20,15 @@ countdowns, and "days remaining" estimated from your consumption rate.
 > dies at 3 a.m. and you only find out after digging through terminals: one platform's quota
 > ran out two hours ago. **token-wallet deletes this failure mode from your workflow.**
 
-| Agent Usage Dashboard (Dark / Light / Glass) |
-|------|
-| ![dashboard dark](docs/screenshots/dashboard-dark.png) |
-| ![dashboard light](docs/screenshots/dashboard-light.png) |
-| ![dashboard glass](docs/screenshots/dashboard-glass.png) |
+| Dark | Light | Glass |
+|------|-------|-------|
+| ![dark](docs/screenshots/panel-dark.png) | ![light](docs/screenshots/panel-light.png) | ![glass](docs/screenshots/panel-glass.png) |
+
+**Local Agent usage dashboard** (live token spend / cost / cache hit — Dark / Light / Glass):
+
+| Dashboard Dark | Dashboard Light | Dashboard Glass |
+|------|------|------|
+| ![dashboard dark](docs/screenshots/dashboard-dark.png) | ![dashboard light](docs/screenshots/dashboard-light.png) | ![dashboard glass](docs/screenshots/dashboard-glass.png) |
 
 **Paste a key and go (HTTP channels) · One-click authorize in app (CLI channels, auto-opens browser) · Zero telemetry · Data never leaves your machine**
 
@@ -143,8 +147,7 @@ token-wallet/
 Current version **v0.2.8**, stable link (always points to the latest stable release, updated on every release):
 
 ```text
-http://10.200.1.88:8889/token-wallet_setup.exe     # self-hosted (dev channel, auto-tracks master)
-https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe  # official stable
+https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
 ```
 
 - Windows 10/11 x64; single-file fully-offline installer (~93 MB, bundles Chromium runtime, no external dependencies)
@@ -154,9 +157,9 @@ https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_set
 - Verify: compare the installer against `SHA256SUMS.txt` in the Release assets
 - First install: the installer is not code-signed; when SmartScreen says "Unknown publisher",
   click "More info" → "Run anyway" (expected behavior; signing is planned)
-- Auto-update: built-in `electron-updater` since v0.2.0 (D-046, hosted at
-  `http://10.200.1.88:8889/token-wallet/`); startup does a silent check-only; download and install
-  are always user-triggered; see Settings → About
+- Auto-update: built-in `electron-updater` since v0.2.0 (D-046, update source = gitee stable
+  `https://gitee.com/ITEater/token-wallet/releases/download/stable/`); startup does a silent
+  check-only; download and install are always user-triggered; see Settings → About
 
 ### Run from source
 

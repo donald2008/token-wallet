@@ -17,11 +17,15 @@
 > **多 Agent 时代的隐形炸弹**：token 消耗散落在各家套餐里 —— 5 小时滚动窗、周窗、月窗、按量余额。
 > 深夜的长任务挂了，你翻遍终端才发现：某家的额度两小时前就没了。**token-wallet 把这种死法从你的工作流里删除。**
 
-| Agent 用量大屏（Dark / Light / Glass） |
-|------|
-| ![dashboard dark](docs/screenshots/dashboard-dark.png) |
-| ![dashboard light](docs/screenshots/dashboard-light.png) |
-| ![dashboard glass](docs/screenshots/dashboard-glass.png) |
+| Dark | Light | Glass |
+|------|-------|-------|
+| ![dark](docs/screenshots/panel-dark.png) | ![light](docs/screenshots/panel-light.png) | ![glass](docs/screenshots/panel-glass.png) |
+
+**本地 Agent 用量大屏**（实时 token 消耗 / 成本 / 缓存命中 — Dark / Light / Glass）：
+
+| 大屏 Dark | 大屏 Light | 大屏 Glass |
+|------|------|------|
+| ![dashboard dark](docs/screenshots/dashboard-dark.png) | ![dashboard light](docs/screenshots/dashboard-light.png) | ![dashboard glass](docs/screenshots/dashboard-glass.png) |
 
 **填 Key 即用（HTTP 通道）· app 内一键授权（CLI 通道，自动打开浏览器）· 零遥测 · 数据不出本机**
 
@@ -132,11 +136,10 @@ token-wallet/
 
 ### 下载安装包（推荐）
 
-当前版本 **v0.2.8**，固定直链（始终指向最新稳定版，发版自动更新）：
+当前版本 **v0.2.8**，稳定版直链（始终指向最新稳定版，发版自动更新）：
 
 ```text
-http://10.200.1.88:8889/token-wallet_setup.exe     # 自家托管（开发版, 跟随 master 自动化更新）
-https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe  # 官方稳定版
+https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
 ```
 
 - Windows 10/11 x64，单文件全离线安装包（~93 MB，含 Chromium 运行时，无外部依赖）
@@ -145,9 +148,9 @@ https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_set
 - 校验：Release 附件中的 `SHA256SUMS.txt` 与安装包比对
 - 首次安装：安装包未做代码签名，SmartScreen 提示「未知发布者」时点
   「更多信息」→「仍要运行」即可（预期行为，签名将在后续版本解决）
-- 自动更新：v0.2.0+ 内置 `electron-updater` 自动更新（D-046，下载清单托管于
-  `http://10.200.1.88:8889/token-wallet/`），启动静默 check only；下载与安装始终用户点击触发，
-  详见设置页「关于」区
+- 自动更新：v0.2.0+ 内置 `electron-updater` 自动更新（D-046，更新源 = gitee stable
+  `https://gitee.com/ITEater/token-wallet/releases/download/stable/`），启动静默 check only；
+  下载与安装始终用户点击触发，详见设置页「关于」区
 
 ### 从源码运行
 

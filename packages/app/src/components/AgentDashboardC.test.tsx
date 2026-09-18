@@ -4,7 +4,7 @@
  * - testid 契约映射(40-handoff/contracts/testid-contract.md): hero-*→kpi-*(大数字锚
  *   hero-tokens/hero-cost 保留), detail-list→detail-table(testid 名保留, DOM ul→table)
  * - 金额可空留白契约(hero-cost is-empty; 明细表 pricing 未接入无金额列)
- * - 主题切换 aria-pressed 同步; 返回按钮 onBack; canvas 存在(chart.js 异步)
+ * - 主题切换/返回钮已删减契约(SL-08 B③); canvas 存在(chart.js 异步)
  * - t_12c28686/t_e83ad982 语义继承: agent tab 切换联动(现在落 Model 面板头, 联动明细行
  *   高亮 + 模型分布过滤); 模块空态(失败重试/积累中/单模型)
  * - t_5cf22ba4 回归锁: 补 0 桶/一位小数不吞项/tokens 标注
@@ -133,7 +133,6 @@ function mountDash(
       modelSummary={modelSummary}
       trendSummary={trendSummary}
       generatedAt={summary.generated_at}
-      onBack={() => {}}
       onRetry={() => {}}
       {...extra}
     />,
@@ -251,32 +250,14 @@ describe("AgentDashboardC(Ops Wall 常态渲染 SC-01)", () => {
     expect(note?.textContent).toContain("均值 40,500");
   });
 
-  it("主题切换 aria-pressed 同步", () => {
+  it("SL-08 B③: 顶栏主题切换/返回钮已删减 — 不再渲染, 主题跟随全局", () => {
     const { container: c } = mountDash();
-    const darkBtn = c.querySelector('[data-testid="agent-dashboard-c-theme-dark"]') as HTMLButtonElement;
-    const lightBtn = c.querySelector('[data-testid="agent-dashboard-c-theme-light"]') as HTMLButtonElement;
-    expect(darkBtn.getAttribute("aria-pressed")).toBe("true");
-    expect(lightBtn.getAttribute("aria-pressed")).toBe("false");
-    act(() => lightBtn.click());
-    expect(lightBtn.getAttribute("aria-pressed")).toBe("true");
-    expect(darkBtn.getAttribute("aria-pressed")).toBe("false");
-  });
-
-  it("返回按钮触发 onBack 回调", () => {
-    const onBack = vi.fn();
-    const { container: c } = mount(
-      <AgentDashboardC
-        summary={fakeSummary}
-        modelSummary={okResult}
-        trendSummary={okDayResult}
-        generatedAt={fakeSummary.generated_at}
-        onBack={onBack}
-        onRetry={() => {}}
-      />,
-    );
-    const back = c.querySelector('[data-testid="agent-dashboard-c-back"]') as HTMLButtonElement;
-    act(() => back.click());
-    expect(onBack).toHaveBeenCalledOnce();
+    // B③ 契约: 三 testid 全删(theme-dark/-light/-back), 顶栏只留标题+时间窗占位
+    expect(c.querySelector('[data-testid="agent-dashboard-c-theme-dark"]')).toBeNull();
+    expect(c.querySelector('[data-testid="agent-dashboard-c-theme-light"]')).toBeNull();
+    expect(c.querySelector('[data-testid="agent-dashboard-c-back"]')).toBeNull();
+    // 时间窗占位保留(C② 下周期填入切换)
+    expect(c.querySelector('[data-testid="agent-dashboard-c-window"]')).not.toBeNull();
   });
 
   it("footer 显示 generated_at 时间戳(agent-dashboard-c-meta)", () => {
@@ -369,7 +350,6 @@ describe("AgentDashboardC(多维数据面 + agent tab H4)", () => {
         modelSummary={failResult}
         trendSummary={okDayResult}
         generatedAt={fakeSummary.generated_at}
-        onBack={() => {}}
         onRetry={onRetry}
       />,
     );

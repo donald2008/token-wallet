@@ -47,8 +47,7 @@ export interface AgentDashboardCProps {
   trendSummary: McpQueryResult<UsageSummaryOutput>;
   /** 由调用方(mcpUsageSummary 返回 generatedAt)传入 — 避免组件内部再发请求 */
   generatedAt: string;
-  /** 返回主页回调(点 ← 返回) */
-  onBack: () => void;
+  /** SL-08 B③: onBack 已随顶栏返回钮删除(大屏是独立窗/全屏态, 无「返回主页」语义) */
   /** 模块空态「重试」回调 — 调用方重新并行拉取三维数据 */
   onRetry: () => void;
   /** SC-02(SL-03): 最近一次刷新三维查询全部失败 → 整屏降级形态

@@ -240,6 +240,31 @@ const meanLinePlugin = {
   },
 };
 
+/** SL-08 D-2: 趋势柱顶数值标签 chart.js plugin — 对稿 ops-wall `.bv`(10px muted 小数值,
+ *  appendix 漏写补实现)。0 高度桶(0 上报日)不画标签, 防零值噪音。 */
+const barValuePlugin = {
+  id: "barValue",
+  afterDatasetsDraw(chart: any) {
+    const meta = chart.getDatasetMeta(0);
+    const data = chart.data.datasets[0]?.data as number[] | undefined;
+    const area = chart.chartArea;
+    if (!meta || !data || !area) return;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.fillStyle = readThemeColor("--fg-dim", "#8b93a1");
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "center";
+    meta.data.forEach((bar: any, i: number) => {
+      const v = data[i] ?? 0;
+      if (v <= 0) return;
+      const y = bar.y;
+      if (y - 3 < area.top) return;
+      ctx.fillText(fmtTokens(v), bar.x, y - 3);
+    });
+    ctx.restore();
+  },
+};
+
 /** 模块空态(拉取失败/无数据)共用小结构 — 显式文案, 不静默空白(P0-8 原则) */
 function ModuleEmpty({
   text,
@@ -274,17 +299,16 @@ export function AgentDashboardC({
   modelSummary,
   trendSummary,
   generatedAt,
-  onBack,
   onRetry,
   offline: offlineProp,
   summaryStale: summaryStaleProp,
   modelStale: modelStaleProp,
   trendStale: trendStaleProp,
 }: AgentDashboardCProps): ReactNode {
-  const [touchedTheme, setTouchedTheme] = useState(false);
-  // 初始主题从全局 html data-theme 派生(尊重 dark-glass 等玻璃变体, t_15397c99 U5 字节互异前提);
-  // 用户在大屏内切换后仍走 dark/light 二态(组件内独立主题, mock 契约)。
-  const [theme, setTheme] = useState<ThemeMode>(() => {
+  // SL-08 B③: 顶栏主题切换钮已删(大屏主题跟随全局 html data-theme, 设置页仍可切换);
+  // 初始主题保留从全局派生(玻璃变体保留语义不变)。
+  // 初始主题从全局 html data-theme 派生(尊重 dark-glass 等玻璃变体, t_15397c99 U5 字节互异前提)。
+  const [theme] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return "dark";
     return document.documentElement.dataset.theme === "light" || document.documentElement.dataset.theme === "light-glass" ? "light" : "dark";
   });
@@ -386,6 +410,9 @@ export function AgentDashboardC({
             x: { grid: { display: false }, ticks: { color: c.fgDim, font: { size: 9 } } },
             y: {
               grid: { color: c.border + "55" },
+              // SL-08 D-2: grace 12% 给柱顶数值标签留头部空间(最高柱 4,474,000 的标签
+              // 原贴图区顶缘被裁), ticks 仍从 0 起; max 推断 = max*1.12 向上取整刻度
+              grace: "12%",
               ticks: {
                 color: c.fgDim,
                 font: { size: 10 },
@@ -395,7 +422,7 @@ export function AgentDashboardC({
             },
           },
         },
-        plugins: [meanLinePlugin],
+        plugins: [meanLinePlugin, barValuePlugin],
       } as any);
     }
 
@@ -448,13 +475,11 @@ export function AgentDashboardC({
   useEffect(() => {
     // dark-first 演示立场(mock 契约, 既有 e2e 锁定): 挂载即落 dark。
     // 全局为玻璃变体时保留玻璃语义(落 <base>-glass, U5 三主题字节互异的前提);
-    // 全局为对侧(light)或用户主动切换后落裸主题值。
+    // B③ 后大屏内无主动切换入口, touchedTheme 恒 false。
     const global = typeof window !== "undefined" ? document.documentElement.dataset.theme : undefined;
-    const keepGlassSuffix = touchedTheme
-      ? false
-      : global === "dark-glass" || global === "light-glass";
+    const keepGlassSuffix = global === "dark-glass" || global === "light-glass";
     document.documentElement.dataset.theme = keepGlassSuffix ? `${theme}-glass` : theme;
-  }, [theme, touchedTheme]);
+  }, [theme]);
 
   // t_12c28686 口径裁决(继承): KPI 总用量/三分项 = 全局 total, agent tab 只联动 Model 分布 + 明细高亮。
   const totalTokens =
@@ -538,47 +563,21 @@ export function AgentDashboardC({
       data-theme={theme}
       data-snapshot={offline ? "1" : undefined}
     >
-      {/* titlebar 40px: 状态点 · 产品语言标题(S10) + 副题 · 时间窗 · 主题/返回 */}
+      {/* titlebar 40px: 状态点 · 产品语言标题(S10) + 副题 · 时间窗空占位。
+       *  SL-08 B③(GATE 3 真机裁定): 顶栏主题切换/返回钮移除——大屏场景两者均无用,
+       *  主题切换仍从设置页可用(不回归); 时间窗 5小时/周/月切换属 C② 下一周期
+       *  (需 daemon window 参数), 此处只留空占位, 不做可交互半成品。 */}
       <header className="dash-titlebar">
         <i className="dash-titlebar-dot" aria-hidden="true" />
         <h1 className="dash-titlebar-title">
           {t("dash.title")}
           <span className="dash-titlebar-sub">
             {t("dash.subtitle", { window: "" })}
-            {/* testid 契约保留项: agent-dashboard-c-window(原时间窗显示位, SL-01 维持显示语义) */}
+            {/* testid 契约保留项: agent-dashboard-c-window(时间窗占位, C② 下周期填入) */}
             <span data-testid="agent-dashboard-c-window">{windowLabel}</span>
           </span>
         </h1>
-        <div className="dash-titlebar-controls">
-          <div className="theme-toggle" role="group" aria-label={t("dash.themeGroup")}>
-            <button
-              type="button"
-              data-theme="dark"
-              aria-pressed={theme === "dark"}
-              onClick={() => { setTouchedTheme(true); setTheme("dark"); }}
-              data-testid="agent-dashboard-c-theme-dark"
-            >
-              Dark
-            </button>
-            <button
-              type="button"
-              data-theme="light"
-              aria-pressed={theme === "light"}
-              onClick={() => { setTouchedTheme(true); setTheme("light"); }}
-              data-testid="agent-dashboard-c-theme-light"
-            >
-              Light
-            </button>
-          </div>
-          <button
-            type="button"
-            className="dash-btn"
-            onClick={onBack}
-            data-testid="agent-dashboard-c-back"
-          >
-            {t("dash.back")}
-          </button>
-        </div>
+        {/* B③ 删减占位: controls 区保留弹性占位, 后续周期接入时间窗切换 */}
       </header>
 
       {/* 降级横幅(SC-02, S14): 最近一次刷新三维查询全部失败(daemon 不可达)时显式状态
@@ -761,7 +760,8 @@ export function AgentDashboardC({
                               style={{ background: `var(${seriesVar(i)})` }}
                               aria-hidden="true"
                             />
-                            {s.model}
+                            {/* SL-08 修复①(配套): 文本进 <b> 承载 fixed 布局下的单元格内截断 */}
+                            <b>{s.model}</b>
                           </td>
                           <td className="num">{fmtWhole.format(s.calls)}</td>
                           <td className="num">{fmtTokens(s.tokens)}</td>

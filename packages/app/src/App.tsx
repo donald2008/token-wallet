@@ -431,6 +431,7 @@ function AppShell() {
   // ⚠️ 必须挂在所有早退 return 之前(Rules of Hooks) — consent/向导/方案页分支
   // 都会提前 return, hook 若在其后首次渲染(未 consent)不会被调用, 下次渲染钩子数
   // 变化直接崩整个 App(e2e 全量红的第一现场)。
+  // SL-08 B③: 顶栏返回钮已删, dashboardBack 仅供降级空态页(agent-dashboard-c-empty-back)使用。
   const dashboardBack = useCallback(() => {
     if (standalone) {
       void winClose();
@@ -526,7 +527,6 @@ function AppShell() {
             modelSummary={mcpModelSummary}
             trendSummary={mcpTrendSummary}
             generatedAt={mcpSummary.generatedAt}
-            onBack={dashboardBack}
             onRetry={() => void tick()}
             /* SL-03 降级形态: 三维全失败 = 整屏降级(SC-02 横幅+降饱和快照);
              * 单维失败且旧快照仍在 = 该面板级降级(SC-03 + H7 时效标注)。 */
