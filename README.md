@@ -20,6 +20,8 @@
 | Agent 用量大屏（Dark / Light / Glass） |
 |------|
 | ![dashboard dark](docs/screenshots/dashboard-dark.png) |
+| ![dashboard light](docs/screenshots/dashboard-light.png) |
+| ![dashboard glass](docs/screenshots/dashboard-glass.png) |
 
 **填 Key 即用（HTTP 通道）· app 内一键授权（CLI 通道，自动打开浏览器）· 零遥测 · 数据不出本机**
 

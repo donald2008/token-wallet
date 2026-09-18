@@ -1,76 +1,170 @@
 /* eslint-disable no-console */
 /**
- * README 截图产图 (v0.2.8 更新): 面板 dark/light/glass 三张 → docs/screenshots/
- * 用法: 先起 dev server (:1420, browser-only), 再 node e2e/capture-readme.cjs
- * 口径: 360×720 视口 (README 所述桌面部件尺寸), deviceScaleFactor 2 高清
- * 三主题: light(默认) / dark / glass(玻璃 50% 透明度演示)
+ * README 大屏截图产图 (t_9fdd07b5 B-1 收口): dashboard dark/light/glass 三张 → docs/screenshots/
+ * 用法: 先起 dev server (`pnpm dev:web`, 默认 :5173; 自定端口 `vite --port N` 后
+ *       `BASE=http://localhost:N node e2e/capture-readme.cjs`), 再跑本脚本。
+ *
+ * 口径对齐 SL-07 交付物 (1de4dd0) 与 e2e/agent-card.spec.ts:
+ * - standalone 产品路径 `?view=agent-dashboard&standalone=1` (真壳 main.ts 打开大屏同款 URL)
+ * - 900×560 视口 (electron/main.ts 窗口壳尺寸) + deviceScaleFactor 2 → 1800×1120 PNG
+ * - e2e 同源 mock 桥 (e2e/fixtures.ts ipcMocks) + fakeSummary 同源数据 — 数据单一事实源,
+ *   本脚本经 esbuild 转译直接 import e2e/fixtures.ts 与 e2e/agent-card.spec.ts, 不复制数据
+ * - 三主题: dark (产品默认) / light / glass (dark-glass 玻璃叠加层, alpha 0.5 演示)
  */
 const { chromium } = require("@playwright/test");
 const fs = require("fs");
 const path = require("path");
+const { buildSync } = require("esbuild");
 
-const BASE = "http://localhost:1420";
-const OUT = path.join(__dirname, "..", "..", "..", "docs", "screenshots");
+const APP = path.join(__dirname, "..");
+const BASE = process.env.BASE || "http://localhost:5173";
+const OUT = path.join(APP, "..", "..", "docs", "screenshots");
 // playwright 自带 chromium 优先, 兜底本机缓存路径(取证机无浏览器安装时)
 const CHROME_CACHED = "/root/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome";
 
+/** e2e/agent-card.spec.ts 内嵌 fakeSummary + deriveMultiFromSingle 提取 (数据与 e2e 断言同源, 不复制) */
+function loadFakeSummary() {
+  const src = fs.readFileSync(path.join(APP, "e2e", "agent-card.spec.ts"), "utf8");
+  const start = src.indexOf("const fakeSummary = {");
+  if (start < 0) throw new Error("fakeSummary not found in agent-card.spec.ts");
+  const open = src.indexOf("{", start);
+  let depth = 0;
+  let end = -1;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+  if (end < 0) throw new Error("fakeSummary braces unbalanced");
+  // eslint-disable-next-line no-eval
+  return eval(`(${src.slice(open, end)})`);
+}
+
+/** e2e/agent-card.spec.ts 内嵌 deriveMultiFromSingle 提取 (多维派生逻辑单一事实源, 不复制) */
+function loadDeriveMulti() {
+  const src = fs.readFileSync(path.join(APP, "e2e", "agent-card.spec.ts"), "utf8");
+  const start = src.indexOf("function deriveMultiFromSingle(");
+  if (start < 0) throw new Error("deriveMultiFromSingle not found in agent-card.spec.ts");
+  const open = src.indexOf("{", start);
+  let depth = 0;
+  let end = -1;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+  if (end < 0) throw new Error("deriveMultiFromSingle braces unbalanced");
+  // spec 源码是 TS: 剥参数注解后转 esbuild 转译再 eval (函数体含 (model: string) 等 TS 注解)
+  const jsSrc = src
+    .slice(start, end)
+    .replace(/\(\s*base:\s*typeof fakeSummary\s*\)/, "(base)");
+  const { code: tfCode } = require("esbuild").transformSync(jsSrc, {
+    loader: "ts",
+    format: "cjs",
+  });
+  // eslint-disable-next-line no-eval
+  const fn = eval(`(${tfCode.replace(/^var deriveMultiFromSingle = /, "").replace(/;?\s*$/, "")})`);
+  return fn;
+}
+
+/** e2e/fixtures.ts 的 ipcMocks + hostPage 初始化脚本经 esbuild 转译成 CJS 加载 (mock 桥单一事实源) */
+function buildIpcInitScript() {
+  const { outputFiles } = require("esbuild").buildSync({
+    entryPoints: [path.join(APP, "e2e", "fixtures.ts")],
+    bundle: true,
+    write: false,
+    format: "cjs",
+    platform: "node",
+    external: ["@playwright/test"],
+  });
+  const code = outputFiles[0].text;
+  const mod = { exports: {} };
+  new Function("require", "module", "exports", code)(require, mod, mod.exports);
+  const { ipcMocks } = mod.exports;
+  if (!ipcMocks) throw new Error("ipcMocks not exported from e2e/fixtures.ts");
+  const entries = Object.entries(ipcMocks)
+    .map(([channel, fn]) => `${JSON.stringify(channel)}: (${fn.toString()})`)
+    .join(",\n");
+  return `(() => {
+      const handlers = {\n${entries}\n};
+      window.__capturedInvokes = [];
+      window.__updaterListeners = [];
+      window.__pushUpdaterEvent = (event) => {
+        for (const cb of window.__updaterListeners) cb(event);
+      };
+      window.tokenWallet = {
+        invoke: (channel, payload) => {
+          window.__capturedInvokes.push({ cmd: channel, args: payload });
+          const h = handlers[channel];
+          return Promise.resolve(h ? h(payload) : null);
+        },
+        onUpdaterEvent: (callback) => {
+          window.__updaterListeners.push(callback);
+        },
+      };
+    })()`;
+}
+
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
+  const fakeSummary = loadFakeSummary();
+  // 多维 seed (agent + agent,model + day 三维度, 与 e2e L2 冒烟 2 同源):
+  // Model 分布面板渲染 glm+kimi 两行 — 单维 seed 会让 Model 面板落空态(实测咬过)。
+  const multiSeed = loadDeriveMulti()(fakeSummary);
+  const seedJson = JSON.stringify({ byGroupBy: multiSeed });
+  const initScript = buildIpcInitScript();
   const browser = await chromium.launch({
     headless: true,
     executablePath: fs.existsSync(CHROME_CACHED) ? CHROME_CACHED : undefined,
     args: ["--no-sandbox", "--disable-gpu", "--force-color-profile=srgb"],
   });
-  const ctx = await browser.newContext({
-    viewport: { width: 360, height: 720 },
-    deviceScaleFactor: 2,
-  });
-  // 预置 consent = 已过首开 + 默认 light 主题 + glass 默认关
-  await ctx.addInitScript(() => {
-    localStorage.setItem("token-wallet.consent.v1", "1");
-  });
-  const page = await ctx.newPage();
-  page.on("pageerror", (e) => console.log("[pageerror]", e.message));
-  const shot = (n) =>
-    page.screenshot({ path: path.join(OUT, `${n}.png`) }).then(() => console.log("shot:", n));
 
-  await page.goto(BASE, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
-
-  // 生产构建里 ScenarioBar 因 import.meta.env.DEV=false 不渲染(dev-only 组件)。
-  // browser 预览无该编译开关, 此处隐藏 = 忠实模拟生产形态, 非修饰。
-  await page.addStyleTag({ content: ".scenario-bar { display: none !important; }" });
-  await page.waitForTimeout(800);
-
-  // ① Light（默认）
-  await shot("panel-light");
-
-  // ② Dark：设置页 → theme-dark
-  await page.click('[data-testid="settings-btn"]');
-  await page.waitForTimeout(400);
-  await page.click('[data-testid="theme-dark"]');
-  await page.waitForTimeout(400);
-  await page.keyboard.press("Escape").catch(() => {});
-  await page.waitForTimeout(600);
-  await shot("panel-dark");
-
-  // ③ Glass：设置页 → 保持 dark（glass 是 dark/light 上的叠加层）+ 勾 glass-toggle + 滑槽 50%
-  await page.click('[data-testid="settings-btn"]');
-  await page.waitForTimeout(400);
-  await page.click('[data-testid="glass-toggle"]');
-  await page.waitForTimeout(400);
-  // 透明度滑槽: 拖到中间 (50%) —— data-testid="glass-alpha-input"
-  const slider = await page.$('#glass-alpha-input');
-  if (slider) {
-    const box = await slider.boundingBox();
-    if (box) {
-      await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
-      await page.waitForTimeout(400);
-    }
+  for (const [name, theme] of [
+    ["dashboard-dark", { theme: "dark", glass: false }],
+    ["dashboard-light", { theme: "light", glass: false }],
+    ["dashboard-glass", { theme: "dark", glass: true }],
+  ]) {
+    const ctx = await browser.newContext({
+      viewport: { width: 900, height: 560 },
+      deviceScaleFactor: 2,
+      colorScheme: "dark",
+    });
+    // e2e 同源: mock 桌面桥(转译自 fixtures.ts) + consent 已过 + mcp usage seed + 主题/glass 预置。
+    // 全部走 addInitScript 页面加载前落位(渲染首帧即读到数据, 无需首载+reload)。
+    await ctx.addInitScript(initScript);
+    await ctx.addInitScript(
+      ([t, glassOn, seed]) => {
+        localStorage.setItem("token-wallet.mock.consent.v1", "1");
+        localStorage.setItem("token-wallet.theme.v1", t);
+        localStorage.setItem("token-wallet.glass.v1", glassOn ? "1" : "0");
+        if (glassOn) localStorage.setItem("token-wallet.glassAlpha.v1", "0.5");
+        localStorage.setItem("token-wallet.mock.mcp.usage", seed);
+      },
+      [theme.theme, theme.glass, seedJson],
+    );
+    const page = await ctx.newPage();
+    page.on("pageerror", (e) => console.log("[pageerror]", e.message));
+    // standalone 产品路径 = electron/main.ts 打开大屏窗口同款 URL(?view=agent-dashboard&standalone=1)
+    await page.goto(`${BASE}/?view=agent-dashboard&standalone=1`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="agent-dashboard-c"]', { state: "visible", timeout: 10000 });
+    // 等 chart.js 异步渲染 + 字体/动画落定
+    await page.waitForTimeout(1200);
+    await page.screenshot({ path: path.join(OUT, `${name}.png`) });
+    console.log("shot:", name);
+    await ctx.close();
   }
-  await page.keyboard.press("Escape").catch(() => {});
-  await page.waitForTimeout(600);
-  await shot("panel-glass");
 
   await browser.close();
   console.log("DONE ->", OUT);

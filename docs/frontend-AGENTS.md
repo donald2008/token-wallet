@@ -228,7 +228,7 @@ pnpm -C packages/app build            # vite build → dist
 
 本地 Agent 大屏（`AgentDashboardC`，900×560 窗口壳，样式源 `app-dash.css`）的面板语法，改大屏 UI 前必读：
 
-- **12 列面板墙**：`.dash-grid = grid-template-columns: repeat(12, 1fr)`，gutter `var(--space-12, 12px)`（grid 自身 padding 为 4px 微调值）；KPI 带 4×span3，趋势/明细 span8，Model/三分项 span4。面板宽度与列跨度绑定，禁止 flex-wrap 流式回退。
+- **12 列面板墙**：`.dash-grid = grid-template-columns: repeat(12, 1fr)`，gutter `var(--space-12, 12px)`（grid 自身 padding 为 4px 微调值）。注意：产品大屏窗口恒为 900×560（`electron/main.ts`），恒命中 `app-dash.css` 紧凑段（`@media (max-height:640px)`）→ 实际渲染 gutter 为 8px（`--space-8`）；12px 仅为宽松视口（高度 >640px）基态，产品窗口不会出现。KPI 带 4×span3，趋势/明细 span8，Model/三分项 span4。面板宽度与列跨度绑定，禁止 flex-wrap 流式回退。
 - **3px 状态顶缘**：面板状态用顶部 3px 状态色缘线表达（`.dash-kpi::before`，KPI 按系列色 `--chart-1..4`；`is-stale` 变体沿同语法），**禁整卡红/黄底渲染**（S11 状态色仅小面积：点/缘线/文字，禁四重编码）。
 - **发丝线**：面板边框与分隔线用 hairline（`var(--border)` 系），面板头 13px/500 + hairline 下缘，禁粗边框。
 - **图例 = 色点 chips**：图表图例用色点 chip 行（趋势/环形旁），不画大块图例表。

@@ -23,6 +23,8 @@ countdowns, and "days remaining" estimated from your consumption rate.
 | Agent Usage Dashboard (Dark / Light / Glass) |
 |------|
 | ![dashboard dark](docs/screenshots/dashboard-dark.png) |
+| ![dashboard light](docs/screenshots/dashboard-light.png) |
+| ![dashboard glass](docs/screenshots/dashboard-glass.png) |
 
 **Paste a key and go (HTTP channels) · One-click authorize in app (CLI channels, auto-opens browser) · Zero telemetry · Data never leaves your machine**
 
