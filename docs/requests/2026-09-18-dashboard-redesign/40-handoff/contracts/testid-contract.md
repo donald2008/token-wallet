@@ -8,9 +8,9 @@
 | testid（旧） | 处置 | 说明 |
 |---|---|---|
 | agent-dashboard-c | 保留 | 根容器 |
-| agent-dashboard-c-back | 保留 | 返回主页 |
-| agent-dashboard-c-window | 保留 | 时间窗切换（titlebar 副题补回） |
-| agent-dashboard-c-theme-dark / -light | 保留 ×2 | 大屏内主题切换 |
+| agent-dashboard-c-back | **删除**（SL-08 B③） | 顶栏返回钮移除（GATE 3 真机裁定：大屏无返回场景）；`dashboardBack` testid 保留给降级空态页 |
+| agent-dashboard-c-window | 保留（占位） | 时间窗空占位（C② 时间窗切换属下周期，本周期禁半成品交互） |
+| agent-dashboard-c-theme-dark / -light | **删除**（SL-08 B③） | 大屏内主题切换移除；主题切换仍从设置页可用（删减不回归设置页功能） |
 | agent-dashboard-c-hero-tokens / -cost | 保留 ×2 | KPI 大数字锚（新 kpi-* 体系并存） |
 | agent-dashboard-c-calls | **删除** | 数据保留：KPI 副行 + Model 表调用列（单测 L176 有断言） |
 | agent-dashboard-c-output | **删除** | 数据保留：Model 表 output 列（单测 L494 有断言） |
