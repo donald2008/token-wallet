@@ -144,7 +144,7 @@ token-wallet/
 
 ### Download the installer (recommended)
 
-Current version **v0.2.8**, stable link (always points to the latest stable release, updated on every release):
+Current version **v0.2.9**, stable link (always points to the latest stable release, updated on every release):
 
 ```text
 https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
@@ -268,10 +268,10 @@ never plaintext. Snapshots land in local SQLite. The app has no telemetry/report
 the only network requests are to the official endpoints of channels you added on the Settings page.
 
 **Q: Upgrading from v0.2.6 or earlier?**
-v0.2.8 ships with auto-update (D-046): Settings → About → "Check for updates" → auto-download the latest
+v0.2.9 ships with auto-update (D-046): Settings → About → "Check for updates" → auto-download the latest
 NSIS installer → "Restart to install" → done. Instances, settings, SQLite snapshots are all preserved
 (NSIS `deleteAppDataOnUninstall:false` + stable userData directory).
-If you're on a pre-v0.2.0 version, download the v0.2.8 installer manually once, then auto-update kicks in.
+If you're on a pre-v0.2.0 version, download the v0.2.9 installer manually once, then auto-update kicks in.
 
 ## Docs
 

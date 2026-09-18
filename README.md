@@ -136,7 +136,7 @@ token-wallet/
 
 ### 下载安装包（推荐）
 
-当前版本 **v0.2.8**，稳定版直链（始终指向最新稳定版，发版自动更新）：
+当前版本 **v0.2.9**，稳定版直链（始终指向最新稳定版，发版自动更新）：
 
 ```text
 https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
@@ -250,10 +250,10 @@ Key 存 OS 钥匙串（Windows 凭据管理器 / macOS Keychain），配置文�
 SQLite。应用无任何遥测/上报代码，网络请求只有你在设置页添加的通道对应官方端点。
 
 **Q：从 v0.2.6 / 更早版本升级？**
-v0.2.8 内置自动更新（D-046）：设置页「关于」区点「检查更新」→ 自动下载最新 NSIS 包 →
+v0.2.9 内置自动更新（D-046）：设置页「关于」区点「检查更新」→ 自动下载最新 NSIS 包 →
 点「重启安装」完成更新；实例配置、settings、SQLite 快照全部保留
 （NSIS `deleteAppDataOnUninstall:false` + userData 目录稳定）。
-若仍在用早期 v0.2.0 之前的版本，先下载 v0.2.8 安装包手动装一次，之后即自动更新。
+若仍在用早期 v0.2.0 之前的版本，先下载 v0.2.9 安装包手动装一次，之后即自动更新。
 
 ## 文档
 
