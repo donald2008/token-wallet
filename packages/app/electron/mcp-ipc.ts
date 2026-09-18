@@ -1,0 +1,406 @@
+/**
+ * MCP daemon IPC 桥注册(D-055, t_4bd214de):
+ * 把 mcp-env/mcp-daemon/mcp-autostart 三个纯逻辑模块挂到 ipcMain.handle。
+ *
+ * 11 通道: mcp_probe / mcp_start / mcp_stop / mcp_restart / mcp_get_config / mcp_gen_key /
+ *         mcp_set_autostart / mcp_get_autostart / mcp_get_guide /
+ *         mcp_usage_summary / mcp_usage_report_echo(t_9255cb63)
+ *  (round-2 增 mcp_restart 编排 stop+start, 让 key regen 后 daemon 真实重启用上新 key)
+ *  (t_9255cb63 增 usage_summary + usage_report_echo 读数据桥 — 主页 Agent 卡 + 大屏方案 C 数据源)
+ *
+ * 默认 shim:
+ * - SpawnShim: 默认实现 spawn/killTree/wait(走 node:child_process + signal)
+ * - PathShim: 默认实现 resolveDaemonPath(resources/token-wallet-mcp[.exe])
+ * - HttpShim: 默认实现 fetch + AbortController(POST /mcp initialize, 卡体钉死不裸 TCP)
+ * - QueryHttpShim: 默认实现 fetch + AbortController(POST /mcp tools/call, Bearer 鉴权);
+ *   与 mcp-daemon 用的 HttpShim 是**不同形态**(一个做 initialize 握手, 一个做 streamable-http 调用),
+ *   故独立成 QueryHttpShim 接口避免耦合。
+ * - AppShim: 注入 electron app 的 setLoginItemSettings/getLoginItemSettings;
+ *   真运行时由 main.ts 注入 {setLoginItemSettings, getLoginItemSettings}; 单测注入 mock。
+ */
+import { ipcMain } from "electron";
+import * as path from "node:path";
+import {
+  type HttpShim,
+  type PathShim,
+  type ProbeResult,
+  type SpawnShim,
+  type SpawnShimDiscovery,
+  checkDaemonVersion,
+  type DaemonVersionCheck,
+  defaultDiscoveryShim,
+  defaultPathShim,
+  defaultSpawnShim,
+  discoverPidByPort,
+  getLastStartedPid,
+  isInstalled as isInstalledFn,
+  probe as probeFn,
+  start as startFn,
+  stop as stopFn,
+} from "./mcp-daemon";
+import {
+  callMcpToolFromEnv,
+  defaultHttpShim as defaultQueryHttpShim,
+  McpCallError,
+  type HttpShim as QueryHttpShim,
+  type UsageReportEchoInput,
+  type UsageReportEchoOutput,
+  type UsageSummaryInput,
+  type UsageSummaryOutput,
+} from "./mcp-query";
+import { connectHost, displayHost } from "./mcp-address";
+import { loadMcpEnv, regenerateKey } from "./mcp-env";
+import { readMcpAutostart, resolveOsAutostart, writeMcpAutostart } from "./mcp-autostart";
+import type { StoragePaths } from "./paths";
+
+/** electron app 的最小接口注入(单测可用 mock 替代) */
+export interface AppShim {
+  setLoginItemSettings(opts: { openAtLogin: boolean }): void;
+  getLoginItemSettings(): { openAtLogin: boolean };
+}
+
+export interface McpIpcDeps {
+  isPackaged: boolean;
+  appRoot: string;
+  platform: NodeJS.Platform;
+  storagePathsFn: () => StoragePaths;
+  settingsFilePathFn: () => string;
+  app: AppShim;
+  spawn?: SpawnShim;
+  paths?: PathShim;
+  http?: HttpShim;
+  /** query 桥 shim — 注入便于 vitest mock http 失败/超时;默认 defaultQueryHttpShim */
+  queryHttp?: QueryHttpShim;
+  /** t_1b396e2f: 端口归属反查 shim(netstat/ss execFile) — 单测注入 fake; 默认走真命令 */
+  discovery?: SpawnShimDiscovery;
+}
+
+/** 默认 fetch 实现: POST /mcp initialize + AbortController 超时, 返回 { status } */
+export function defaultHttpShim(): HttpShim {
+  return {
+    postInitialize: async (url, timeoutMs, key) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // fastmcp streamable-http 要求双 Accept, 单 application/json → 406 (t_da2fd1f1 U6b)
+            Accept: "application/json, text/event-stream",
+            // daemon 鉴权不豁免 initialize — probe 必须带 key, 否则 401 误判不活 (t_da2fd1f1 U6b)
+            ...(key ? { Authorization: `Bearer ${key}` } : {}),
+          },
+          // MCP initialize envelope 最小骨架(daemon 端具体字段由 A 卡定义)
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: { protocolVersion: "2025-03-26", capabilities: {} },
+          }),
+          signal: ctrl.signal,
+        });
+        return { status: resp.status };
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    // t_1b396e2f 版本一致性: GET /guide(JSON, BearerAuth 之外) → 拿 daemon 自报 build_id
+    getGuide: async (url, timeoutMs) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const resp = await fetch(url, { signal: ctrl.signal });
+        return { status: resp.status, body: await resp.text() };
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  };
+}
+
+export function registerMcpIpc(deps: McpIpcDeps): void {
+  const spawn = deps.spawn ?? defaultSpawnShim();
+  const paths = deps.paths ?? defaultPathShim();
+  const http = deps.http ?? defaultHttpShim();
+  const queryHttp = deps.queryHttp ?? defaultQueryHttpShim();
+  const discovery = deps.discovery ?? defaultDiscoveryShim();
+  const app = deps.app;
+  const configDir = (): string => deps.storagePathsFn().configDir;
+  /** stop/restart 兜底所需的完整 probe 目标(归一 connect 地址 + key) */
+  const probeTarget = (cfg: ReturnType<typeof loadMcpEnv>) => ({
+    host: connectHost(cfg.TOKEN_WALLET_HOST),
+    port: cfg.TOKEN_WALLET_PORT,
+    key: cfg.TOKEN_WALLET_MCP_KEY,
+  });
+
+  // ---- 通道: mcp_probe ----
+  ipcMain.handle("mcp_probe", async (): Promise<ProbeResult & { installed: boolean }> => {
+    const installed = isInstalledFn(paths, deps.platform, deps.isPackaged, deps.appRoot);
+    if (!installed) return { alive: false, reason: "unreachable", installed: false };
+    const cfg = loadMcpEnv(configDir());
+    // t_da2fd1f1 U6: HOST 是 bind 地址 — 通配(0.0.0.0/::)不能作 connect 目标(Windows 挂起超时),
+    // 连接侧统一归一 127.0.0.1(通配 bind 必含 loopback)
+    const r = await probeFn(probeTarget(cfg), http);
+    return { ...r, installed: true };
+  });
+
+  // ---- 通道: mcp_start ----
+  ipcMain.handle("mcp_start", async () => {
+    const cfg = loadMcpEnv(configDir());
+    return startFn(
+      {
+        // U6: start 里 spawn env 的 HOST 保留 cfg 原值(bind 语义), 但就绪 probe 走归一 connect 地址
+        host: cfg.TOKEN_WALLET_HOST,
+        port: cfg.TOKEN_WALLET_PORT,
+        key: cfg.TOKEN_WALLET_MCP_KEY,
+        dbPath: cfg.TOKEN_WALLET_DB_PATH,
+        ttlDays: cfg.USAGE_TTL_DAYS,
+        connectAddress: connectHost(cfg.TOKEN_WALLET_HOST),
+      },
+      spawn,
+      http,
+      paths,
+      deps.appRoot,
+      deps.isPackaged,
+      deps.platform,
+    );
+  });
+
+  // ---- 通道: mcp_stop ----
+  // t_1b396e2f: pid 解析 = payload > lastStartedPid 缓存 > **端口归属反查**(netstat/ss)。
+  // pid_required 终态消失 — daemon 在跑端口必被占, 端口是唯一不会说谎的事实源;
+  // 反查也失败(权限/命令卡死) → 显式返 discovery_failed, 不静默绕过。
+  ipcMain.handle(
+    "mcp_stop",
+    async (_event, payload: { pid?: number } | undefined): Promise<{ stopped: boolean; reason?: string }> => {
+      const cfg = loadMcpEnv(configDir());
+      let pid = Number(payload?.pid ?? 0) || getLastStartedPid() || 0;
+      if (!pid) {
+        const r = await probeFn(probeTarget(cfg), http);
+        if (!r.alive) return { stopped: true }; // 本来就没跑 → 幂等成功
+        // daemon 活但缓存无 pid → 端口反查
+        const owner = discoverPidByPort(cfg.TOKEN_WALLET_PORT, discovery, deps.platform);
+        if (!owner) {
+          const alive2 = await probeFn(probeTarget(cfg), http);
+          return alive2.alive ? { stopped: false, reason: "discovery_failed" } : { stopped: true };
+        }
+        pid = owner;
+      }
+      return stopFn(pid, spawn, http, probeTarget(cfg), deps.platform, discovery);
+    },
+  );
+
+  // ---- 通道: mcp_restart(t_4bd214de round-2 BLOCKING-1; t_1b396e2f 修复假绿)----
+  // 编排 stop + start + 等就绿。t_1b396e2f: 无缓存 pid 时**不再跳过 stop 直接 start** —
+  // 旧行为会让新 exe 因 :9131 被旧 daemon 占用而自退, poll 又被旧 daemon 应答 200 骗绿,
+  // 返 started:true 并缓存死 pid。现一律先停(stop 内部端口反查兜底), startFn 里另有
+  // 「probe 已活即属他人 → 禁 spawn」护栏, 双保险封死假绿路径。
+  ipcMain.handle(
+    "mcp_restart",
+    async (): Promise<{ restarted: boolean; started: boolean; pid?: number; reason?: string }> => {
+      const cfg = loadMcpEnv(configDir());
+      const pid = getLastStartedPid() ?? 0;
+      const r = await stopFn(pid, spawn, http, probeTarget(cfg), deps.platform, discovery);
+      const stoppedOk = r.stopped;
+      const stopReason = r.reason;
+      // stop 失败(started=false 语义: 端口仍被占)时**不 spawn** — 否则回到假绿老路
+      if (!stoppedOk) {
+        return { restarted: false, started: false, reason: stopReason ?? "stop_failed" };
+      }
+      const sr = await startFn(
+        {
+          host: cfg.TOKEN_WALLET_HOST,
+          port: cfg.TOKEN_WALLET_PORT,
+          key: cfg.TOKEN_WALLET_MCP_KEY,
+          dbPath: cfg.TOKEN_WALLET_DB_PATH,
+          ttlDays: cfg.USAGE_TTL_DAYS,
+          connectAddress: connectHost(cfg.TOKEN_WALLET_HOST),
+        },
+        spawn,
+        http,
+        paths,
+        deps.appRoot,
+        deps.isPackaged,
+        deps.platform,
+      );
+      return {
+        restarted: stoppedOk,
+        started: sr.started,
+        pid: sr.pid,
+        reason: sr.reason,
+      };
+    },
+  );
+
+  // ---- 通道: mcp_get_config ----
+  // 返回 5 键位 + mcpEnvPath + installed; key 明文仅 IPC 内部用, UI 走 mcp_get_config 拿后前端 maskKey
+  // t_1b396e2f: 并入 daemonVersion(build_id 比对) — panel 直接渲染陈旧提示, 不发第二程 IPC
+  ipcMain.handle("mcp_get_config", async () => {
+    const cfg = loadMcpEnv(configDir());
+    const daemonPath = paths.resolveDaemonPath(deps.platform, deps.isPackaged, deps.appRoot);
+    const daemonVersion = await checkDaemonVersion(
+      { host: connectHost(cfg.TOKEN_WALLET_HOST), port: cfg.TOKEN_WALLET_PORT },
+      daemonPath,
+      http,
+    );
+    return {
+      TOKEN_WALLET_MCP_KEY: cfg.TOKEN_WALLET_MCP_KEY,
+      TOKEN_WALLET_PORT: cfg.TOKEN_WALLET_PORT,
+      TOKEN_WALLET_HOST: cfg.TOKEN_WALLET_HOST,
+      TOKEN_WALLET_DB_PATH: cfg.TOKEN_WALLET_DB_PATH,
+      USAGE_TTL_DAYS: cfg.USAGE_TTL_DAYS,
+      // U6: 通配 bind 时 UI 展示局域网 IPv4(bind 0.0.0.0 不是可访问地址)
+      displayEndpoint: `http://${displayHost(cfg.TOKEN_WALLET_HOST)}:${cfg.TOKEN_WALLET_PORT}/mcp`,
+      mcpEnvPath: path.join(configDir(), "mcp.env"),
+      installed: isInstalledFn(paths, deps.platform, deps.isPackaged, deps.appRoot),
+      daemonVersion,
+    };
+  });
+
+  // ---- 通道: mcp_check_version (t_1b396e2f) ----
+  // 独立版本一致性检查(probe 活后按需调用; get_config 已并入同逻辑, 此通道供单点复查)
+  ipcMain.handle("mcp_check_version", async (): Promise<DaemonVersionCheck> => {
+    const cfg = loadMcpEnv(configDir());
+    const daemonPath = paths.resolveDaemonPath(deps.platform, deps.isPackaged, deps.appRoot);
+    return checkDaemonVersion(
+      { host: connectHost(cfg.TOKEN_WALLET_HOST), port: cfg.TOKEN_WALLET_PORT },
+      daemonPath,
+      http,
+    );
+  });
+
+  // ---- 通道: mcp_gen_key ----
+  // 生成新 32hex key, 写盘; daemon 重启由前端持有 pid 调 mcp_stop + mcp_start
+  // (后端无 pid 持有, 此通道只负责生成 + 写盘, 重启逻辑由 renderer 编排)
+  ipcMain.handle("mcp_gen_key", async (): Promise<{ key: string; daemonWasRunning: boolean }> => {
+    const cfg = loadMcpEnv(configDir());
+    const newKey = regenerateKey(configDir());
+    const probeResult = await probeFn(probeTarget(cfg), http);
+    return { key: newKey, daemonWasRunning: probeResult.alive };
+  });
+
+  // ---- 通道: mcp_set_autostart ----
+  // Q1 决议 B 联动: mcp 开 ⇒ app 自启也开; mcp 关 ⇒ 保持 app 原态
+  ipcMain.handle("mcp_set_autostart", async (_event, payload: { enabled?: boolean }) => {
+    const enabled = Boolean(payload?.enabled);
+    writeMcpAutostart(deps.settingsFilePathFn(), enabled);
+    const appActual = safeGetLoginItem(app);
+    const osTarget = resolveOsAutostart(enabled, appActual);
+    try {
+      app.setLoginItemSettings({ openAtLogin: osTarget });
+    } catch {
+      /* 平台不支持时静默(同 D-024) */
+    }
+    if (osTarget !== appActual) {
+      try {
+        const { recordAutostart } = await import("./persist");
+        recordAutostart(deps.settingsFilePathFn(), osTarget);
+      } catch {
+        /* 写盘失败不阻断 UI */
+      }
+    }
+    return { mcpAutostart: enabled, osAutostart: osTarget };
+  });
+
+  // ---- 通道: mcp_get_autostart ----
+  ipcMain.handle("mcp_get_autostart", async () => {
+    const mcp = readMcpAutostart(deps.settingsFilePathFn());
+    const appActual = safeGetLoginItem(app);
+    return { mcpAutostart: mcp, osAutostart: resolveOsAutostart(mcp, appActual) };
+  });
+
+  // ---- 通道: mcp_get_guide ----
+  // 调 daemon GET /guide → JSON(agents 数组); daemon 未跑 → 返回空 + reason
+  ipcMain.handle("mcp_get_guide", async () => {
+    const cfg = loadMcpEnv(configDir());
+    const probeR = await probeFn(probeTarget(cfg), http);
+    if (!probeR.alive) return { agents: [], reason: "daemon_not_running" as const };
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 3000);
+      try {
+        const url = `http://${connectHost(cfg.TOKEN_WALLET_HOST)}:${cfg.TOKEN_WALLET_PORT}/guide`;
+        const resp = await fetch(url, { signal: ctrl.signal });
+        if (!resp.ok) return { agents: [], reason: "fetch_failed" as const };
+        const data = (await resp.json()) as { agents?: unknown };
+        return { agents: Array.isArray(data.agents) ? data.agents : [], reason: undefined };
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch {
+      return { agents: [], reason: "fetch_failed" as const };
+    }
+  });
+
+  // ---- 通道: mcp_usage_summary(t_9255cb63, D-055 后续)----
+  // 调 daemon `usage_summary` 工具(主页 Agent 卡 + 大屏方案 C 数据源)。
+  // daemon 不可达 / 401 / 协议错 → 抛 McpCallError 由 renderer 归类降级。
+  // 注: 不做 probe 预检 — daemon 未跑时直接 fast-fail,UI 走"daemon 未连接"空态。
+  ipcMain.handle(
+    "mcp_usage_summary",
+    async (
+      _event,
+      input: UsageSummaryInput,
+    ): Promise<{ ok: true; data: UsageSummaryOutput } | { ok: false; reason: string }> => {
+      const t0 = Date.now();
+      try {
+        const r = await callMcpToolFromEnv<UsageSummaryOutput>(
+          configDir(),
+          { name: "usage_summary", arguments: (input ?? {}) as Record<string, unknown> },
+          queryHttp,
+          { timeoutMs: 5000 },
+        );
+        // round-7 终结日志: 每次 IPC 调用一条(状态+耗时+行数) — 成功/失败速率
+        // 与延迟分布直接可统计, 间歇性问题不再需要现场守着抓。
+        const rows = r.parsed.rows?.length ?? -1;
+        console.log(`[mcp-ipc] usage_summary ok=true ${Date.now() - t0}ms rows=${rows}`);
+        return { ok: true, data: r.parsed };
+      } catch (e) {
+        const kind = e instanceof McpCallError ? e.kind : "protocol_error";
+        console.log(
+          `[mcp-ipc] usage_summary ok=false ${Date.now() - t0}ms reason=${kind} detail=${e instanceof Error ? e.message : String(e)}`,
+        );
+        if (e instanceof McpCallError) return { ok: false, reason: e.kind };
+        return { ok: false, reason: "protocol_error" };
+      }
+    },
+  );
+
+  // ---- 通道: mcp_usage_report_echo(t_9255cb63, D-055 后续)----
+  // 调 daemon `usage_report_echo` 工具(明细对账,大屏方案 C 右下象限数据源)。
+  ipcMain.handle(
+    "mcp_usage_report_echo",
+    async (
+      _event,
+      input: UsageReportEchoInput,
+    ): Promise<{ ok: true; data: UsageReportEchoOutput } | { ok: false; reason: string }> => {
+      const t0 = Date.now();
+      try {
+        const r = await callMcpToolFromEnv<UsageReportEchoOutput>(
+          configDir(),
+          { name: "usage_report_echo", arguments: (input ?? {}) as Record<string, unknown> },
+          queryHttp,
+          { timeoutMs: 5000 },
+        );
+        console.log(`[mcp-ipc] usage_report_echo ok=true ${Date.now() - t0}ms`);
+        return { ok: true, data: r.parsed };
+      } catch (e) {
+        const kind = e instanceof McpCallError ? e.kind : "protocol_error";
+        console.log(
+          `[mcp-ipc] usage_report_echo ok=false ${Date.now() - t0}ms reason=${kind} detail=${e instanceof Error ? e.message : String(e)}`,
+        );
+        if (e instanceof McpCallError) return { ok: false, reason: e.kind };
+        return { ok: false, reason: "protocol_error" };
+      }
+    },
+  );
+}
+
+function safeGetLoginItem(app: AppShim): boolean {
+  try {
+    return app.getLoginItemSettings().openAtLogin;
+  } catch {
+    return false;
+  }
+}

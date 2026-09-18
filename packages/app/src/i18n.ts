@@ -21,8 +21,9 @@ type DictPaths<T, P extends string = ""> = T extends string
   ? P
   : { [K in keyof T & string]: DictPaths<T[K], P extends "" ? K : `${P}.${K}`> }[keyof T & string];
 
-/** zh 字典(canonical): 全量既有用户可见文案原样搬入 */
-const zh = {
+/** zh 字典(canonical): 全量既有用户可见文案原样搬入
+ * (t_36b7ecb1 SL-04: 导出供 i18n.test.ts 结构性断言遍历 zh/en 键位)。 */
+export const zh = {
   common: {
     add: "添加 Provider",
     back: "← 返回",
@@ -101,11 +102,22 @@ const zh = {
     lampAuthTitle: "登录态失效, 亮黄灯",
     lampAuthAria: "auth_expired 黄灯",
     statusDot: "状态: {label}",
+    /* t_5d8c3c81 只读缓存语义: 异常卡有旧数据时, 标注数据时效让用户知道不是最新值 */
+    staleFetchedAgo: "当前数据为 {ago} 采集(非最新)",
+    /* t_12bdc277 火山授权三连 P0 + L1/L2 引导(2026-09-11):
+     * cli_missing: 授权阶段 CLI 不可用, 用户无需翻日志也能自助恢复 */
+    authCliMissingTitle: "{cli} 未安装或不在 PATH",
+    authCliMissingInstall: "请先安装: {cmd}",
+    authCliMissingRestart: "装完需重启 app(PATH 继承)",
+    authCliMissingPathHintTitle: "检测到 npm 全局目录 {prefix} 不在 PATH",
+    authCliMissingPathHintDesc: "包已安装但 app 找不到。请把 npm prefix 加入 PATH 后重启 app:",
+    authCliMissingPathHintCmd: "$env:Path = \"{prefix};$env:Path\"",
   },
   ago: {
     now: "刚刚",
     minutes: "{n} 分钟前",
     hours: "{n} 小时前",
+    days: "{n} 天前",
   },
   reset: {
     soon: "即将重置",
@@ -144,10 +156,57 @@ const zh = {
     tokens: "tokens",
     credits: "credits",
   },
-  local: {
-    title: "本地 Agent",
-    tag: "即将推出",
-    body: "per-agent 用量 + 云×本地对比行(接入真实数据后显示)",
+  /* 大屏(AgentDashboardC)产品语言文案(t_36b7ecb1 SL-04): zh canonical。
+   * 术语直出(S13): cache hit/tokens/hit rate 等技术同行术语不解释。
+   * en 侧为翻译; Dict=typeof zh 编译期兜住 en 漏键。 */
+  dash: {
+    title: "Agent 用量",
+    subtitle: "token 消耗 · 成本 · 缓存命中 · {window}",
+    bannerTitle: "DAEMON 未连接",
+    bannerSub: "三维查询全部失败 · 显示上次快照 · 数据截至 {stamp}",
+    reconnect: "重新连接",
+    retry: "重试",
+    today: "今日",
+    kpiTokens: "Tokens · {window}",
+    callsPre: "调用 ",
+    callsPost: " 次",
+    kpiCost: "成本 · {window}",
+    pricingPre: "计价 ",
+    kpiHitRate: "Cache 命中率",
+    kpiActive: "活跃 Agent",
+    modelsSuffix: " 个模型参与",
+    pTrend: "趋势 · tokens 消耗",
+    trendNote: "日粒度 · 均值 {avg}",
+    trendAccumulating: "数据积累中（{n} 天）",
+    fetchFailed: "数据拉取失败",
+    pModel: "Model 分布",
+    agentTabsAria: "Agent 切换",
+    tokensShare: "tokens 占比",
+    donutTotal: "TOTAL",
+    thModel: "模型",
+    thCalls: "调用",
+    thShare: "占比",
+    thHitRate: "命中率",
+    pDetail: "明细 · 按 agent",
+    detailNote: "tokens · 成本",
+    thCost: "成本",
+    idleTag: "空闲",
+    pSplit: "三分项拆分",
+    noModelData: "暂无模型数据",
+    footSource: "DAEMON usage_summary · {window}",
+    footSnapshot: "数据快照 {stamp} · generated_at",
+    footRefreshFailed: "上次刷新失败",
+    footPartialFailed: "部分面板拉取失败",
+    footSnapshotOf: "显示快照 {stamp}",
+    weekday: {
+      "0": "周日",
+      "1": "周一",
+      "2": "周二",
+      "3": "周三",
+      "4": "周四",
+      "5": "周五",
+      "6": "周六",
+    },
   },
   consent: {
     title: "欢迎使用 token-wallet",
@@ -274,6 +333,41 @@ const zh = {
     language: "语言",
     languageHint: "界面显示语言, 切换即生效, 重启后保持。",
     quotaGallery: "四元素排版变体方案(theme-glass 实验)",
+    // ---- D-055 / t_4bd214de: 设置页 [MCP 服务] 区块 ----
+    mcpTitle: "MCP 服务",
+    mcpSubtitle: "本地 MCP daemon 管理, agent 通过 127.0.0.1:{port}/mcp 接入。",
+    mcpStatusRunning: "运行中",
+    mcpStatusStopped: "未运行",
+    mcpStatusProbe: "正在探测…",
+    mcpStatusNotInstalled: "未找到 daemon 可执行文件",
+    mcpStart: "一键启动",
+    mcpStop: "停止",
+    mcpRestarting: "重启中…",
+    mcpAutostartLabel: "开机自启",
+    mcpAutostartHint: "登录系统后自动启动 daemon(Q1 联动: 同时启用应用自启)。",
+    mcpEndpointLabel: "服务地址",
+    mcpKeyLabel: "API Key",
+    mcpKeyMasked: "{key}(已遮罩)",
+    mcpKeyCopy: "复制",
+    mcpKeyCopied: "已复制",
+    mcpKeyRegen: "随机生成",
+    mcpKeyRegenConfirmTitle: "重新生成 API Key?",
+    mcpKeyRegenConfirmBody:
+      "新 key 写入 mcp.env, 已配 agent 必须更新才能继续调用。daemon 需手动重启后新 key 生效。",
+    mcpKeyRegenConfirm: "生成并提示",
+    mcpKeyRegenCancel: "取消",
+    mcpKeyRegenRestartHint: "新 key 已写入, 请点 [停止] → [一键启动] 让 daemon 生效。",
+    mcpKeyRegenAutoRestartHint: "新 key 已写入, daemon 已自动重启生效。",
+    mcpKeyRegenRestartFailedHint: "新 key 已写入, 但 daemon 自动重启失败, 请手动 [停止] → [一键启动]。",
+    mcpAgentTitle: "Agent 接入",
+    mcpAgentOpenGuide: "查看安装步骤",
+    mcpAgentGuideEmpty: "daemon 未运行, 无法获取接入步骤。先启动 daemon。",
+    mcpAgentGuideFailed: "获取接入步骤失败。",
+    mcpAgentGuideStep: "步骤",
+    mcpErrorGeneric: "操作失败: {msg}",
+    mcpStaleTitle: "daemon 版本陈旧",
+    mcpStaleBody: "正在运行的 MCP daemon 与本机安装的版本不一致(可能是升级后残留的旧进程)。建议重启 daemon 以加载新版本。",
+    mcpStaleRestartAction: "一键重启",
   },
   updater: {
     unavailable: "更新功能仅安装版可用",
@@ -318,8 +412,9 @@ const zh = {
 type Writable<T> = { -readonly [K in keyof T]: T[K] extends string ? string : Writable<T[K]> };
 export type Dict = Writable<typeof zh>;
 
-/** en 字典: 类型强制与 zh 键位完全对齐(漏键/多键编译期报错) */
-const en: Dict = {
+/** en 字典: 类型强制与 zh 键位完全对齐(漏键/多键编译期报错)
+ * (t_36b7ecb1 SL-04: 导出供 i18n.test.ts 结构性断言遍历)。 */
+export const en: Dict = {
   common: {
     add: "Add provider",
     back: "← Back",
@@ -397,11 +492,21 @@ const en: Dict = {
     lampAuthTitle: "Session expired (yellow)",
     lampAuthAria: "auth_expired yellow",
     statusDot: "Status: {label}",
+    /* t_5d8c3c81: data freshness note shown on abnormal cards with stale-but-rendered data */
+    staleFetchedAgo: "Data last fetched {ago} (stale)",
+    /* t_12bdc277 cli_missing onepager guidance (2026-09-11) */
+    authCliMissingTitle: "{cli} not installed or not in PATH",
+    authCliMissingInstall: "Install first: {cmd}",
+    authCliMissingRestart: "Restart app after installing (PATH is inherited at launch)",
+    authCliMissingPathHintTitle: "npm global prefix {prefix} is not in PATH",
+    authCliMissingPathHintDesc: "The package is installed but the app can't find it. Add the npm prefix to PATH and restart the app:",
+    authCliMissingPathHintCmd: "$env:Path = \"{prefix};$env:Path\"",
   },
   ago: {
     now: "just now",
     minutes: "{n} min ago",
     hours: "{n} h ago",
+    days: "{n} d ago",
   },
   reset: {
     soon: "resets soon",
@@ -439,10 +544,56 @@ const en: Dict = {
     tokens: "tokens",
     credits: "credits",
   },
-  local: {
-    title: "Local agents",
-    tag: "Coming soon",
-    body: "Per-agent usage + cloud×local comparison rows (shown once real data lands)",
+  /* Agent dashboard (AgentDashboardC) copy (t_36b7ecb1 SL-04): en side.
+   * Terms stay raw per S13 (cache hit / tokens / hit rate are not explained). */
+  dash: {
+    title: "Agent Usage",
+    subtitle: "token spend · cost · cache hit · {window}",
+    bannerTitle: "DAEMON not connected",
+    bannerSub: "all three queries failed · showing last snapshot · data as of {stamp}",
+    reconnect: "Reconnect",
+    retry: "Retry",
+    today: "today",
+    kpiTokens: "Tokens · {window}",
+    callsPre: " ",
+    callsPost: " calls",
+    kpiCost: "Cost · {window}",
+    pricingPre: "pricing ",
+    kpiHitRate: "Cache hit rate",
+    kpiActive: "Active agents",
+    modelsSuffix: " models",
+    pTrend: "Trend · tokens",
+    trendNote: "daily · mean {avg}",
+    trendAccumulating: "accumulating data ({n} days)",
+    fetchFailed: "fetch failed",
+    pModel: "Model distribution",
+    agentTabsAria: "Agent switch",
+    tokensShare: "token share",
+    donutTotal: "TOTAL",
+    thModel: "Model",
+    thCalls: "Calls",
+    thShare: "Share",
+    thHitRate: "Hit rate",
+    pDetail: "Details · by agent",
+    detailNote: "tokens · cost",
+    thCost: "Cost",
+    idleTag: "idle",
+    pSplit: "Split breakdown",
+    noModelData: "no model data",
+    footSource: "DAEMON usage_summary · {window}",
+    footSnapshot: "snapshot {stamp} · generated_at",
+    footRefreshFailed: "last refresh failed",
+    footPartialFailed: "some panels failed to fetch",
+    footSnapshotOf: "showing snapshot {stamp}",
+    weekday: {
+      "0": "Sun",
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat",
+    },
   },
   consent: {
     title: "Welcome to token-wallet",
@@ -569,6 +720,42 @@ const en: Dict = {
     language: "Language",
     languageHint: "UI display language; applies immediately and persists across restarts.",
     quotaGallery: "Layout-variant gallery (theme-glass experiment)",
+    // ---- D-055 / t_4bd214de: Settings [MCP Service] section ----
+    mcpTitle: "MCP Service",
+    mcpSubtitle: "Local MCP daemon manager. Agents connect via 127.0.0.1:{port}/mcp.",
+    mcpStatusRunning: "Running",
+    mcpStatusStopped: "Stopped",
+    mcpStatusProbe: "Probing…",
+    mcpStatusNotInstalled: "Daemon executable not found",
+    mcpStart: "Start",
+    mcpStop: "Stop",
+    mcpRestarting: "Restarting…",
+    mcpAutostartLabel: "Launch at login",
+    mcpAutostartHint: "Auto-start daemon at login (Q1 linked: also enables app launch at login).",
+    mcpEndpointLabel: "Endpoint",
+    mcpKeyLabel: "API Key",
+    mcpKeyMasked: "{key} (masked)",
+    mcpKeyCopy: "Copy",
+    mcpKeyCopied: "Copied",
+    mcpKeyRegen: "Regenerate",
+    mcpKeyRegenConfirmTitle: "Regenerate API Key?",
+    mcpKeyRegenConfirmBody:
+      "New key is written to mcp.env. Configured agents must update to keep working. Restart daemon to apply.",
+    mcpKeyRegenConfirm: "Generate & notify",
+    mcpKeyRegenCancel: "Cancel",
+    mcpKeyRegenRestartHint: "New key written. Tap [Stop] → [Start] to apply on the daemon.",
+    mcpKeyRegenAutoRestartHint: "New key written. Daemon auto-restarted with new key.",
+    mcpKeyRegenRestartFailedHint: "New key written. Daemon auto-restart failed — tap [Stop] → [Start] manually.",
+    mcpAgentTitle: "Agent access",
+    mcpAgentOpenGuide: "View setup steps",
+    mcpAgentGuideEmpty: "Daemon not running. Start it first to fetch setup steps.",
+    mcpAgentGuideFailed: "Failed to fetch setup steps.",
+    mcpAgentGuideStep: "Step",
+    mcpErrorGeneric: "Operation failed: {msg}",
+    mcpStaleTitle: "daemon is outdated",
+    mcpStaleBody:
+      "The running MCP daemon does not match the installed version (likely a leftover process from before an upgrade). Restart the daemon to load the new version.",
+    mcpStaleRestartAction: "Restart now",
   },
   updater: {
     unavailable: "Updates are only available in the installed build",

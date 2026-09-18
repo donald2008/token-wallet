@@ -40,6 +40,15 @@
       "brand-block-ark": { "$value": "#1668dc", "$description": "火山方舟 平台识别色" },
       "brand-block-opencode": { "$value": "#0ea5e9", "$description": "OpenCode 平台识别色" }
     },
+    "chart": {
+      "$description": "图表多系列色序(S3, 锚点 dk-a3 series palette)。固定顺序取用, 图内扇区/表行/图例同源同序; t_15397c99 SL-01 新增",
+      "series-1": { "$value": "#5794f2", "$description": "系列1 蓝(主系列)" },
+      "series-2": { "$value": "#b877d9", "$description": "系列2 紫" },
+      "series-3": { "$value": "#73bf69", "$description": "系列3 绿" },
+      "series-4": { "$value": "#f2cc0c", "$description": "系列4 黄" },
+      "series-5": { "$value": "#ff9830", "$description": "系列5 橙" },
+      "series-6": { "$value": "#e02f44", "$description": "系列6 红" }
+    },
     "glass": {
       "$description": "玻璃变体(theme-glass)透明度与白/黑 alpha",
       "white-a08": { "$value": "#14ffffff", "$description": "白色 8% alpha 玻璃面" },

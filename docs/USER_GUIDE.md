@@ -10,6 +10,7 @@
 ### 1.1 下载安装包（推荐 Windows 用户）
 
 - 稳定版：[gitee Releases → stable](https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe)
+- 开发版（自动跟随 master）：`http://10.200.1.88:8889/token-wallet_setup.exe`
 
 下载后双击 `.exe` 安装。
 

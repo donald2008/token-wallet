@@ -155,7 +155,7 @@ describe("add-kimi 全链路(t_5b52b633): 添加 → 注册表 → 落地 → �
     engine.stop();
   });
 
-  it("kimi 限流态真实响应(2026-08-31 探针) → weekly 卡照常出 + rolling_5h 跳过(不再整卡蒸发)", async () => {
+  it("kimi 限流态真实响应(2026-08-31 探针) → rolling_5h 由 remaining 反推恒红 + weekly 跳过(e860cf9 反推语义)", async () => {
     const { GenericHttpAdapter } = await import("@token-wallet/core/generic-http");
     const { KIMI_CODING_MAPPING, KIMI_CODING } = await import("@token-wallet/core/channels");
 
@@ -179,9 +179,11 @@ describe("add-kimi 全链路(t_5b52b633): 添加 → 注册表 → 落地 → �
       resolveCredential: () => Promise.resolve("«redacted»"),
     });
 
-    // 修复语义: 整卡 ok(weekly 可用), 缺失窗口跳过并带 warn —— 不再抛异常
+    // 修复语义(e860cf9): rolling_5h 由 remaining=0 反推 used=100(限流恒红), weekly 缺 remaining 跳过 + warn
     expect(snap.status).toBe("ok");
-    expect(snap.metrics.map((m) => m.key)).toEqual(["weekly"]);
+    const byKey = Object.fromEntries(snap.metrics.map((m) => [m.key, m]));
+    expect(Object.keys(byKey)).toEqual(["rolling_5h"]);
+    expect(byKey["rolling_5h"]).toMatchObject({ used: 100, limit: 100 });
     expect(snap.alerts.some((a) => a.level === "warn")).toBe(true);
   });
 });

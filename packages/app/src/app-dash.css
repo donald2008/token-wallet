@@ -1,0 +1,832 @@
+/* ============================================================================
+ * Agent 用量大屏 · Ops Wall(t_15397c99 SL-01, GATE 2 选型定案)
+ * 结构: titlebar 40px + [banner 降级态] + 12 列面板墙(gutter 12px padding 12px) + footer 24px
+ * 视觉基准: docs/requests/2026-09-18-dashboard-redesign/50-design/ops-wall/index.html(对照, 禁发明色值)
+ * 铁律: 8px 网格(唯二例外=1px 边框+50% 圆角); 色值全走 tokens/theme 语义变量(H9);
+ *       面板语法 = 3px 状态顶缘 + hairline 边框 + 13px/500 面板头(S5); 数字纪律 S4。
+ * ========================================================================== */
+
+/* ---- 根容器: 900×640 一屏收口(继承 t_04f75eae/t_5cf22ba4 高度预算纪律) ---- */
+.agent-dashboard-c {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8, 8px);
+  padding: var(--space-8, 8px);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto; /* 极窄窗口兜底; 正常 900×640 零滚动(e2e 门禁断言) */
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- titlebar 40px(S10 产品语言 + 状态点) ---- */
+.dash-titlebar {
+  flex: 0 0 auto;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8, 8px);
+  padding: 0 var(--space-12, 12px);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  border-radius: var(--radius-8, 8px);
+}
+.dash-titlebar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+.dash-titlebar-sub {
+  color: var(--fg-dim);
+  font-weight: 400;
+  margin-left: var(--space-8, 8px);
+  font-size: var(--font-12, 12px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.dash-titlebar-title {
+  display: flex; /* 副题与主标题同行: 副题限宽省略, 防止 titlebar 换行撑高(实测 97px 溢出根因) */
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: var(--font-13, 13px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.dash-titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8, 8px);
+  margin-left: auto;
+  flex: none;
+}
+
+/* 通用小按钮(空态重试/返回/重新连接) */
+.dash-btn {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-4, 4px);
+  padding: var(--space-4, 4px) var(--space-8, 8px);
+  font-size: var(--font-11, 11px);
+  cursor: pointer;
+}
+.dash-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 主题切换(保留既有 testid/交互, 观感对齐 titlebar 家族) */
+.theme-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-8, 8px);
+  overflow: hidden;
+  background: var(--bg);
+}
+.theme-toggle button {
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  padding: var(--space-4, 4px) var(--space-8, 8px);
+  font-size: var(--font-11, 11px);
+  cursor: pointer;
+}
+.theme-toggle button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+/* ---- 降级横幅(SC-02/S14): 默认隐藏, 三维查询同挂时显式(面板墙仍渲染) ---- */
+.dash-banner {
+  display: none;
+  align-items: center;
+  gap: var(--space-8, 8px);
+  padding: var(--space-8, 8px) var(--space-12, 12px);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
+  border-radius: var(--radius-8, 8px);
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg-elev));
+  font-size: var(--font-12, 12px);
+  color: var(--fg);
+  flex: 0 0 auto;
+}
+.dash-banner.is-visible {
+  display: flex;
+}
+.dash-banner-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  flex: none;
+}
+.dash-banner-sub {
+  color: var(--fg-dim);
+}
+.dash-banner .dash-btn {
+  margin-left: auto;
+}
+
+/* ---- 降级态(SL-03 SC-02/S14): 整屏快照语义 ----
+ * 数据区降饱和(对齐选中 IA ops-wall 离线态 .grid > .panel .pbody: saturate(.25) brightness(.82))。
+ * 只作用于数据承载元素, 不覆盖 .dash-module-empty —— SC-03 面板内失败文案与重试按钮必须保持可读可点。 */
+.agent-dashboard-c.is-snapshot .dash-kpi-body,
+.agent-dashboard-c.is-snapshot .chart-wrap,
+.agent-dashboard-c.is-snapshot .dash-model-table,
+.agent-dashboard-c.is-snapshot .dash-detail-table,
+.agent-dashboard-c.is-snapshot .dash-stack,
+.agent-dashboard-c.is-snapshot .dash-splitrows {
+  filter: saturate(0.25) brightness(0.82);
+}
+
+/* ---- 面板级降级(SL-03 SC-03/H7): 该维最近一次拉取失败但旧快照仍在 ----
+ * 3px 状态色顶缘 = S11 小面积状态色(继承 .dash-kpi::before 的 S5 顶缘语法);
+ * 用 inset box-shadow 而非 border/伪元素, 零布局位移(900×640 一屏收口预算不被吃掉)。 */
+.agent-dashboard-c .dash-panel.is-stale {
+  box-shadow: inset 0 3px 0 0 var(--warn);
+}
+/* KPI 面板自带 3px 系列色顶缘(::before) → 降级时顶缘让位状态色(禁叠色) */
+.agent-dashboard-c .dash-panel.dash-kpi.is-stale::before {
+  background: var(--warn);
+}
+
+/* 降级态状态点 + footer 时效标注/恢复动作(S11 状态色小面积; 文案走 --warn-fg 双 token D-016) */
+.dash-foot-live.is-degraded {
+  background: var(--warn);
+}
+.dash-foot-stale {
+  color: var(--warn-fg);
+  flex: none;
+}
+.dash-foot-retry {
+  margin-left: var(--space-8, 8px);
+  padding: 0 var(--space-8, 8px);
+  line-height: 16px;
+  flex: none;
+}
+
+/* ---- 12 列面板墙(S6) ---- */
+.dash-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: min-content;
+  gap: var(--space-12, 12px);
+  padding: var(--space-4, 4px);
+}
+.dash-panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-8, 8px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.dash-span8 {
+  grid-column: span 8;
+}
+.dash-span4 {
+  grid-column: span 4;
+}
+
+/* 面板头(S5: 13px/500 + 紧凑 padding + hairline 下缘) */
+.dash-phead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8, 8px);
+  padding: var(--space-8, 8px) var(--space-12, 12px);
+  border-bottom: 1px solid var(--border);
+  min-height: 32px;
+}
+.dash-phead h2 {
+  margin: 0;
+  font-size: var(--font-13, 13px);
+  font-weight: 500;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.dash-pnote {
+  font-size: var(--font-10, 10px);
+  color: var(--fg-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-pbody {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-12, 12px);
+}
+
+/* ---- KPI 带(span3×4, 顶缘 3px 系列色 S5; 大数字 -0.02em + 精确数副行) ---- */
+.dash-kpi {
+  grid-column: span 3;
+}
+.dash-kpi::before {
+  content: "";
+  display: block;
+  height: 3px;
+  flex: none;
+}
+.dash-kpi.t1::before { background: var(--chart-1); }
+.dash-kpi.t2::before { background: var(--chart-2); }
+.dash-kpi.t3::before { background: var(--chart-3); }
+.dash-kpi.t4::before { background: var(--chart-4); }
+.dash-kpi-body {
+  padding: var(--space-8, 8px) var(--space-12, 12px) var(--space-12, 12px);
+}
+.dash-label {
+  font-size: var(--font-10, 10px);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-kpi-v {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  margin-top: var(--space-4, 4px);
+  white-space: nowrap;
+}
+.dash-kpi-v small {
+  font-size: var(--font-12, 12px);
+  font-weight: 400;
+  color: var(--fg-dim);
+  margin-left: var(--space-4, 4px);
+  letter-spacing: 0;
+}
+.dash-kpi-v.is-empty {
+  visibility: hidden; /* H3: cost=null 大数字留空(占位保持行高), 副行仍可读 */
+  height: 24px;
+}
+.dash-kpi-sub {
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+  margin-top: var(--space-4, 4px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-kpi-sub b {
+  color: var(--fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 趋势(span8) ---- */
+.dash-pbody-trend {
+  display: flex;
+  flex-direction: column;
+}
+.dash-pbody-trend .chart-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 140px; /* 定值下限: chart.js responsive 尺寸循环锁死规避(t_5cf22ba4 实测) */
+}
+
+/* ---- Model(span4): 环形定容 + chips 表(S5/S7) ----
+ * SL-08 修复①: 横排(donut 左 + 表右)在 span4(~283px)下表仅得 ~147px, 5 列完整千分位
+ * (fmtTokens 无 K/M 简写契约)数学上放不下 — 旧 auto 布局直接右溢 127px 被面板裁切
+ * (真机 900×640 实锤)。改纵向: donut 居中上浮, 表 100% 满宽在下方, 5 列 ~250px 可用。 */
+.dash-pbody-model {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+  align-items: center;
+  min-height: 0;
+  overflow: hidden;
+  /* SL-08 修复②: grid-auto-rows:min-content 由面板内容最高者定行高 —
+   * 单 agent 数据时 Model 面板(donut+表)比 1 行明细高, 同排明细 span8 被拉伸出
+   * 30px+ 空行隙(真机撑高变形实锤)。min-height:0 解除内容定高, 行高由明细面板
+   * 自身行数决定, 明细行数变化不再被兄弟面板顶撑变形。 */
+}
+.dash-pbody-model .chart-wrap-model {
+  position: relative;
+  flex: 0 0 auto;
+  width: 112px;
+  height: 112px;
+  min-height: 0;
+}
+/* 环形中心总量(appendix 数据接线): overlay 居中于 donut 中心 */
+.dash-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.dash-donut-center b {
+  font-size: var(--font-13, 13px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+.dash-donut-center span {
+  font-size: var(--font-10, 10px);
+  color: var(--fg-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.dash-model-table {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  align-self: center;
+  border-collapse: collapse;
+  font-size: var(--font-11, 11px);
+  color: var(--fg);
+  /* SL-08 修复①(配套): fixed 布局列宽由 CSS 决定 — 满宽 5 列(name 34% + 4 数值列 16.5%,
+   * 千分位 tokens ~64px 全可见), 长模型名截断省略不再顶爆表宽。 */
+  table-layout: fixed;
+}
+.dash-model-table th,
+.dash-model-table td {
+  padding: var(--space-4, 4px) var(--space-4, 4px);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dash-model-table th {
+  color: var(--fg-dim);
+  font-weight: 500;
+}
+.dash-model-table th:first-child,
+.dash-model-table td.name {
+  text-align: left;
+}
+/* SL-08 修复①(配套): fixed 布局按列内容实宽分配 — tokens 9 位千分位(2,237,000 ≈ 60px)
+ * 是最宽内容列, 26% (~70px); name 27% 长模型名截断省略; 其余数值列 15~16.5%。 */
+.dash-model-table th:nth-child(1) { width: 27%; }
+.dash-model-table th:nth-child(2) { width: 15.5%; }
+.dash-model-table th:nth-child(3) { width: 26%; }
+.dash-model-table th:nth-child(4) { width: 15%; }
+.dash-model-table th:nth-child(5) { width: 16.5%; }
+.dash-model-table td.name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* chips 图例色点(S5): 与扇区同源同序 */
+.dash-chip {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+.dash-model-table td.name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 4px);
+  /* SL-08 修复①(配套): flex 容器吃掉单元格 text-overflow, 截断下沉到内层 <b>(文本承载) */
+  min-width: 0;
+}
+.dash-model-table td.name b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 明细(span8): agent 维全量, 24px 行高 + 右对齐成列(S4/S6) ---- */
+.dash-pbody-detail {
+  padding-top: var(--space-8, 8px);
+  overflow: auto;
+}
+.dash-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-12, 12px);
+}
+.dash-detail-table thead th {
+  font-size: var(--font-10, 10px);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  font-weight: 400;
+  text-align: right;
+  padding: 0 var(--space-8, 8px) var(--space-8, 8px) 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.dash-detail-table thead th:first-child {
+  text-align: left;
+  padding-left: 0;
+  /* SL-08 修复②(配套): agent 列定宽后 6 个数值列拿到均分以上宽度 —
+   * 9 位 tokens(4,474,000, ~75px)不再挤到行尾撑爆行高, 多行右对齐数字按列直读(S4/S6)。 */
+  width: 26%;
+}
+.dash-detail-table tbody td {
+  height: 24px;
+  padding: 0 var(--space-8, 8px) 0 0;
+  text-align: right;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  border-bottom: 1px solid transparent;
+}
+.dash-detail-table tbody td:first-child {
+  text-align: left;
+  padding-left: 0;
+  /* SL-08 修复②(配套): 与 th:first-child 同宽, 保证列宽稳定 */
+  width: 26%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 4px);
+}
+.dash-detail-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+/* H4 联动: 当前 agent 行高亮(小面积 hover 色同源, 禁整行状态色 B4 反向红线) */
+.dash-detail-table tbody tr.is-selected td {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.dash-detail-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.dash-detail-table .cell-dim {
+  color: var(--fg-dim);
+}
+/* W1(H3): cost=null 成本单元格留空 — 占位结构不丢, 视觉留白 */
+.dash-detail-table td.cost-empty {
+  color: var(--fg-dim);
+}
+.dash-ast {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  display: inline-block;
+}
+.dash-ast.on { background: var(--ok); }
+.dash-ast.idle { background: var(--fg-dim); }
+.dash-ast.off { background: var(--bad); }
+.dash-idle-tag {
+  font-size: var(--font-10, 10px);
+  padding: 0 var(--space-4, 4px);
+  border-radius: var(--radius-4, 4px);
+  background: var(--warn);
+  color: var(--warn-fg);
+}
+
+/* ---- 三分项(span4): 堆叠条 + 行式三行(大写标签 S4) ---- */
+.dash-pbody-split {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8, 8px);
+}
+.dash-stack {
+  display: flex;
+  width: 100%;
+  height: var(--space-12, 12px);
+  border-radius: var(--radius-4, 4px);
+  overflow: hidden;
+  background: var(--bg-hover);
+}
+.dash-stack span {
+  height: 100%;
+}
+.dash-stack .seg-hit { background: var(--chart-1); }
+.dash-stack .seg-miss { background: var(--chart-5); }
+.dash-stack .seg-out { background: var(--chart-3); }
+.dash-splitrows {
+  display: flex;
+  flex-direction: column;
+}
+.dash-splitrows .r {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8, 8px);
+  height: 24px;
+  font-size: var(--font-11, 11px);
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
+}
+.dash-splitrows .r:last-child {
+  border-bottom: 0;
+}
+.dash-splitrows .r .dash-chip {
+  align-self: center;
+}
+.dash-splitrows .r b {
+  margin-left: auto;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+.dash-splitrows .r span {
+  color: var(--fg-dim);
+}
+.dash-splitrows .r > span:first-of-type {
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: var(--font-10, 10px);
+}
+/* 三分项 chips 与堆叠条同色(S3 同源) */
+.seg-hit-chip { background: var(--chart-1); }
+.seg-miss-chip { background: var(--chart-5); }
+.seg-out-chip { background: var(--chart-3); }
+
+/* ---- footer 24px ---- */
+.dash-foot {
+  flex: 0 0 auto;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8, 8px);
+  padding: 0 var(--space-12, 12px);
+  border-top: 1px solid var(--border);
+  font-size: var(--font-10, 10px);
+  color: var(--fg-dim);
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.dash-foot-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: none;
+}
+.dash-foot b {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+/* ---- 模块空态 + agent tabs(H4, 语义继承) ---- */
+.dash-module-empty {
+  flex: 1;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8, 8px);
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-8, 8px);
+}
+.dash-agent-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4, 4px);
+  min-width: 0;
+}
+.dash-agent-tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  color: var(--fg-dim);
+  font-size: var(--font-11, 11px);
+  padding: 0 var(--space-8, 8px);
+  cursor: pointer;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dash-agent-tab:hover {
+  color: var(--fg);
+}
+.dash-agent-tab.active {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---- standalone 自绘 chrome(t_185002af 继承, 壳不动 H8) ---- */
+.dash-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap, 8px);
+  height: var(--space-32, 32px);
+  padding: 0 var(--space-12, 12px);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  flex: 0 0 auto;
+  -webkit-app-region: drag;
+}
+.dash-chrome .btn {
+  -webkit-app-region: no-drag;
+}
+.dash-chrome-title {
+  font-size: var(--font-12, 12px);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.dash-chrome .spacer {
+  flex: 1;
+  min-width: 0;
+}
+.panel[data-standalone="1"] {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  border-radius: 0;
+}
+
+/* ---- 紧凑视口段(900×640/560 一屏收口; >680px 宽松视口不命中, 观感不变) ----
+ * 行高定值 px(t_04f75eae R4: 消除平台字体度量差异, 断言可移植)。 */
+@media (max-height: 640px) {
+  .dash-grid {
+    gap: var(--space-8, 8px);
+    padding: var(--space-4, 4px);
+  }
+  .agent-dashboard-c {
+    gap: var(--space-4, 4px);
+    padding: var(--space-4, 4px);
+  }
+  .dash-titlebar {
+    height: 36px;
+    border-radius: var(--radius-4, 4px);
+  }
+  .dash-kpi-v {
+    font-size: 20px;
+    line-height: 24px;
+  }
+  .dash-kpi-v.is-empty {
+    height: 24px;
+  }
+  .dash-pbody {
+    padding: var(--space-8, 8px);
+  }
+  .dash-pbody-trend .chart-wrap {
+    min-height: 112px;
+  }
+  /* SL-08 修复①(紧凑段): Model 面板改纵向后 donut 是行高原顶者, 112→96px 回收 16px
+   * 纵向预算(multi 场景 dashScrollH 612→608 一屏收口); 环形中心数字同步缩号。 */
+  .dash-pbody-model .chart-wrap-model {
+    width: 96px;
+    height: 96px;
+  }
+  .dash-donut-center b {
+    font-size: var(--font-12, 12px);
+  }
+  /* SL-08 紧凑段纵向预算②: 900×600 四象限门禁(detail bottom ≤ 600) — Model 面板纵向化
+   * 后第一行 min-content = donut 96 + 表(2 行)顶高 ~18px。收 donut 96→84 + 表体行高
+   * 16px 严格化, 让 min-content 落回预算; 640 宽松场景观感差异极小。 */
+  .dash-pbody-model .chart-wrap-model {
+    width: 84px;
+    height: 84px;
+  }
+  /* SL-08 紧凑段纵向预算③: SC-02 降级态 900×560 零滚动 — 横幅 28px 在场时可用高
+   * 528, Model min-content + trend min-height 是最后余量: trend 图表下限收 112→100,
+   * 降级态(is-snapshot)趋势冷失败空态 80(降级面板内容本就少, 观感不塌)。 */
+  .dash-pbody-trend .chart-wrap {
+    min-height: 100px;
+  }
+  .agent-dashboard-c.is-snapshot .dash-pbody-trend .chart-wrap {
+    min-height: 80px;
+  }
+  /* SL-08 紧凑段纵向预算④: 900×560(dash-chrome 32+titlebar 36+footer 20 在场, grid 可用
+   * ~464px)逐元素实测后做减法 — KPI 底 padding、明细 padding-top、Model 行内 gap 各收一档,
+   * 让「KPI 92 + 行2(model 纵向) + 行3(明细 167)」min-content 落回预算。 */
+  .dash-kpi-body {
+    padding: var(--space-8, 8px) var(--space-12, 12px);
+  }
+  .dash-pbody-detail {
+    padding-top: 0;
+  }
+  .dash-pbody-model {
+    gap: var(--space-4, 4px);
+  }
+  .dash-model-table th,
+  .dash-model-table td {
+    padding-top: var(--space-4, 4px);
+    padding-bottom: 0;
+  }
+  .dash-model-table .dash-chip {
+    width: 7px;
+    height: 7px;
+  }
+  .dash-module-empty {
+    min-height: 80px;
+  }
+  /* SL-03 降级态(整屏): 横幅按紧凑刻度回预算 —— 实测 banner 44px(按钮 padding 撑高)会把
+   * 面板墙 min-content 挤超出 560 一屏(3px 顶缘 + 24px 行高都是硬下限, 面板不能再压) →
+   * 收横幅按钮/纵向 padding(banner 44→28px), 全快照降级态零纵向滚动(与常态同品质 S14)。 */
+  .dash-banner {
+    padding: var(--space-4, 4px) var(--space-12, 12px);
+  }
+  .dash-banner .dash-btn {
+    padding: 0 var(--space-8, 8px);
+  }
+
+  .dash-titlebar,
+  .dash-titlebar-title,
+  .dash-titlebar-sub,
+  .dash-titlebar-controls,
+  .dash-btn,
+  .theme-toggle,
+  .theme-toggle button,
+  .dash-banner,
+  .dash-banner-sub,
+  .dash-phead,
+  .dash-phead h2,
+  .dash-pnote,
+  .dash-label,
+  .dash-kpi-sub,
+  .dash-model-table,
+  .dash-model-table th,
+  .dash-model-table td,
+  .dash-detail-table,
+  .dash-detail-table thead th,
+  .dash-detail-table tbody td,
+  .dash-splitrows .r,
+  .dash-module-empty,
+  .dash-module-empty button,
+  .dash-agent-tabs,
+  .dash-agent-tab,
+  .dash-foot,
+  .dash-foot-stale,
+  .dash-foot-retry {
+    line-height: 16px;
+  }
+  .dash-foot {
+    min-height: 20px;
+  }
+  .dash-phead {
+    min-height: 28px;
+    padding: var(--space-4, 4px) var(--space-12, 12px);
+  }
+  /* SL-08 紧凑段纵向预算⑤(900×560 dash-chrome 在场): phead 28→26(两面板行 ×2 = -4),
+   * trend chart-wrap min-height 100→88(-12, 图表 flex:1 自适应缩放不受影响)。 */
+  /* SL-08 紧凑段纵向预算⑥: agent tabs 压缩刻度 — Model 面板头 tabs 4 个时允许 2×2 网格
+   * 收窄占位(max-width 让 phead 两行排布而不是把 h2 挤下去), 18px 行高紧凑刻度。 */
+  .dash-agent-tab {
+    line-height: 16px;
+    padding: 0 var(--space-4, 4px);
+    font-size: var(--font-10, 10px);
+  }
+  .dash-agent-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, auto));
+    gap: var(--space-4, 4px);
+  }
+  .dash-phead {
+    min-height: 26px;
+  }
+  .dash-pbody-trend .chart-wrap {
+    min-height: 88px;
+  }
+}
+
+/* ---- 大屏空态(daemon 未连接, App 层既有降级分支) ---- */
+.agent-dashboard-c-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+  padding: var(--space-12, 12px);
+  align-items: flex-start;
+}
+
+/* ---- Agent rows 空态(round-7): daemon 连接正常但窗口内零上报 ---- */
+.agent-rows-empty {
+  padding: var(--space-16) var(--space-12);
+  text-align: center;
+}
+.agent-rows-empty-title {
+  color: var(--fg);
+  font-weight: 600;
+}
+.agent-rows-empty-hint {
+  margin-top: var(--space-4);
+  color: var(--fg-dim);
+  font-size: 12px;
+  line-height: 1.6;
+}

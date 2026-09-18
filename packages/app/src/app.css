@@ -584,6 +584,9 @@ body {
 .text-warn { color: var(--warn-fg); }
 .text-bad { color: var(--bad-fg); }
 .text-unknown { color: var(--unknown-fg); }
+/* t_5d8c3c81: 错误原因行专用色 —— 与 status badge 的 text-bad 同色但语义独立,
+ * 表达「这里是一段错误原因文字」而非「整卡健康度=bad」(卡健康度可能因 metric 仍 ok 而为 ok)。 */
+.text-error { color: var(--bad-fg); font-weight: 500; }
 
 .card-error-note {
   font-size: 12px;
@@ -596,6 +599,24 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+/* t_5d8c3c81 只读缓存: 异常卡有旧数据时 — 渲染正常模板(进度条/余额) + 数据时效标注 + 错误原因行。
+ * abnormal-body--stale-data = 模板之下追加两行(stale-fetched-note + abnormal-body-error-reason)。
+ * 模板顶部间距与其它形态对齐(8px = var(--space-4)=4px * 2? 实测 var(--space-8) 看起来更稳)。 */
+.abnormal-body--stale-data {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.abnormal-body-stale-note {
+  font-size: var(--font-11);
+  color: var(--fg-dim);
+  margin-top: var(--space-4);
+}
+.abnormal-body-error-reason {
+  font-size: var(--font-12);
+  line-height: 1.4;
 }
 
 /* auth_expired 亮黄灯(§2.1): 自绘圆点, 填充 --warn(D-016), 带光晕提示待处理 */
@@ -731,58 +752,80 @@ body {
   font-size: 12px;
   color: var(--err-fg);
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-8);
   word-break: break-all;
 }
 
-/* ---- 本地 Agent 区(§6.5): 默认折叠占位(P3) ---- */
-.local-agent {
-  flex: 0 0 auto;
-  border-top: 1px solid var(--border);
-  background: var(--bg-elev);
-}
-
-.local-agent-head {
+/* t_12bdc277 P0 L1 (2026-09-11): CLI 缺失引导 — 标题 + 安装命令 + 复制按钮 + 重启提示 */
+.oneclick-auth-cli-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
   width: 100%;
+}
+.oneclick-auth-cli-missing-title {
+  font-weight: 600;
+}
+.oneclick-auth-cli-missing-row {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: 8px 12px;
-  border: none;
-  background: transparent;
-  color: var(--fg);
-  font-size: var(--font-size);
-  cursor: pointer;
-  text-align: left;
+  width: 100%;
 }
-.local-agent-head:hover {
-  background: var(--bg-hover);
+.oneclick-auth-cli-missing-cmd {
+  flex: 1 1 auto;
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Menlo, monospace);
+  background: var(--bg-elev);
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-small);
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
 }
-
-.local-agent-chevron {
-  display: inline-block;
-  font-size: 10px;
-  color: var(--fg-dim);
-  transition: transform 0.15s ease;
-}
-.local-agent-chevron[data-open] {
-  transform: rotate(90deg);
+.oneclick-auth-cli-missing-note {
+  color: var(--fg-muted, var(--muted));
+  font-size: 12px;
 }
 
-.local-agent-title {
+/* t_12bdc277 P0 L2: npm prefix 不在 PATH 时附 PowerShell 修复命令 */
+.oneclick-auth-path-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  width: 100%;
+  border-top: 1px solid var(--border-hairline);
+  padding-top: var(--space-8);
+}
+.oneclick-auth-path-hint-title {
   font-weight: 600;
-  flex: 1;
+  color: var(--warn-fg, var(--err-fg));
+}
+.oneclick-auth-path-hint-desc {
+  color: var(--fg-muted, var(--muted));
+  font-size: 12px;
+}
+.oneclick-auth-path-hint-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+}
+.oneclick-auth-path-hint-cmd {
+  flex: 1 1 auto;
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Menlo, monospace);
+  background: var(--bg-elev);
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-small);
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
-.local-agent-tag {
-  font-size: 11px;
-  color: var(--fg-dim);
-}
-
-.local-agent-body {
-  padding: var(--space-4) var(--space-12) var(--space-8) var(--space-28);
-}
+/* round-6: LocalAgentSection 占位组件已删除, 其 §6.5 样式块一并移除 */
 
 /* ---- 进度条(手写 bars 模板微部件, D-002) ---- */
 .bar-row {
@@ -2197,5 +2240,379 @@ body {
 .qcard3-note {
   font-size: var(--font-10);
   color: var(--fg-dim);
+}
+
+
+/* ===== D-055 / t_4bd214de: 设置页 MCP 服务区块(纯增量, 不动既有) ===== */
+.mcp-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+  margin-top: var(--space-8, 8px);
+}
+.mcp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12, 12px);
+  flex-wrap: wrap;
+}
+.mcp-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--fg-dim, #999);
+}
+.mcp-status-dot[data-status="running"] {
+  background: var(--ok, #22c55e);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok, #22c55e) 25%, transparent);
+}
+.mcp-status-dot[data-status="stopped"] {
+  background: var(--fg-dim, #999);
+}
+.mcp-status-dot[data-status="not_installed"] {
+  background: var(--bad, #ef4444);
+}
+.mcp-status-dot[data-status="loading"] {
+  background: var(--fg-dim, #999);
+  opacity: 0.5;
+}
+.mcp-status-label {
+  font-weight: 600;
+}
+.mcp-subtitle {
+  color: var(--fg-dim, #666);
+  font-size: var(--font-12, 12px);
+}
+.mcp-actions {
+  gap: var(--space-8, 8px);
+}
+.mcp-actions .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.mcp-autostart-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4, 4px);
+}
+.mcp-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8, 8px);
+  margin: 0;
+}
+.mcp-info-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: var(--space-8, 8px);
+  align-items: center;
+}
+.mcp-info-row dt {
+  color: var(--fg-dim, #666);
+  font-size: var(--font-12, 12px);
+}
+.mcp-info-row dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8, 8px);
+  min-width: 0;
+}
+.mcp-info-row code {
+  font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+  font-size: var(--font-12, 12px);
+  color: var(--fg, #222);
+  word-break: break-all;
+}
+:root[data-theme="dark"] .mcp-info-row code,
+:root[data-theme="dark-glass"] .mcp-info-row code {
+  color: var(--fg, #eee);
+}
+.mcp-key-row {
+  flex-wrap: wrap;
+}
+.mcp-confirm {
+  border: 1px solid var(--warn, #f59e0b);
+  border-radius: var(--radius-8, 8px);
+  padding: var(--space-12, 12px);
+  background: color-mix(in srgb, var(--warn, #f59e0b) 10%, transparent);
+}
+.mcp-confirm-body h4 {
+  margin: 0 0 var(--space-8, 8px) 0;
+  font-size: var(--font-14, 14px);
+}
+.mcp-confirm-body p {
+  margin: 0 0 var(--space-8, 8px) 0;
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim, #666);
+}
+.mcp-confirm-actions {
+  display: flex;
+  gap: var(--space-8, 8px);
+}
+.mcp-hint {
+  color: var(--warn, #f59e0b);
+  font-size: var(--font-12, 12px);
+  margin: 0;
+}
+.mcp-error {
+  color: var(--bad, #ef4444);
+  font-size: var(--font-12, 12px);
+  margin: 0;
+}
+
+/* ===== D-055: Agent 引导弹窗(portal to body, Q4 决议 B) ===== */
+.mcp-guide-overlay {
+  position: fixed;
+  inset: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  border-radius: var(--radius-16, 16px);
+}
+:root[data-theme="dark-glass"] .mcp-guide-overlay,
+:root[data-theme="light-glass"] .mcp-guide-overlay {
+  -webkit-backdrop-filter: var(--card-blur, blur(32px));
+  backdrop-filter: var(--card-blur, blur(32px));
+}
+.mcp-guide-modal {
+  background: var(--bg-elev, #fff);
+  border-radius: var(--radius-12, 12px);
+  width: min(720px, 90vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+:root[data-theme="dark"] .mcp-guide-modal,
+:root[data-theme="dark-glass"] .mcp-guide-modal {
+  background: var(--bg-elev, #1f2937);
+}
+.mcp-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-12, 12px) var(--space-16, 16px);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.mcp-guide-head h3 {
+  margin: 0;
+  font-size: var(--font-16, 16px);
+}
+.mcp-guide-body {
+  padding: var(--space-16, 16px);
+  overflow-y: auto;
+  font-size: var(--font-12, 12px);
+}
+.mcp-guide-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16, 16px);
+}
+.mcp-guide-item {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius-8, 8px);
+  padding: var(--space-12, 12px);
+}
+.mcp-guide-item h4 {
+  margin: 0 0 var(--space-8, 8px) 0;
+}
+.mcp-guide-item pre {
+  background: var(--bg, #f3f4f6);
+  padding: var(--space-8, 8px);
+  border-radius: var(--radius-4, 4px);
+  overflow-x: auto;
+  font-size: var(--font-12, 12px);
+  margin: var(--space-4, 4px) 0 0 0;
+}
+
+/* ============= t_9255cb63: 主页 Agent 卡区 + 大屏方案 C =============
+ * 数据源 = MCP daemon usage_summary(group_by=["agent"]); 不再用 mock。
+ * Agent 卡与 ProviderCard 同构(共用 .card/.card-head/.card-name/.card-status-text),
+ * 大屏方案 C 移植自 feat/mcp-server dev-pages/agent-dashboard-C.html,
+ * 用项目 tokens.css 变量统一色板(深/浅主题自适应)。
+ */
+
+.agent-card-section {
+  margin-top: var(--space-16, 16px);
+  padding: var(--space-8, 8px) var(--space-12, 12px) 0 var(--space-12, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+}
+.agent-card-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-12, 12px);
+  padding: 0 var(--space-4, 4px);
+}
+.agent-card-section-title {
+  font-size: var(--font-13, 13px);
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: 0.01em;
+}
+.agent-card-section-meta {
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.agent-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+}
+.agent-card {
+  padding: var(--space-12, 12px) var(--space-16, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+}
+.agent-card .card-head {
+  gap: var(--space-8, 8px);
+}
+.agent-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-28, 28px);
+  height: var(--space-28, 28px);
+  border-radius: var(--radius-8, 8px);
+  background: var(--bg-hover, #232a35);
+  color: var(--fg);
+  font-size: var(--font-14, 14px);
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.agent-card-body {
+  /* t_4b7984d9 round-3 (老大 njbx02 亲测 BLOCKING):
+   * row1 = tokens(1fr 整行宽,大数字 32px 不溢出);
+   * row2 = cost | detail(并排,detail 留在卡片右端);
+   * row3 = meta(全宽)。
+   * 旧版 1fr|auto|auto 三列等高布局在 360px 窗口 + 9 位数字(4,474,000)时
+   * 1fr 被 tokens min-content(~168px) 撑大,挤压 cost + detail 顶出右边 +32px。
+   * 行 1 整行吃满 280px(360 − 24 section − 32 card − 24 gap) 后,
+   * 32px 大数字视觉冲击力保留(用户拍板「4,474,000 比 4.5M 震撼」)。*/
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "tokens tokens"
+    "cost   detail"
+    "meta   meta";
+  align-items: end;
+  gap: var(--space-12, 12px);
+  row-gap: var(--space-8, 8px);
+}
+.agent-tokens {
+  grid-area: tokens;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4, 4px);
+  font-variant-numeric: tabular-nums;
+  /* min-width:0 让 tokens 行不溢出(默认 grid item min-width:auto 会保留 min-content,
+   * 即便父级给 1fr,内部数字 nowrap 仍可能撑出;显式 0 让 flex 子换行/截断由 nowrap 把控) */
+  min-width: 0;
+}
+.agent-tokens-number {
+  /* t_4b7984d9 round-3 B 修复: tokens 占整行 1fr(280px) 后,32px 字号 9 位数字 ~ 122px + unit
+   * 「tokens」~ 42px + gap 4 = 168px,远 < 280px,零溢出。
+   * clamp 上限保持 32px 留视觉冲击,下限 20px 兜底 < 360px 卡宽场景。
+   * tabular-nums + nowrap 双重保险。*/
+  font-size: clamp(20px, 9vw, 32px);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.agent-tokens-unit {
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+}
+.agent-cost {
+  grid-area: cost;
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.agent-cost.is-empty {
+  /* 拍板契约: 无金额时彻底留空(不显示 0/—/N/A) */
+  display: none;
+}
+.agent-detail-btn {
+  grid-area: detail;
+  align-self: end;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-8, 8px);
+  padding: var(--space-4, 4px) var(--space-12, 12px);
+  font-size: var(--font-12, 12px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.agent-detail-btn:hover,
+.agent-detail-btn:focus-visible {
+  background: var(--bg-hover, #232a35);
+  border-color: var(--accent);
+  outline: none;
+}
+.agent-meta {
+  grid-area: meta;
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+  border-top: 1px dashed var(--border);
+  padding-top: var(--space-8, 8px);
+  font-variant-numeric: tabular-nums;
+}
+.agent-meta strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.agent-card-empty .agent-empty-reason {
+  margin: 0;
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+}
+
+/* ---- t_4b7984d9 round-4 ④: 主页 tab 分离(用量 / 本地 Agent) ----
+ * 两枚 tab 按钮放在 panel-main 顶部、TitleBar 之下,
+ * 互斥渲染: 「用量」= 现 agent-card-section;「本地 Agent」= 现 LocalAgentSection
+ * 选中的 tab 加 .active 类(accent 下边框 + 字体色加亮)
+ */
+.main-tabs {
+  display: flex;
+  gap: var(--space-4, 4px);
+  padding: 0 var(--space-12, 12px);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex: 0 0 auto;
+}
+.main-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-dim);
+  font-size: var(--font-13, 13px);
+  font-weight: 500;
+  padding: var(--space-8, 8px) var(--space-12, 12px);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.main-tab:hover {
+  color: var(--fg);
+}
+.main-tab.active {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
 }
 

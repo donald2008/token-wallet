@@ -224,6 +224,17 @@ pnpm -C packages/app build            # vite build → dist
 
 标题栏 `titlebar` + `app-title` + `spacer` + `btn btn-icon`（refresh/settings）为标题栏骨架，改布局须保持 e2e 可达。
 
+### 5.4 大屏面板语法（Ops Wall，D-056 / feat/dashboard-redesign）
+
+本地 Agent 大屏（`AgentDashboardC`，900×560 窗口壳，样式源 `app-dash.css`）的面板语法，改大屏 UI 前必读：
+
+- **12 列面板墙**：`.dash-grid = grid-template-columns: repeat(12, 1fr)`，gutter `var(--space-12, 12px)`（grid 自身 padding 为 4px 微调值）。注意：产品大屏窗口恒为 900×560（`electron/main.ts`），恒命中 `app-dash.css` 紧凑段（`@media (max-height:640px)`）→ 实际渲染 gutter 为 8px（`--space-8`）；12px 仅为宽松视口（高度 >640px）基态，产品窗口不会出现。KPI 带 4×span3，趋势/明细 span8，Model/三分项 span4。面板宽度与列跨度绑定，禁止 flex-wrap 流式回退。
+- **3px 状态顶缘**：面板状态用顶部 3px 状态色缘线表达（`.dash-kpi::before`，KPI 按系列色 `--chart-1..4`；`is-stale` 变体沿同语法），**禁整卡红/黄底渲染**（S11 状态色仅小面积：点/缘线/文字，禁四重编码）。
+- **发丝线**：面板边框与分隔线用 hairline（`var(--border)` 系），面板头 13px/500 + hairline 下缘，禁粗边框。
+- **图例 = 色点 chips**：图表图例用色点 chip 行（趋势/环形旁），不画大块图例表。
+- **tabular 数字纪律**（S4）：一切数值 `font-variant-numeric: tabular-nums`（`.dash-kpi-v`/明细单元格/副行数字已内置）；KPI 大数字附精确数副行（`.dash-kpi-sub`）；明细表数值列右对齐成列，行高 24px。新增数值元素必须显式带 tabular-nums。
+- 数字口径/空态/降级语义不在本节：命中率分母（H2）、cost=null 留空（H3/D-055）、无 daemon 降级横幅（S14/D-056）按 DECISIONS.md 既有决策执行。
+
 ---
 
 ## 6. 提交约定

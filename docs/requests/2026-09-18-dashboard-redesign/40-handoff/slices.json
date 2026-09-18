@@ -1,0 +1,13 @@
+{
+  "cycle": "2026-09-18-dashboard-redesign",
+  "note": "SL-xx ↔ REQ/SC 映射；实现卡按 plan.md 派发；本文件为 slices 图谱非派卡记录",
+  "slices": [
+    { "id": "SL-01", "title": "大屏 IA 骨架重构（胜出 mock 落地）", "reqs": ["REQ-01"], "scenarios": ["SC-01", "SC-09"], "depends_on": ["GATE-2"], "risk_class": "AMBER" },
+    { "id": "SL-02", "title": "执行基线 S1-S14 CSS 落地", "reqs": ["REQ-02", "REQ-03", "REQ-06"], "scenarios": ["SC-01", "SC-07"], "depends_on": ["SL-01"], "risk_class": "RED" },
+    { "id": "SL-03", "title": "无 daemon 专业降级形态", "reqs": ["REQ-04"], "scenarios": ["SC-02", "SC-03"], "depends_on": ["SL-01"], "risk_class": "AMBER" },
+    { "id": "SL-04", "title": "产品语言文案与 i18n", "reqs": ["REQ-05", "REQ-07"], "scenarios": ["SC-04", "SC-05", "SC-06", "SC-08"], "depends_on": ["SL-01"], "risk_class": "GREEN" },
+    { "id": "SL-05", "title": "e2e 契约迁移", "reqs": ["REQ-08"], "scenarios": ["SC-01", "SC-09"], "depends_on": ["SL-01"], "risk_class": "GREEN" },
+    { "id": "SL-06", "title": "GATE 3 真机验收执行", "reqs": ["REQ-09"], "scenarios": ["SC-10"], "depends_on": ["SL-01", "SL-02", "SL-03", "SL-04", "SL-05"], "risk_class": "GREEN" }
+  ],
+  "traceability_rule": "REQ-xx → SC-xx → SL-xx 三元组逐条勾稽，实现卡评论里完成"
+}

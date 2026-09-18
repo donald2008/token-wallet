@@ -1,7 +1,7 @@
 {
   "name": "@token-wallet/app",
   "private": true,
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "token-wallet 桌面部件壳 — Electron + React 19 (托盘 + 弹出面板 + 主题)",
   "type": "module",
   "main": "dist-electron/main.cjs",
@@ -10,12 +10,13 @@
     "dev:web": "vite",
     "build": "node electron/scripts/build.mjs && vite build",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test --project=browser-only",
+    "test:e2e": "playwright test --project=browser-only --project=electron-shell",
     "test": "vitest run",
     "dist:win": "node electron/scripts/dist-win.mjs"
   },
   "dependencies": {
     "@token-wallet/core": "workspace:*",
+    "chart.js": "4.4.4",
     "electron-updater": "^6.6.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

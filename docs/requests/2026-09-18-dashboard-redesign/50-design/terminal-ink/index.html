@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Terminal Ink — Agent 用量</title>
+<style>
+  /* ===== Terminal Ink · dk-a1 纯黑数据终端立场 · S1-S14 基线 ===== */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #000000; --panel: #0c0c0d; --border: #262626;
+    --text: #f2f2f2; --muted: #a8a8a8; --dim: #8a8a8a;
+    --accent: #3080ff; --ok: #00bb7f; --crit: #fb2c36;
+    --s1: #3080ff; --s2: #9d7bff; --s3: #00bb7f; --s4: #e0a832; --s5: #ff7a45; --s6: #e05a7a;
+    --hairline: 1px solid var(--border);
+  }
+  html, body { background: #050505; }
+  body {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--text); -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px 0 40px;
+  }
+  .mono, .num { font-family: ui-monospace, "SF Mono", Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
+  .label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); font-weight: 500; }
+
+  .window { width: 900px; height: 640px; background: var(--bg); border: var(--hairline); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* 顶栏 40px：极简产品语言（S10） */
+  .titlebar { height: 40px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: var(--hairline); }
+  .titlebar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+  .titlebar h1 { font-size: 13px; font-weight: 600; }
+  .titlebar h1 span { color: var(--muted); font-weight: 400; margin-left: 10px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .titlebar .seg { display: flex; border: var(--hairline); border-radius: 6px; padding: 2px; gap: 2px; margin-left: auto; }
+  .titlebar .seg button { border: 0; background: transparent; color: var(--muted); font-size: 11px; padding: 3px 9px; border-radius: 4px; cursor: pointer; }
+  .titlebar .seg button.on { background: #1a1a1c; color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+  .titlebar .themes { display: flex; gap: 4px; align-items: center; margin-left: 8px; }
+  .titlebar .themes i { width: 10px; height: 10px; border-radius: 50%; border: var(--hairline); display: block; }
+  .titlebar .themes i.tl { background: #e6e8e8; }
+  .titlebar .themes i.tl.on { box-shadow: 0 0 0 2px #444; }
+  .titlebar .themes i.td { background: #000; border-color: #3a3a3a; }
+
+  /* 分屏不对称（dk-a1 layout）：左 240px 固定 KPI 纵列，右弹性数据区 */
+  .split { flex: 1; display: flex; min-height: 0; }
+  .left { width: 240px; flex: none; border-right: var(--hairline); display: flex; flex-direction: column; overflow: hidden; }
+  .right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  /* 左栏 KPI 纵列（S4/S9）：大写标签 + 等宽大数字 */
+  .kpi { padding: 14px 16px; border-bottom: var(--hairline); }
+  .kpi .v { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-top: 6px; }
+  .kpi .v small { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+  .kpi .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .kpi .sub b { color: var(--text); font-weight: 600; }
+
+  /* agent 列表（左栏下部）：状态点 + 右对齐数字 */
+  .agents { flex: 1; border-top: var(--hairline); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+  .agents .label { padding: 10px 16px 6px; }
+  .agents .a { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 16px; font-size: 12px; cursor: pointer; }
+  .agents .a:hover { background: #101012; }
+  .agents .a.on { background: #12161c; box-shadow: inset 2px 0 0 var(--accent); }
+  .agents .a i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .agents .a i.st-on { background: var(--ok); }
+  .agents .a i.st-idle { background: var(--dim); }
+  .agents .a .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agents .a .t { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+  /* 右区：趋势（上）+ 3 列网格（下） */
+  .right .top { flex: 1.15; display: flex; flex-direction: column; border-bottom: var(--hairline); min-height: 0; }
+  .rhead { display: flex; align-items: baseline; gap: 8px; padding: 12px 16px 0; }
+  .rhead h2 { font-size: 13px; font-weight: 600; }
+  .rhead .note { font-size: 10px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-left: auto; }
+  .trend { flex: 1; display: flex; align-items: flex-end; gap: 10px; padding: 8px 16px 12px; position: relative; min-height: 0; }
+  .trend .bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; height: 100%; }
+  .trend .bar i { display: block; background: var(--s1); border-radius: 1px 1px 0 0; opacity: .9; }
+  .trend .bar:hover i { background: #5c9bff; }
+  .trend .bar em { font-style: normal; font-size: 10px; color: var(--dim); text-align: center; }
+  .trend .bar .bv { font-size: 10px; color: #c9c9c9; text-align: center; }
+  .meanline { position: absolute; left: 16px; right: 16px; border-top: 1px dashed var(--s4); opacity: .8; }
+  .meanline b { position: absolute; right: 0; top: -14px; font-weight: 400; font-size: 9px; color: var(--s4); letter-spacing: .1em; }
+
+  /* 右区底部 3 列（S6/S13 密度拉满） */
+  .right .bottom { flex: 1; display: grid; grid-template-columns: 1.35fr 1fr 0.85fr; min-height: 0; }
+  .cell { padding: 12px 16px; border-right: var(--hairline); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .cell:last-child { border-right: 0; }
+  .chead { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
+  .chead h3 { font-size: 12px; font-weight: 600; }
+  .chead .note { font-size: 9px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-left: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: ui-monospace, "SF Mono", Consolas, "Cascadia Mono", monospace; }
+  thead th { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-weight: 500; text-align: right; padding: 0 6px 5px 0; border-bottom: var(--hairline); }
+  thead th:first-child { text-align: left; padding-left: 0; }
+  tbody td { height: 24px; padding: 0 6px 0 0; text-align: right; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tbody td:first-child { text-align: left; padding-left: 0; color: var(--muted); }
+  tbody tr:hover td { background: #101012; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .cell-dim { color: var(--muted); }
+
+  /* 三分项列 */
+  .srow { display: flex; align-items: center; gap: 6px; height: 24px; font-size: 11px; border-bottom: var(--hairline); font-family: ui-monospace, "SF Mono", Consolas, "Cascadia Mono", monospace; }
+  .srow:last-child { border-bottom: 0; }
+  .srow i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .srow b { margin-left: auto; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .srow span { color: var(--muted); }
+  .stack { height: 10px; border-radius: 2px; overflow: hidden; display: flex; margin-top: 6px; }
+  .stack i { height: 100%; display: block; }
+  .stack .h { background: var(--s1); }
+  .stack .m { background: var(--s5); }
+  .stack .o { background: var(--s3); }
+
+  /* 汇总列：环形（S7 带数值）+ chips 图例 */
+  .donut { width: 104px; height: 104px; border-radius: 50%; margin: 2px auto 10px; position: relative;
+    background: conic-gradient(var(--s1) 0 41%, var(--s2) 41% 64%, var(--s3) 64% 79%, var(--s4) 79% 91%, var(--s5) 91% 97%, var(--s6) 97% 100%); }
+  .donut::after { content: ""; position: absolute; inset: 22px; background: var(--bg); border-radius: 50%; }
+  .donut .dc { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .donut .dc b { font-size: 13px; letter-spacing: -0.02em; }
+  .donut .dc span { font-size: 8px; color: var(--dim); letter-spacing: .12em; text-transform: uppercase; }
+  .chips { display: flex; flex-direction: column; gap: 5px; }
+  .chips .c { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); height: 15px; font-family: ui-monospace, "SF Mono", Consolas, "Cascadia Mono", monospace; }
+  .chips .c i { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+  .chips .c b { margin-left: auto; color: var(--text); font-weight: 500; }
+
+  /* footer */
+  .foot { flex: none; height: 26px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-top: var(--hairline); font-size: 10px; color: var(--dim); }
+  .foot .live { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+  .foot b { margin-left: auto; font-weight: 400; }
+
+  /* ===== 降级态（S14：同品质壳 + 明确状态） ===== */
+  .window.offline .right .top, .window.offline .right .bottom, .window.offline .left .kpi .v, .window.offline .left .kpi .sub, .window.offline .agents .a .t { filter: saturate(.2) brightness(.8); }
+  .banner { display: none; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: var(--hairline); background: #171207; font-size: 12px; flex: none; }
+  .banner i { width: 8px; height: 8px; border-radius: 50%; background: var(--s4); flex: none; }
+  .banner b { font-weight: 600; font-size: 11px; letter-spacing: .08em; }
+  .banner span { color: var(--muted); }
+  .banner button { margin-left: auto; border: var(--hairline); background: transparent; color: var(--text); font-size: 11px; padding: 4px 10px; border-radius: 5px; cursor: pointer; }
+  .banner button:hover { border-color: var(--accent); color: #7aa7ff; }
+  .window.offline .banner { display: flex; }
+  .window.offline .titlebar .dot { background: var(--s4); }
+
+  /* 演示控制 */
+  .demo { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #666; }
+  .demo button { border: 1px solid #333; background: #15161a; color: #aaa; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .demo button.on { border-color: #3080ff; color: #7aa7ff; }
+</style>
+</head>
+<body>
+  <div class="demo">
+    <button id="bOn" class="on" onclick="setMode(false)">常态</button>
+    <button id="bOff" onclick="setMode(true)">无 daemon 降级态</button>
+    <span>900×640 · Terminal Ink · dk-a1 数据终端立场</span>
+  </div>
+
+  <div class="window" id="win">
+    <header class="titlebar">
+      <i class="dot"></i>
+      <h1>Agent 用量</h1>
+      <span class="label">Tokens · Cost · Cache</span>
+      <div class="seg mono"><button>近5小时</button><button class="on">本周</button><button>本月</button></div>
+      <div class="themes"><i class="tl on"></i><i class="td"></i></div>
+    </header>
+
+    <div class="banner"><i></i><b>DAEMON OFFLINE</b><span>快照 09:41 后无数据 · 显示最后快照</span><button onclick="setMode(false)">Reconnect</button></div>
+
+    <div class="split">
+      <aside class="left">
+        <div class="kpi">
+          <div class="label">Tokens · 本周</div>
+          <div class="v num">184.6<small>M</small></div>
+          <div class="sub">精确 <b class="num">184,627,391</b></div>
+        </div>
+        <div class="kpi">
+          <div class="label">成本 · 本周</div>
+          <div class="v num">$46.18</div>
+          <div class="sub">调用 <b class="num">1,284</b> 次</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Cache 命中率</div>
+          <div class="v num">87.3<small>%</small></div>
+          <div class="sub">hit <b class="num">96.4M</b> / miss <b class="num">14.0M</b></div>
+        </div>
+        <div class="agents">
+          <div class="label">Agents · 4</div>
+          <div class="a on"><i class="st-on"></i><span class="nm">njbx02</span><span class="t num">98.1M</span></div>
+          <div class="a"><i class="st-on"></i><span class="nm">home-computer</span><span class="t num">52.6M</span></div>
+          <div class="a"><i class="st-on"></i><span class="nm">desktop-e5jupfs</span><span class="t num">33.9M</span></div>
+          <div class="a"><i class="st-idle"></i><span class="nm">home-computer-win</span><span class="t num">12.0M</span></div>
+        </div>
+      </aside>
+      <main class="right">
+        <section class="top">
+          <div class="rhead"><h2>趋势</h2><span class="note">日粒度 · Mean 26.4M</span></div>
+          <div class="trend">
+            <div class="meanline" style="bottom: 36%"><b>MEAN 26.4M</b></div>
+            <div class="bar"><span class="bv num">31.2</span><i style="height: 58%"></i><em>周五</em></div>
+            <div class="bar"><span class="bv num">18.4</span><i style="height: 34%"></i><em>周六</em></div>
+            <div class="bar"><span class="bv num">12.7</span><i style="height: 24%"></i><em>周日</em></div>
+            <div class="bar"><span class="bv num">38.9</span><i style="height: 72%"></i><em>周一</em></div>
+            <div class="bar"><span class="bv num">26.1</span><i style="height: 48%"></i><em>周二</em></div>
+            <div class="bar"><span class="bv num">29.8</span><i style="height: 55%"></i><em>周三</em></div>
+            <div class="bar"><span class="bv num">27.5</span><i style="height: 51%"></i><em>周四</em></div>
+          </div>
+        </section>
+        <section class="bottom">
+          <div class="cell">
+            <div class="chead"><h3>Model 分布</h3><span class="note">tokens</span></div>
+            <table>
+              <thead><tr><th>Model</th><th>Tokens</th><th>Hit</th><th>Out</th><th>调用</th></tr></thead>
+              <tbody>
+                <tr><td>glm-5.3-flash</td><td>75.7M</td><td>40.1M</td><td>30.6M</td><td>527</td></tr>
+                <tr><td>kimi-k2</td><td>42.5M</td><td>22.4M</td><td>17.2M</td><td>295</td></tr>
+                <tr><td>deepseek-v4-flash</td><td>27.7M</td><td>14.6M</td><td>11.2M</td><td>192</td></tr>
+                <tr><td>claude-sonnet-4.5</td><td>22.2M</td><td>11.6M</td><td>9.0M</td><td>154</td></tr>
+                <tr><td>gpt-5-codex</td><td>11.1M</td><td>5.8M</td><td>4.5M</td><td>77</td></tr>
+                <tr><td class="cell-dim">qwen-max</td><td class="cell-dim">5.5M</td><td class="cell-dim">1.9M</td><td class="cell-dim">1.7M</td><td class="cell-dim">39</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="cell">
+            <div class="chead"><h3>三分项</h3><span class="note">tokens</span></div>
+            <div class="srow"><i style="background:var(--s1)"></i><span>Cache hit</span><b>96.4M</b><span>52%</span></div>
+            <div class="srow"><i style="background:var(--s5)"></i><span>Cache miss</span><b>14.0M</b><span>8%</span></div>
+            <div class="srow"><i style="background:var(--s3)"></i><span>Output</span><b>74.2M</b><span>40%</span></div>
+            <div class="stack"><i class="h" style="width:52%"></i><i class="m" style="width:8%"></i><i class="o" style="width:40%"></i></div>
+            <div class="chead" style="margin-top:14px"><h3>占比</h3><span class="note">total</span></div>
+            <div class="donut"><div class="dc"><b class="num">184.6M</b><span>total</span></div></div>
+            <div class="chips">
+              <div class="c"><i style="background:var(--s1)"></i><span>glm-5.3-flash</span><b class="num">41%</b></div>
+              <div class="c"><i style="background:var(--s2)"></i><span>kimi-k2</span><b class="num">23%</b></div>
+              <div class="c"><i style="background:var(--s3)"></i><span>deepseek-v4-flash</span><b class="num">15%</b></div>
+              <div class="c"><i style="background:var(--s4)"></i><span>claude-sonnet-4.5</span><b class="num">12%</b></div>
+              <div class="c"><i style="background:var(--s5)"></i><span>gpt-5-codex</span><b class="num">6%</b></div>
+            </div>
+          </div>
+          <div class="cell">
+            <div class="chead"><h3>成本口径</h3><span class="note">usd</span></div>
+            <div class="srow"><span>Token 均价</span><b class="num">$0.25 / M</b></div>
+            <div class="srow"><span>Cache 节省</span><b class="num" style="color:var(--ok)">-$18.40</b></div>
+            <div class="srow"><span>Output 占比</span><b class="num">40%</b></div>
+            <div class="srow"><span>调用均耗</span><b class="num">143.7K</b></div>
+            <div class="srow"><span>峰值日</span><b class="num">周一 38.9M</b></div>
+            <div class="srow"><span>混合币种</span><b class="cell-dim" style="font-weight:400">仅 USD</b></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <footer class="foot"><i class="live"></i><span>DAEMON :9131</span><b class="num">数据快照 09:41:23</b></footer>
+  </div>
+
+<script>
+  function setMode(off) {
+    document.getElementById('win').classList.toggle('offline', off);
+    document.getElementById('bOn').classList.toggle('on', !off);
+    document.getElementById('bOff').classList.toggle('on', off);
+  }
+</script>
+</body>
+</html>

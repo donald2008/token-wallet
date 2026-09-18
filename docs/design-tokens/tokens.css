@@ -82,6 +82,14 @@
   --c-warn-text-light: #92600a; /* 浅底压深(D-016) */
   --c-bad-text-light: #b91c1c;
   --c-unknown-text-light: #6b7280;
+  /* t_15397c99 SL-01: 图表多系列色序(S3, 锚点 dk-a3 series palette) —
+   * 固定顺序取用, 图内扇区/表行/图例同源同序; 两主题共用图形角色 */
+  --c-chart-series-1: #5794f2;
+  --c-chart-series-2: #b877d9;
+  --c-chart-series-3: #73bf69;
+  --c-chart-series-4: #f2cc0c;
+  --c-chart-series-5: #ff9830;
+  --c-chart-series-6: #e02f44;
   --c-brand-deepseek: #4d6bfe;
   --c-brand-kimi: #7c3aed;
   --c-brand-aliyun: #ff6a00;
@@ -126,6 +134,14 @@
   --unknown: var(--c-unknown);
   --unknown-fg: var(--c-unknown-text-dark);
 
+  /* t_15397c99 SL-01: chart 系列色序(S3) — 图形角色, 两主题共用 */
+  --chart-1: var(--c-chart-series-1);
+  --chart-2: var(--c-chart-series-2);
+  --chart-3: var(--c-chart-series-3);
+  --chart-4: var(--c-chart-series-4);
+  --chart-5: var(--c-chart-series-5);
+  --chart-6: var(--c-chart-series-6);
+
   /* 语义间距/圆角/字号(别名延续现有命名) */
   --gap: var(--space-8);
   --radius: var(--radius-8);
@@ -153,6 +169,14 @@
   --bad-fg: var(--c-bad-text-light);
   --unknown: var(--c-unknown-light);
   --unknown-fg: var(--c-unknown-text-light);
+
+  /* t_15397c99 SL-01: chart 系列色序(S3) — 图形角色, 两主题共用 */
+  --chart-1: var(--c-chart-series-1);
+  --chart-2: var(--c-chart-series-2);
+  --chart-3: var(--c-chart-series-3);
+  --chart-4: var(--c-chart-series-4);
+  --chart-5: var(--c-chart-series-5);
+  --chart-6: var(--c-chart-series-6);
 
   --gap: var(--space-8);
   --radius: var(--radius-8);

@@ -1,0 +1,22 @@
+[project]
+name = "token-wallet-mcp-server"
+version = "0.2.8"
+description = "token-wallet MCP data-plane daemon — fastmcp streamable-http :9131 (D-055)"
+requires-python = ">=3.11"
+dependencies = [
+  "fastmcp>=2.0",
+  "pydantic>=2.7",
+]
+
+[project.scripts]
+token-wallet-mcp = "mcp_server.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -13,6 +13,7 @@
  *   （替代 electron-builder --win nsis）
  */
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -61,17 +62,16 @@ async function main() {
     );
   }
 
-  // electron-builder 在本 repo 是 devDependency → node_modules/.bin/electron-builder
-  const builderBin = path.resolve(
-    __dirname,
-    "..",
-    "..",
-    "..",
-    "..",
-    "node_modules",
-    ".bin",
-    process.platform === "win32" ? "electron-builder.cmd" : "electron-builder",
-  );
+  // electron-builder 二进制解析: pnpm 默认把 app 的 devDep shim 放
+  // packages/app/node_modules/.bin(不提升); 仓库根 .bin 仅在提升场景存在。
+  // 旧实现只查根路径 → 非提升安装直接 ENOENT(v0.2.9 发版实测)。
+  // 候选按 [app 侧, 仓库根] 顺序取第一个存在的, 双缺 → 首选(保留原报错语义)。
+  const binName = process.platform === "win32" ? "electron-builder.cmd" : "electron-builder";
+  const candidates = [
+    path.resolve(__dirname, "..", "..", "node_modules", ".bin", binName),
+    path.resolve(__dirname, "..", "..", "..", "..", "node_modules", ".bin", binName),
+  ];
+  const builderBin = candidates.find((p) => existsSync(p)) ?? candidates[0];
 
   console.log(`[dist:win] electron-builder → ${builderBin}`);
   const child = spawn(builderBin, ["--win", "nsis"], {

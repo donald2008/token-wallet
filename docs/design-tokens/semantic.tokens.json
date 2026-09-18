@@ -68,6 +68,15 @@
         }
       }
     },
+    "chart": {
+      "$description": "图表多系列色序(S3, 锚点 dk-a3 series palette)。引用 primitives color.chart.series-N, 两主题共用图形角色; t_15397c99 SL-01 新增",
+      "series-1": { "$value": "{color.chart.series-1}" },
+      "series-2": { "$value": "{color.chart.series-2}" },
+      "series-3": { "$value": "{color.chart.series-3}" },
+      "series-4": { "$value": "{color.chart.series-4}" },
+      "series-5": { "$value": "{color.chart.series-5}" },
+      "series-6": { "$value": "{color.chart.series-6}" }
+    },
     "brand": {
       "$description": "平台识别色(§6.1 第4条品牌色块); 用户新增平台时扩展此表",
       "deepseek": { "$value": "{color.status.brand-block-deepseek}" },

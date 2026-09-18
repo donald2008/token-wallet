@@ -38,3 +38,12 @@ playwright-report/
 data/
 *.jsonl
 !sketches/**/*.jsonl
+
+# Python venvs (MCP daemon local dev)
+.venv*/
+# MCP daemon build artifacts (PyInstaller onefile, build-exe.ps1 产出)
+packages/app/resources/
+
+# Python bytecode
+__pycache__/
+*.pyc

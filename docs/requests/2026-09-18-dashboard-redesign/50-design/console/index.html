@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Console — Agent 用量</title>
+<style>
+  /* ===== Console · ed-d2 工作台主从立场 · S1-S14 基线 ===== */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #16161c; --panel: #1a1a21; --panel2: #1e1e24; --border: #2a2a33;
+    --text: #e8e8ec; --muted: #aab1bc; --dim: #8b93a1;
+    --accent: #00aaff; --ok: #3fb984; --warn: #e0a832; --crit: #e05a7a;
+    --s1: #00aaff; --s2: #9d7bff; --s3: #3fb984; --s4: #e0a832; --s5: #ff7a45; --s6: #e05a7a;
+    --hairline: 1px solid var(--border);
+  }
+  html, body { background: #0d0d10; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--text); -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px 0 40px;
+  }
+  .mono, .num { font-family: ui-monospace, "SF Mono", Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
+  .label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+
+  .window { width: 900px; height: 640px; background: var(--bg); border: var(--hairline); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* 顶栏 40px */
+  .titlebar { height: 40px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: var(--hairline); background: var(--panel); }
+  .titlebar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+  .titlebar h1 { font-size: 13px; font-weight: 600; }
+  .titlebar h1 span { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 12px; }
+  .titlebar .seg { display: flex; background: var(--bg); border: var(--hairline); border-radius: 6px; padding: 2px; gap: 2px; margin-left: auto; }
+  .titlebar .seg button { border: 0; background: transparent; color: var(--muted); font-size: 11px; padding: 4px 9px; border-radius: 4px; cursor: pointer; }
+  .titlebar .seg button.on { background: var(--accent); color: #0d0d10; font-weight: 600; }
+  .titlebar .themes { display: flex; gap: 4px; align-items: center; margin-left: 8px; }
+  .titlebar .themes i { width: 10px; height: 10px; border-radius: 50%; border: var(--hairline); display: block; }
+  .titlebar .themes i.tl { background: #e6e8e8; }
+  .titlebar .themes i.td { background: #16161c; border-color: #3a3a44; }
+  .titlebar .themes i.td.on { box-shadow: 0 0 0 2px #3a3a44; }
+
+  /* 主从：左 master 列表 208px，右 detail 弹性 */
+  .split { flex: 1; display: flex; min-height: 0; }
+  .master { width: 208px; flex: none; border-right: var(--hairline); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .master .mhead { padding: 12px 12px 8px; display: flex; align-items: baseline; justify-content: space-between; }
+  .master .mhead .label { font-size: 10px; }
+  .master .mhead b { font-size: 11px; color: var(--muted); font-weight: 500; }
+  .alist { flex: 1; overflow: hidden; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .acard { border: var(--hairline); border-radius: 6px; padding: 8px 10px; cursor: pointer; background: var(--panel2); }
+  .acard:hover { border-color: #3a3a46; }
+  .acard.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .acard .r1 { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+  .acard .r1 i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .acard .r1 i.st-on { background: var(--ok); }
+  .acard .r1 i.st-idle { background: var(--dim); }
+  .acard .r1 .t { margin-left: auto; font-weight: 500; color: var(--muted); font-size: 11px; }
+  .acard .r2 { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); margin-top: 4px; }
+  .acard .mini { height: 3px; border-radius: 2px; background: #26262e; margin-top: 6px; overflow: hidden; }
+  .acard .mini i { display: block; height: 100%; background: var(--accent); opacity: .75; }
+  .master .mfoot { flex: none; padding: 8px 12px; border-top: var(--hairline); font-size: 10px; color: var(--dim); display: flex; justify-content: space-between; }
+
+  /* detail 区 */
+  .detail { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .dhead { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: var(--hairline); }
+  .dhead h2 { font-size: 15px; font-weight: 600; }
+  .dhead .pill { font-size: 10px; color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 40%, var(--border)); border-radius: 10px; padding: 2px 8px; letter-spacing: .06em; }
+  .dhead .gen { margin-left: auto; font-size: 10px; color: var(--dim); }
+
+  /* KPI 行：4 格 hairline 分隔（S9/S4） */
+  .kpis { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: var(--hairline); }
+  .kpis .k { padding: 12px 16px; border-right: var(--hairline); }
+  .kpis .k:last-child { border-right: 0; }
+  .kpis .v { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; }
+  .kpis .v small { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+  .kpis .sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .kpis .sub b { color: var(--text); }
+
+  /* 主体：趋势（上）+ 双列（下） */
+  .dbody { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .trend-sec { flex: 1.1; display: flex; flex-direction: column; border-bottom: var(--hairline); min-height: 0; }
+  .rhead { display: flex; align-items: baseline; gap: 8px; padding: 10px 16px 0; }
+  .rhead h3 { font-size: 12px; font-weight: 600; }
+  .rhead .note { font-size: 9px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-left: auto; }
+  .trend { flex: 1; display: flex; align-items: flex-end; gap: 10px; padding: 6px 16px 10px; position: relative; min-height: 0; }
+  .trend .bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; height: 100%; }
+  .trend .bar i { display: block; background: color-mix(in srgb, var(--s1) 52%, var(--bg)); border-radius: 1px 1px 0 0; opacity: .95; }
+  .trend .bar em { font-style: normal; font-size: 10px; color: var(--dim); text-align: center; }
+  .trend .bar .bv { font-size: 10px; color: #c6cbd4; text-align: center; }
+  .meanline { position: absolute; left: 16px; right: 16px; border-top: 1px dashed var(--s4); opacity: .8; }
+  .meanline b { position: absolute; right: 0; top: -13px; font-weight: 400; font-size: 9px; color: var(--s4); letter-spacing: .1em; }
+
+  .dbottom { flex: 1; display: grid; grid-template-columns: 1.4fr 1fr; min-height: 0; }
+  .cell { padding: 10px 16px; border-right: var(--hairline); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .cell:last-child { border-right: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead th { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-weight: 500; text-align: right; padding: 0 6px 5px 0; border-bottom: var(--hairline); }
+  thead th:first-child { text-align: left; padding-left: 0; }
+  tbody td { height: 24px; padding: 0 6px 0 0; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tbody td:first-child { text-align: left; padding-left: 0; color: var(--muted); }
+  tbody tr:hover td { background: #20202a; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
+  .srow { display: flex; align-items: center; gap: 6px; height: 24px; font-size: 11px; border-bottom: var(--hairline); }
+  .srow:last-child { border-bottom: 0; }
+  .srow b { margin-left: auto; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .srow span { color: var(--muted); }
+  .stack { height: 10px; border-radius: 2px; overflow: hidden; display: flex; margin-top: 8px; }
+  .stack i { height: 100%; display: block; }
+  .stack .h { background: var(--s1); } .stack .m { background: var(--s5); } .stack .o { background: var(--s3); }
+
+  .foot { flex: none; height: 26px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-top: var(--hairline); background: var(--panel); font-size: 10px; color: var(--dim); }
+  .foot .live { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+  .foot b { margin-left: auto; font-weight: 400; }
+
+  /* ===== 降级态（S14）：左列表=缓存快照(照常显示但降饱和)，右 detail=明确离线面板 ===== */
+  .banner { display: none; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: var(--hairline); background: color-mix(in srgb, var(--warn) 7%, var(--panel)); font-size: 12px; flex: none; }
+  .banner i { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+  .banner b { font-weight: 600; font-size: 11px; letter-spacing: .06em; }
+  .banner span { color: var(--muted); }
+  .banner button { margin-left: auto; border: var(--hairline); background: transparent; color: var(--text); font-size: 11px; padding: 4px 10px; border-radius: 5px; cursor: pointer; }
+  .banner button:hover { border-color: var(--accent); color: var(--accent); }
+  .window.offline .banner { display: flex; }
+  .window.offline .titlebar .dot { background: var(--warn); }
+  .window.offline .master { filter: saturate(.3) brightness(.85); }
+  .offline-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+  .offline-box .ic { width: 40px; height: 40px; border-radius: 10px; border: var(--hairline); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--warn); }
+  .offline-box h3 { font-size: 14px; font-weight: 600; }
+  .offline-box p { font-size: 12px; color: var(--muted); max-width: 380px; text-align: center; line-height: 1.6; }
+  .offline-box .hint { font-size: 11px; color: var(--dim); }
+  .offline-box code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--text); background: var(--panel2); border: var(--hairline); border-radius: 4px; padding: 2px 6px; }
+
+  .demo { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #666; }
+  .demo button { border: 1px solid #333; background: #15161a; color: #aaa; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .demo button.on { border-color: #00aaff; color: #6cc9ff; }
+</style>
+</head>
+<body>
+  <div class="demo">
+    <button id="bOn" class="on" onclick="setMode(false)">常态</button>
+    <button id="bOff" onclick="setMode(true)">无 daemon 降级态</button>
+    <span>900×640 · Console · ed-d2 主从工作台立场</span>
+  </div>
+
+  <div class="window" id="win">
+    <header class="titlebar">
+      <i class="dot"></i>
+      <h1>Agent 用量<span>工作台</span></h1>
+      <div class="seg mono"><button>近5小时</button><button class="on">本周</button><button>本月</button></div>
+      <div class="themes"><i class="tl"></i><i class="td on"></i></div>
+    </header>
+
+    <div class="banner"><i></i><b>DAEMON 未连接</b><span>左列显示最后快照 · 快照 09:41</span><button onclick="setMode(false)">重新连接</button></div>
+
+    <div class="split">
+      <aside class="master">
+        <div class="mhead"><span class="label">Agents</span><b>4</b></div>
+        <div class="alist">
+          <div class="acard on">
+            <div class="r1"><i class="st-on"></i>njbx02<span class="t num">98.1M</span></div>
+            <div class="r2"><span>53% · 682 调用</span><span>$24.40</span></div>
+            <div class="mini"><i style="width: 53%"></i></div>
+          </div>
+          <div class="acard">
+            <div class="r1"><i class="st-on"></i>home-computer<span class="t num">52.6M</span></div>
+            <div class="r2"><span>29% · 365 调用</span><span>$13.10</span></div>
+            <div class="mini"><i style="width: 29%"></i></div>
+          </div>
+          <div class="acard">
+            <div class="r1"><i class="st-on"></i>desktop-e5jupfs<span class="t num">33.9M</span></div>
+            <div class="r2"><span>18% · 236 调用</span><span>$8.68</span></div>
+            <div class="mini"><i style="width: 18%"></i></div>
+          </div>
+          <div class="acard">
+            <div class="r1"><i class="st-idle"></i>home-computer-win<span class="t num">12.0M</span></div>
+            <div class="r2"><span>6% · 86 调用</span><span>$2.90</span></div>
+            <div class="mini"><i style="width: 6%"></i></div>
+          </div>
+        </div>
+        <div class="mfoot"><span>总计</span><span class="num">184.6M · $46.18</span></div>
+      </aside>
+
+      <main class="detail">
+        <div class="dhead">
+          <h2>njbx02</h2>
+          <span class="pill">ACTIVE</span>
+          <span class="gen num">快照 09:41:23 · 6 模型</span>
+        </div>
+        <div class="kpis">
+          <div class="k"><div class="label">Tokens · 本周</div><div class="v num">98.1<small>M</small></div><div class="sub">精确 <b class="num">98,132,204</b></div></div>
+          <div class="k"><div class="label">成本</div><div class="v num">$24.40</div><div class="sub">调用 <b class="num">682</b> 次</div></div>
+          <div class="k"><div class="label">Cache 命中率</div><div class="v num">87.9<small>%</small></div><div class="sub">hit <b class="num">51.2M</b> / miss <b class="num">7.0M</b></div></div>
+          <div class="k"><div class="label">Output</div><div class="v num">39.1<small>M</small></div><div class="sub">占总量 <b class="num">40%</b></div></div>
+        </div>
+        <div class="dbody">
+          <section class="trend-sec">
+            <div class="rhead"><h3>趋势 · njbx02</h3><span class="note">日粒度 · Mean 14.0M</span></div>
+            <div class="trend">
+              <div class="meanline" style="bottom: 38%"><b>MEAN 14.0M</b></div>
+              <div class="bar"><span class="bv num">16.6</span><i style="height: 60%"></i><em>周五</em></div>
+              <div class="bar"><span class="bv num">9.8</span><i style="height: 35%"></i><em>周六</em></div>
+              <div class="bar"><span class="bv num">6.8</span><i style="height: 24%"></i><em>周日</em></div>
+              <div class="bar"><span class="bv num">20.7</span><i style="height: 74%"></i><em>周一</em></div>
+              <div class="bar"><span class="bv num">13.9</span><i style="height: 50%"></i><em>周二</em></div>
+              <div class="bar"><span class="bv num">15.8</span><i style="height: 57%"></i><em>周三</em></div>
+              <div class="bar"><span class="bv num">14.6</span><i style="height: 53%"></i><em>周四</em></div>
+            </div>
+          </section>
+          <section class="dbottom">
+            <div class="cell">
+              <div class="rhead" style="padding: 0 0 8px;"><h3>Model 分布</h3><span class="note">njbx02 · tokens</span></div>
+              <table>
+                <thead><tr><th>Model</th><th>Tokens</th><th>Hit</th><th>Out</th><th>调用</th></tr></thead>
+                <tbody>
+                  <tr><td><i class="swatch" style="background:var(--s1)"></i>glm-5.3-flash</td><td>40.2M</td><td>21.3M</td><td>16.2M</td><td>280</td></tr>
+                  <tr><td><i class="swatch" style="background:var(--s2)"></i>kimi-k2</td><td>22.6M</td><td>11.9M</td><td>9.1M</td><td>157</td></tr>
+                  <tr><td><i class="swatch" style="background:var(--s3)"></i>deepseek-v4-flash</td><td>14.7M</td><td>7.8M</td><td>6.0M</td><td>102</td></tr>
+                  <tr><td><i class="swatch" style="background:var(--s4)"></i>claude-sonnet-4.5</td><td>11.8M</td><td>6.2M</td><td>4.8M</td><td>82</td></tr>
+                  <tr><td><i class="swatch" style="background:var(--s5)"></i>gpt-5-codex</td><td>5.9M</td><td>3.1M</td><td>2.4M</td><td>41</td></tr>
+                  <tr><td><i class="swatch" style="background:var(--s6)"></i>qwen-max</td><td>2.9M</td><td>0.9M</td><td>0.6M</td><td>20</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="cell">
+              <div class="rhead" style="padding: 0 0 8px;"><h3>三分项拆分</h3><span class="note">njbx02</span></div>
+              <div class="srow"><span><i class="swatch" style="background:var(--s1)"></i>Cache hit</span><b>51.2M</b><span>52%</span></div>
+              <div class="srow"><span><i class="swatch" style="background:var(--s5)"></i>Cache miss</span><b>7.0M</b><span>7%</span></div>
+              <div class="srow"><span><i class="swatch" style="background:var(--s3)"></i>Output</span><b>39.1M</b><span>40%</span></div>
+              <div class="stack"><i class="h" style="width:52%"></i><i class="m" style="width:8%"></i><i class="o" style="width:40%"></i></div>
+              <div class="rhead" style="padding: 14px 0 8px;"><h3>成本口径</h3><span class="note">usd</span></div>
+              <div class="srow"><span>Token 均价</span><b>$0.25 / M</b></div>
+              <div class="srow"><span>Cache 节省</span><b style="color:var(--ok)">-$9.80</b></div>
+              <div class="srow"><span>调用均耗</span><b>143.9K</b></div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <footer class="foot"><i class="live"></i><span>DAEMON :9131</span><b class="num">数据快照 09:41:23 · generated_at</b></footer>
+  </div>
+
+<script>
+  function setMode(off) {
+    document.getElementById('win').classList.toggle('offline', off);
+    document.getElementById('bOn').classList.toggle('on', !off);
+    document.getElementById('bOff').classList.toggle('on', off);
+    // 降级：右 detail 区替换为离线面板（缓存优先语义：左列表快照保留）
+    const d = document.querySelector('.detail');
+    if (off && !document.getElementById('offbox')) {
+      const box = document.createElement('div');
+      box.className = 'offline-box';
+      box.id = 'offbox';
+      box.innerHTML = '<div class="ic">⏸</div><h3>与 daemon 失去连接</h3>' +
+        '<p>左侧列表为最后快照数据。恢复连接后自动刷新，无需重开窗口。</p>' +
+        '<span class="hint">检查服务：<code>systemctl status token-wallet-daemon</code></span>' +
+        '<button class="banner-btn" style="margin-top:6px; border:1px solid var(--border); background:transparent; color:var(--text); font-size:11px; padding:5px 12px; border-radius:5px; cursor:pointer;">重试连接</button>';
+      d.appendChild(box);
+      const head = d.querySelector('.dhead'), k = d.querySelector('.kpis'), b = d.querySelector('.dbody');
+      [head, k, b].forEach(el => el.style.display = 'none');
+    } else if (!off) {
+      const box = document.getElementById('offbox');
+      if (box) box.remove();
+      const head = d.querySelector('.dhead'), k = d.querySelector('.kpis'), b = d.querySelector('.dbody');
+      [head, k, b].forEach(el => el.style.display = '');
+    }
+  }
+</script>
+</body>
+</html>

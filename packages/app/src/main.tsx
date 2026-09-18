@@ -4,6 +4,8 @@ import App from "./App";
 import { dataThemeAttr, loadGlass, loadThemeMode } from "./theme";
 import "./theme.css";
 import "./app.css";
+// t_15397c99: 大屏样式独立文件( Ops Wall 重构) — 必须在 main.tsx import(CSS @import 在文件尾部会被浏览器忽略)
+import "./app-dash.css";
 
 /**
  * 首帧前同步主题(D-010/D-016): index.html 不硬编码 data-theme,
