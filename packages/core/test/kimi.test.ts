@@ -4,6 +4,11 @@
  * fixture = 2026-08-29 真实 API 响应脱敏(userId/walletId 一律 <redacted>)。
  * 断言: 双窗 used/limit 经 number pipe 转数值、resetTime iso_epoch → 合理 epoch。
  *
+ * ⚠️ t_be136794 后 used 由 remaining 反推(invert_percent, kimi.ts 头注释三形态):
+ * 本 golden 的 detail 只有 limit/used(无 remaining, 8/29 取证形态原样保留)——
+ * remaining 缺失 → rolling_5h 按数据缺失跳过不再映射(假红≠坏方向, 是契约收紧);
+ * usage 主窗 remaining:"29" → used 反推 71(语义与旧行为一致)。
+ *
  * ⚠️ 不确定性记录(任务卡点名): kimi 主窗 `usage` 的窗口周期文档未明确
  * (实测 resetTime 距取证约 6 天, 推断 7 天窗) —— 本 fixture 只断言映射正确,
  * 不断言窗口语义; 上游若改周期, 唯一变化是 reset_at 数值, 断言仍绿但需人工复核。
@@ -56,7 +61,7 @@ function makeCtx(): AdapterContext {
 }
 
 describe("kimi/coding golden sample(§5.2 T3 双窗)", () => {
-  it("真实响应 → ok 快照: 字符串数值经 number pipe、resetTime iso_epoch", async () => {
+  it("真实响应 → ok 快照: remaining 反推 used、resetTime iso_epoch", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve({
         ok: true,
@@ -69,18 +74,13 @@ describe("kimi/coding golden sample(§5.2 T3 双窗)", () => {
 
     expect(snap.status).toBe("ok");
     expect(snap.plan_type).toBe("window");
-    expect(snap.metrics).toHaveLength(2);
 
     const byKey = Object.fromEntries(snap.metrics.map((m) => [m.key, m]));
-    // rolling_5h ← limits[0].detail: 5h 窗 100/100(字符串 → number pipe)
-    expect(byKey["rolling_5h"]).toMatchObject({
-      kind: "window",
-      unit: "percent",
-      used: 100,
-      limit: 100,
-      reset_at: 1_787_995_270,
-    });
-    // weekly ← usage 主窗: 71/100, reset .687248Z(6 位毫秒)
+    // rolling_5h ← limits[0].detail: 8/29 golden 的 detail 无 remaining(取证形态原样)
+    // → 数据缺失按契约跳过该指标(t_be136794 后 used 一律由 remaining 反推)
+    expect(byKey["rolling_5h"]).toBeUndefined();
+    expect(snap.alerts.some((a) => a.level === "warn")).toBe(true);
+    // weekly ← usage 主窗: remaining "29" → invert_percent → used=71(语义与旧 used:"71" 直读一致)
     expect(byKey["weekly"]).toMatchObject({
       kind: "window",
       unit: "percent",
