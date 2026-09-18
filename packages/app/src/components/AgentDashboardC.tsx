@@ -137,11 +137,12 @@ export function buildTrend(summary: UsageSummaryOutput): TrendBucket[] {
     }
     return filled;
   }
-  // 兼容退路: 单维单行时用一个「今日」桶表达今日总和(与旧口径一致, 便于 e2e 非空验证)
+  // 兼容退路: 单维单行时用一个「今日」桶表达今日总和(与旧口径一致, 便于 e2e 非空验证)。
+  // t_36b7ecb1 round-2(P2-1): 文案入 i18n(数据层文案, t() 读当前语言; en 界面不再漏中文)
   const total = summary.total;
   return [
     {
-      label: "今日",
+      label: t("dash.today"),
       tokens: total.input_cache_hit_tokens + total.input_cache_miss_tokens + total.output_tokens,
     },
   ];

@@ -82,6 +82,22 @@ describe("i18n 结构性断言(zh/en key 零缺漏)", () => {
     }
   });
 
+  it("zh/en 插值占位符集合一致(t_36b7ecb1 round-2 P2-2: 防 en 漏写 {n}/{window} 占位)", () => {
+    const { zh, en } = i18nModule;
+    const placeholders = (s: string): string[] =>
+      [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!).sort();
+    for (const path of leafPaths(zh)) {
+      const segs = path.split(".");
+      let zn: unknown = zh;
+      let enn: unknown = en;
+      for (const s of segs) {
+        zn = (zn as Record<string, unknown>)?.[s];
+        enn = (enn as Record<string, unknown>)?.[s];
+      }
+      expect(placeholders(zn as string)).toEqual(placeholders(enn as string));
+    }
+  });
+
   it("dash 命名空间(大屏文案)双语抽查", () => {
     setCurrentLang("zh");
     expect(t("dash.title")).toBe("Agent 用量");
