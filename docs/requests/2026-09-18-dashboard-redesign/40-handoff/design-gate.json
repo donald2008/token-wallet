@@ -1,0 +1,21 @@
+{
+  "cycle": "2026-09-18-dashboard-redesign",
+  "gate": 2,
+  "status": "pending",
+  "approved": false,
+  "approver": null,
+  "at": null,
+  "note": "approved 只能由老大在 GATE 2 亲手翻（管线铁律④：代码里没有写 true 的路径）",
+  "inputs": [
+    "00-context-lock.md",
+    "05-north-star.md",
+    "10-research.md",
+    "20-strategy.md",
+    "30-spec.md",
+    "references-locked.md",
+    "40-handoff/"
+  ],
+  "mocks": [],
+  "design_qa": null,
+  "seal": null
+}
