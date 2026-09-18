@@ -11,7 +11,8 @@
 | SL-03 | 无 daemon 降级形态 | SC-02/03 全状态实现 | SL-01 | kanban-worker + visual-test |
 | SL-04 | 文案与 i18n | 产品语言命名/空态文案/术语直出（zh+en 双语同步） | SL-01 | kanban-worker |
 | SL-05 | e2e 契约迁移 | testid 映射落地 + 断言更新（contracts/testid-contract.md） | SL-01 | kanban-worker |
-| SL-06 | 真机验收执行 | GATE 3：Windows 真机 + SC-10 三秒三问 | SL-01~05 全绿 | 老大人肉 |
+| SL-07 | 文档收口 | blast-radius 文档回写清单逐项执行（DECISIONS 新 D 条目/frontend-AGENTS 面板语法节/TESTING testid 节/README 双语截图） | SL-02~05 全绿 | kanban-worker（docs-only 惯例） |
+| SL-06 | 真机验收执行 | GATE 3：Windows 真机 + SC-10 三秒三问 | SL-01~05 + SL-07 全绿 | 老大人肉 |
 
 同仓严格单线程：SL-01→(02,03,04,05 可并行但共享 app.css 需圈地)→06。冲突热点预防：dash 样式段集中一个 commit range，禁跨卡散改 app.css 其他段。
 
