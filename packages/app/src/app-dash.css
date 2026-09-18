@@ -137,6 +137,44 @@
   margin-left: auto;
 }
 
+/* ---- 降级态(SL-03 SC-02/S14): 整屏快照语义 ----
+ * 数据区降饱和(对齐选中 IA ops-wall 离线态 .grid > .panel .pbody: saturate(.25) brightness(.82))。
+ * 只作用于数据承载元素, 不覆盖 .dash-module-empty —— SC-03 面板内失败文案与重试按钮必须保持可读可点。 */
+.agent-dashboard-c.is-snapshot .dash-kpi-body,
+.agent-dashboard-c.is-snapshot .chart-wrap,
+.agent-dashboard-c.is-snapshot .dash-model-table,
+.agent-dashboard-c.is-snapshot .dash-detail-table,
+.agent-dashboard-c.is-snapshot .dash-stack,
+.agent-dashboard-c.is-snapshot .dash-splitrows {
+  filter: saturate(0.25) brightness(0.82);
+}
+
+/* ---- 面板级降级(SL-03 SC-03/H7): 该维最近一次拉取失败但旧快照仍在 ----
+ * 3px 状态色顶缘 = S11 小面积状态色(继承 .dash-kpi::before 的 S5 顶缘语法);
+ * 用 inset box-shadow 而非 border/伪元素, 零布局位移(900×640 一屏收口预算不被吃掉)。 */
+.agent-dashboard-c .dash-panel.is-stale {
+  box-shadow: inset 0 3px 0 0 var(--warn);
+}
+/* KPI 面板自带 3px 系列色顶缘(::before) → 降级时顶缘让位状态色(禁叠色) */
+.agent-dashboard-c .dash-panel.dash-kpi.is-stale::before {
+  background: var(--warn);
+}
+
+/* 降级态状态点 + footer 时效标注/恢复动作(S11 状态色小面积; 文案走 --warn-fg 双 token D-016) */
+.dash-foot-live.is-degraded {
+  background: var(--warn);
+}
+.dash-foot-stale {
+  color: var(--warn-fg);
+  flex: none;
+}
+.dash-foot-retry {
+  margin-left: var(--space-8, 8px);
+  padding: 0 var(--space-8, 8px);
+  line-height: 16px;
+  flex: none;
+}
+
 /* ---- 12 列面板墙(S6) ---- */
 .dash-grid {
   flex: 1 1 auto;
@@ -624,6 +662,15 @@
   .dash-module-empty {
     min-height: 80px;
   }
+  /* SL-03 降级态(整屏): 横幅按紧凑刻度回预算 —— 实测 banner 44px(按钮 padding 撑高)会把
+   * 面板墙 min-content 挤超出 560 一屏(3px 顶缘 + 24px 行高都是硬下限, 面板不能再压) →
+   * 收横幅按钮/纵向 padding(banner 44→28px), 全快照降级态零纵向滚动(与常态同品质 S14)。 */
+  .dash-banner {
+    padding: var(--space-4, 4px) var(--space-12, 12px);
+  }
+  .dash-banner .dash-btn {
+    padding: 0 var(--space-8, 8px);
+  }
 
   .dash-titlebar,
   .dash-titlebar-title,
@@ -650,7 +697,9 @@
   .dash-module-empty button,
   .dash-agent-tabs,
   .dash-agent-tab,
-  .dash-foot {
+  .dash-foot,
+  .dash-foot-stale,
+  .dash-foot-retry {
     line-height: 16px;
   }
   .dash-foot {

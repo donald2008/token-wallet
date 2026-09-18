@@ -171,6 +171,14 @@ function AppShell() {
     ok: false,
     reason: "unavailable",
   });
+  // SL-03(SC-02/SC-03) 降级判据: 最近一次刷新里各维是否失败。
+  // 与上面 H7 只读缓存合并语义正交 —— 合并决定「展示什么」, 本 state 决定「降级形态怎么标」:
+  // 失败但旧 ok 快照仍在 = 面板级降级(快照语义), 从不成功 = 面板内显式失败空态。
+  const [lastFetchFailed, setLastFetchFailed] = useState({
+    summary: false,
+    model: false,
+    trend: false,
+  });
   const tick = useCallback(async () => {
     // 并行 3 查: 单维(agent) / 二维(agent+model) / 单维(day); 每份独立落地, 单份失败不阻塞其余
     // t_4b7984d9 round-7(用户真机 9/14): 查询存在间歇性失败(成功 7ms / 失败 unreachable 交替),
@@ -193,6 +201,8 @@ function AppShell() {
     setMcpSummary((prev) => (r.ok || !prev.ok ? r : prev));
     setMcpModelSummary((prev) => (rm.ok || !prev.ok ? rm : prev));
     setMcpTrendSummary((prev) => (rt.ok || !prev.ok ? rt : prev));
+    // SL-03: 记录本拍各维成败(供降级形态判定), 不改上面三行的展示语义(H7 不回退)
+    setLastFetchFailed({ summary: !r.ok, model: !rm.ok, trend: !rt.ok });
   }, []);
   useEffect(() => {
     let alive = true;
@@ -518,6 +528,12 @@ function AppShell() {
             generatedAt={mcpSummary.generatedAt}
             onBack={dashboardBack}
             onRetry={() => void tick()}
+            /* SL-03 降级形态: 三维全失败 = 整屏降级(SC-02 横幅+降饱和快照);
+             * 单维失败且旧快照仍在 = 该面板级降级(SC-03 + H7 时效标注)。 */
+            offline={lastFetchFailed.summary && lastFetchFailed.model && lastFetchFailed.trend}
+            summaryStale={lastFetchFailed.summary && mcpSummary.ok}
+            modelStale={lastFetchFailed.model && mcpModelSummary.ok}
+            trendStale={lastFetchFailed.trend && mcpTrendSummary.ok}
           />
         </div>
       );

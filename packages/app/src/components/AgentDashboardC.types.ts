@@ -51,4 +51,13 @@ export interface AgentDashboardCProps {
   onBack: () => void;
   /** 模块空态「重试」回调 — 调用方重新并行拉取三维数据 */
   onRetry: () => void;
+  /** SC-02(SL-03): 最近一次刷新三维查询全部失败 → 整屏降级形态
+   *  (横幅: 状态明确+快照时效+重试动作) + 数据区降饱和快照语义。
+   *  调用方仅在「三维全失败」时置 true —— 单维失败走下面的 *Stale 面板级形态。 */
+  offline?: boolean;
+  /** SC-03/H7(SL-03): 该维最近一次拉取失败, 但旧 ok 快照仍在(只读缓存语义) →
+   *  对应面板标为降级(快照语义)而不清空数据; 整屏降级(offline)时由横幅统一承载, 面板级标记让位。 */
+  summaryStale?: boolean;
+  modelStale?: boolean;
+  trendStale?: boolean;
 }

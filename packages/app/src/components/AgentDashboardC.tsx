@@ -66,6 +66,31 @@ export function splitGroupDims(group: string, dims: string[]): string[] | null {
   return parts;
 }
 
+/** SC-02 快照时效(SL-03): 生成时间 → 「MM-DD HH:MM」短格式(ISO 解析失败则原样截断)。
+ * 导出供 L1 单测锁格式契约。 */
+export function snapshotStamp(iso: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso.slice(0, 16);
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** SC-02 快照时效(SL-03): 距生成时间的相对时长文案(H7 时效标注)。
+ * 时间不可解析/未来时间 → 空串(不渲染假时效)。 */
+export function snapshotAge(iso: string, now: number = Date.now()): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "";
+  const diff = now - ms;
+  if (diff < 0) return "";
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "刚刚";
+  if (min < 60) return `${min} 分钟前`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour} 小时前`;
+  return `${Math.floor(hour / 24)} 天前`;
+}
+
 function rowTokens(r: SummaryRow): number {
   return r.input_cache_hit_tokens + r.input_cache_miss_tokens + r.output_tokens;
 }
@@ -247,6 +272,10 @@ export function AgentDashboardC({
   generatedAt,
   onBack,
   onRetry,
+  offline: offlineProp,
+  summaryStale: summaryStaleProp,
+  modelStale: modelStaleProp,
+  trendStale: trendStaleProp,
 }: AgentDashboardCProps): ReactNode {
   const [touchedTheme, setTouchedTheme] = useState(false);
   // 初始主题从全局 html data-theme 派生(尊重 dark-glass 等玻璃变体, t_15397c99 U5 字节互异前提);
@@ -479,15 +508,32 @@ export function AgentDashboardC({
     return `${short(since)} ~ ${short(until)}`;
   }, [summary]);
 
-  // 降级横幅时间(H7 缓存优先语义: 显示快照截至时间而非空白)
-  const snapshotAt = useMemo(() => {
+  // 降级形态判定(SL-03): 整屏降级(三维全失败) / 面板级降级(该维失败但旧快照仍在)。
+  // 整屏降级时面板级标记让位 —— 横幅已承载屏幕级状态, 双重告警反而削弱信号(S11 状态色克制)。
+  const offline = offlineProp === true;
+  const panelStale = {
+    summary: !offline && summaryStaleProp === true,
+    model: !offline && modelStaleProp === true,
+    trend: !offline && trendStaleProp === true,
+  };
+  const degraded = offline || panelStale.summary || panelStale.model || panelStale.trend;
+  /** 面板降级类名/属性(零布局位移: 视觉标记走 inset box-shadow 顶缘, 见 app-dash.css) */
+  const panelCls = (base: string, isStale: boolean): string => (isStale ? `${base} is-stale` : base);
+  const staleAttr = (isStale: boolean): string | undefined => (isStale ? "1" : undefined);
+
+  // 降级态快照时效(H7 缓存优先语义: 显示快照截至时间+相对时长, 而非空白)
+  const snapshot = useMemo(() => {
     const iso = generatedAt || summary.generated_at || "";
-    const m = /(\d{2}:\d{2}(:\d{2})?)/.exec(iso);
-    return m ? m[1]! : iso;
+    return { stamp: snapshotStamp(iso), age: snapshotAge(iso) };
   }, [generatedAt, summary]);
 
   return (
-    <div className="agent-dashboard-c" data-testid="agent-dashboard-c" data-theme={theme}>
+    <div
+      className={`agent-dashboard-c${offline ? " is-snapshot" : ""}`}
+      data-testid="agent-dashboard-c"
+      data-theme={theme}
+      data-snapshot={offline ? "1" : undefined}
+    >
       {/* titlebar 40px: 状态点 · 产品语言标题(S10) + 副题 · 时间窗 · 主题/返回 */}
       <header className="dash-titlebar">
         <i className="dash-titlebar-dot" aria-hidden="true" />
@@ -531,18 +577,28 @@ export function AgentDashboardC({
         </div>
       </header>
 
-      {/* 降级横幅(SC-02, S14): DAEMON 查询失败时显式状态 + 恢复动作, 同一品质壳。
-       *  可见性代理: 三维查询同时失败 = daemon 会话内不可达(单维 summary 走 App 层
-       *  既有降级空态, 不动数据边界); SL-03 降级形态卡在此基础上扩展全状态。 */}
+      {/* 降级横幅(SC-02, S14): 最近一次刷新三维查询全部失败(daemon 不可达)时显式状态
+       *  + 快照时效 + 恢复动作, 数据区保持上次快照(降饱和) — 专业壳不塌。
+       *  SL-03: 触发改由调用方 offline 判定(App 层: 三维全失败), 替换 SL-01 的
+       *  「trend+model 同挂」代理 —— 该代理在 H7 只读缓存合并下永不成立(失败维保留旧 ok)。 */}
       <div
-        className={`dash-banner${trendState === "failed" && modelState === "failed" ? " is-visible" : ""}`}
+        className={`dash-banner${offline ? " is-visible" : ""}`}
         data-testid="agent-dashboard-c-banner-offline"
         role="alert"
+        aria-hidden={offline ? undefined : "true"}
       >
         <i className="dash-banner-dot" aria-hidden="true" />
         <b>DAEMON 未连接</b>
-        <span className="dash-banner-sub">显示上次快照 · 数据截至 {snapshotAt || "—"}</span>
-        <button type="button" className="dash-btn" onClick={onRetry}>
+        <span className="dash-banner-sub">
+          三维查询全部失败 · 显示上次快照 · 数据截至 {snapshot.stamp}
+          {snapshot.age ? ` · ${snapshot.age}` : ""}
+        </span>
+        <button
+          type="button"
+          className="dash-btn"
+          data-testid="agent-dashboard-c-banner-retry"
+          onClick={onRetry}
+        >
           重新连接
         </button>
       </div>
@@ -550,7 +606,7 @@ export function AgentDashboardC({
       {/* 12 列面板墙(S6: gutter 12px, padding 12px) */}
       <div className="dash-grid">
         {/* KPI 带 span3×4, 顶缘 3px 系列色(S5); 大数字锚 + 精确数(H: 全数字, 禁 K/M 简写) */}
-        <section className="dash-panel dash-kpi t1">
+        <section className={panelCls("dash-panel dash-kpi t1", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <div className="dash-kpi-body">
             <div className="dash-label">Tokens · {windowLabel}</div>
             <div className="dash-kpi-v" data-testid="agent-dashboard-c-kpi-tokens">
@@ -562,7 +618,7 @@ export function AgentDashboardC({
             </div>
           </div>
         </section>
-        <section className="dash-panel dash-kpi t2">
+        <section className={panelCls("dash-panel dash-kpi t2", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <div className="dash-kpi-body">
             <div className="dash-label">成本 · {windowLabel}</div>
             {/* H3: cost=null 留空不显 0(is-empty 隐藏大数字, 副行仍给调用数) */}
@@ -578,7 +634,7 @@ export function AgentDashboardC({
             </div>
           </div>
         </section>
-        <section className="dash-panel dash-kpi t3">
+        <section className={panelCls("dash-panel dash-kpi t3", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <div className="dash-kpi-body">
             <div className="dash-label">Cache 命中率</div>
             <div className="dash-kpi-v" data-testid="agent-dashboard-c-kpi-hit">
@@ -590,7 +646,7 @@ export function AgentDashboardC({
             </div>
           </div>
         </section>
-        <section className="dash-panel dash-kpi t4">
+        <section className={panelCls("dash-panel dash-kpi t4", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <div className="dash-kpi-body">
             <div className="dash-label">活跃 Agent</div>
             <div className="dash-kpi-v" data-testid="agent-dashboard-c-kpi-active">
@@ -604,7 +660,7 @@ export function AgentDashboardC({
         </section>
 
         {/* 趋势 span8: 柱状 + 均值虚线(S8); 桶计数/均值在 phead note */}
-        <section className="dash-panel dash-span8 dash-p-trend">
+        <section className={panelCls("dash-panel dash-span8 dash-p-trend", panelStale.trend)} data-stale={staleAttr(panelStale.trend)}>
           <header className="dash-phead">
             <h2>趋势 · tokens 消耗</h2>
             <span className="dash-pnote" data-testid="dash-trend-note">
@@ -630,7 +686,7 @@ export function AgentDashboardC({
         </section>
 
         {/* Model span4: 环形 + 中心总量 + chips 表(S5/S7); agent tab(H4) 落 phead */}
-        <section className="dash-panel dash-span4 dash-p-model">
+        <section className={panelCls("dash-panel dash-span4 dash-p-model", panelStale.model)} data-stale={staleAttr(panelStale.model)}>
           <header className="dash-phead">
             <h2>Model 分布</h2>
             {detailRows.length > 1 ? (
@@ -720,7 +776,7 @@ export function AgentDashboardC({
         {/* 明细 span8: agent 维全量一行一 agent(appendix 数据接线), 24px 行高 + 右对齐成列(S4/S6);
          *  当前 agent 行高亮 = H4 联动语义保留; 状态点 active/idle/off(S11 小面积);
          *  第 7 列 = 成本(W1 人工终审裁定, 对齐锁定参考 ops-wall 第 7 列) */}
-        <section className="dash-panel dash-span8 dash-p-detail">
+        <section className={panelCls("dash-panel dash-span8 dash-p-detail", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <header className="dash-phead">
             <h2>明细 · 按 agent</h2>
             {/* W1 裁定: 第 7 列=成本(对齐锁定参考 ops-wall), pricing 已接入(cost_total/currency);
@@ -789,7 +845,7 @@ export function AgentDashboardC({
         </section>
 
         {/* 三分项 span4: 堆叠条 + 行式三行(大写标签, S4) */}
-        <section className="dash-panel dash-span4 dash-p-split">
+        <section className={panelCls("dash-panel dash-span4 dash-p-split", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <header className="dash-phead">
             <h2>三分项拆分</h2>
             <span className="dash-pnote">{`${pctHit}% / ${pctMiss}% / ${pctOut}%`}</span>
@@ -836,11 +892,31 @@ export function AgentDashboardC({
         </section>
       </div>
 
-      {/* footer 24px: daemon 状态点 · 来源 · 快照时间(agent-dashboard-c-footer 兼容类保留, e2e 断言用) */}
+      {/* footer 24px: daemon 状态点 · 来源 · 快照时间(agent-dashboard-c-footer 兼容类保留, e2e 断言用)
+       *  SL-03 降级态(H7 时效标注 + SC-03 恢复动作): 任一维降级时状态点转 warn +
+       *  显式「上次拉取失败 · 显示快照 <时间>」+ 重试(整屏降级时与横幅同源动作, 局部降级时唯一恢复入口)。 */}
       <footer className="dash-foot agent-dashboard-c-footer" data-testid="agent-dashboard-c-meta">
-        <i className="dash-foot-live" aria-hidden="true" />
+        <i
+          className={`dash-foot-live${degraded ? " is-degraded" : ""}`}
+          aria-hidden="true"
+        />
         <span>DAEMON usage_summary · {windowLabel}</span>
         <b className="dash-num">数据快照 {generatedAt || summary.generated_at} · generated_at</b>
+        {degraded && (
+          <span className="dash-foot-stale" data-testid="agent-dashboard-c-foot-degraded">
+            {offline ? "上次刷新失败" : "部分面板拉取失败"} · 显示快照 {snapshot.stamp}
+          </span>
+        )}
+        {degraded && (
+          <button
+            type="button"
+            className="dash-btn dash-foot-retry"
+            data-testid="agent-dashboard-c-retry"
+            onClick={onRetry}
+          >
+            重试
+          </button>
+        )}
       </footer>
     </div>
   );

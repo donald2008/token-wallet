@@ -1000,3 +1000,211 @@ test("t_12c28686 单模型如实 1 slice + 趋势不足 2 天显「数据积累�
   await pwExpect(page.getByTestId("dash-trend-empty-retry")).toHaveCount(0);
   await pwExpect(page.getByTestId("agent-dashboard-c-chart-trend")).toHaveCount(0);
 });
+
+/**
+ * SL-03(SC-02) 整屏降级: 最近一次刷新三维查询全部失败(daemon 掉线) → 专业降级形态。
+ * 判据(REQ-04/S14): ①横幅显式(状态明确 + 快照时效 + 重试动作) ②数据区降饱和快照语义
+ * ③旧快照数据保留(H7 同源, 不清零成假数据) ④15% 高度预算内不塌(零纵向滚动)。
+ * 触发说明: 面板内「重试」(ModuleEmpty) 与 footer「重试」都走 App 同一 tick —— 用面板重试
+ * 驱动跌线那一拍, 避免在用例里白等 30s 轮询间隔(同一代码路径, 语义等价)。
+ */
+test("SL-03 SC-02 整屏降级: 三维全失败 → 横幅(状态+快照时效+重试)+快照降饱和+旧数据保留", async ({
+  hostPage,
+  page,
+}) => {
+  test.setTimeout(90_000); // ⑦ 需真等 30s 轮询那一拍(掉线检测)
+  void hostPage;
+  // 起手: summary/model 有快照 + day 冷失败(趋势面板失败态 = tick 触发器) ——
+  // 掉线后即为「缓存快照 KPI/明细/Model + 趋势冷失败」的真实演示现场形态(SC-10 降级演练同源)
+  await page.getByTestId("consent-agree").click();
+  await seedAgentUsageMulti(page, {
+    agent: { ok: true, data: multiAgent },
+    "agent,model": { ok: true, data: multiModelAgent },
+    day: { ok: false, reason: "unreachable" },
+  });
+  await page.setViewportSize({ width: 900, height: 560 }); // 产品窗内容区尺寸(t_e83ad982)
+  await page.goto("?view=agent-dashboard&standalone=1");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  await pwExpect(page.getByTestId("agent-dashboard-c-banner-offline")).not.toHaveClass(/is-visible/);
+  await pwExpect(page.getByTestId("agent-dashboard-c")).not.toHaveAttribute("data-snapshot", "1");
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-table")).toBeVisible(); // Model 快照已在场
+
+  // daemon 掉线: 三维全失败 → 点面板重试驱动这一拍 tick
+  await seedAgentUsageMulti(page, {
+    agent: { ok: false, reason: "unreachable" },
+    "agent,model": { ok: false, reason: "unreachable" },
+    day: { ok: false, reason: "unreachable" },
+  });
+  await page.getByTestId("dash-trend-empty-retry").click();
+
+  // ① 横幅: 状态明确 + 快照时效(绝对时间) + 恢复动作
+  const banner = page.getByTestId("agent-dashboard-c-banner-offline");
+  await pwExpect(banner).toHaveClass(/is-visible/);
+  await pwExpect(banner).toContainText("DAEMON 未连接");
+  await pwExpect(banner).toContainText("三维查询全部失败");
+  await pwExpect(banner).toContainText(/数据截至 \d{2}-\d{2} \d{2}:\d{2}/);
+  await pwExpect(page.getByTestId("agent-dashboard-c-banner-retry")).toBeVisible();
+
+  // ② 数据区降饱和快照语义(root 标位 + 数据承载元素真吃 filter)
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toHaveAttribute("data-snapshot", "1");
+  const detailFilter = await page
+    .getByTestId("agent-dashboard-c-detail-list")
+    .evaluate((el) => getComputedStyle(el).filter);
+  expect(detailFilter, "数据区降饱和未生效(SC-02 快照语义)").toContain("saturate(0.25)");
+
+  // ③ 旧快照保留(H7 同源): KPI/明细 仍是掉线前那一拍的真数据, 不清零
+  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148,400");
+  await pwExpect(page.getByTestId("agent-dashboard-c-detail-list").locator("tbody tr")).toHaveCount(2);
+
+  // ④ footer 时效标注 + 降级态状态点
+  await pwExpect(page.getByTestId("agent-dashboard-c-foot-degraded")).toContainText("上次刷新失败");
+  await pwExpect(page.locator(".dash-foot-live")).toHaveClass(/is-degraded/);
+  // ④b 零裁剪硬探针: footer 一行为定高, 降级文案/重试不得把内容挤出可视区(被 overflow:hidden 静默裁掉)
+  const foot = await page.evaluate(() => {
+    const f = document.querySelector(".agent-dashboard-c-footer") as HTMLElement;
+    const stale = document.querySelector('[data-testid="agent-dashboard-c-foot-degraded"]') as HTMLElement;
+    const retry = document.querySelector('[data-testid="agent-dashboard-c-retry"]') as HTMLElement;
+    return {
+      sw: f.scrollWidth,
+      cw: f.clientWidth,
+      fRight: f.getBoundingClientRect().right,
+      staleLeft: stale.getBoundingClientRect().left,
+      staleRight: stale.getBoundingClientRect().right,
+      retryRight: retry.getBoundingClientRect().right,
+    };
+  });
+  expect(foot.sw, `footer 内容被裁(sw ${foot.sw} > cw ${foot.cw})`).toBeLessThanOrEqual(foot.cw + 1);
+  expect(foot.staleLeft, "降级时效标注被左挤裁").toBeGreaterThanOrEqual(foot.fRight - foot.cw - 1);
+  expect(foot.retryRight, "降级重试按钮被右裁").toBeLessThanOrEqual(foot.fRight + 0.5);
+
+  // ⑤ 版式不塌: 横幅占位后容器仍零纵向滚动(900×560 一屏收口预算 + banner ≈33px)
+  const box = await page.evaluate(() => {
+    const dash = document.querySelector(".agent-dashboard-c") as HTMLElement;
+    const footer = document.querySelector(".agent-dashboard-c-footer") as HTMLElement;
+    return {
+      ch: dash.clientHeight,
+      sh: dash.scrollHeight,
+      footerBottom: footer.getBoundingClientRect().bottom,
+      vh: window.innerHeight,
+    };
+  });
+  expect(box.sh, `降级态纵向溢出(scrollHeight ${box.sh} > clientHeight ${box.ch})`).toBeLessThanOrEqual(
+    box.ch + 1,
+  );
+  expect(box.footerBottom, `降级态页脚越出视口 bottom=${box.footerBottom}`).toBeLessThanOrEqual(box.vh + 0.5);
+
+  // ⑥ 恢复动作真联通: 横幅重试重新并行发 3 查
+  const before = (await getCapturedInvokes(page)).filter((c) => c.cmd === "mcp_usage_summary").length;
+  await page.getByTestId("agent-dashboard-c-banner-retry").click();
+  const after = (await getCapturedInvokes(page)).filter((c) => c.cmd === "mcp_usage_summary").length;
+  expect(after, "横幅重试必须重新发起 3 查(并行)").toBeGreaterThanOrEqual(before + 3);
+  // mock 仍 unreachable → 降级态保持(不闪回常态)
+  await pwExpect(page.getByTestId("agent-dashboard-c-banner-offline")).toHaveClass(/is-visible/);
+
+  // ⑦ 全快照降级(演示现场形态: 先三维全 ok 拿到快照, 再掉线一拍):
+  //    数据区三块全是快照 → 降饱和 + logo 曲线/表全在 + 零纵向滚动(版式不塌, S14 同品质)。
+  //    day 恢复 → 三维全 ok(横幅重试即 tick)
+  await seedAgentUsageMulti(page, {
+    agent: { ok: true, data: multiAgent },
+    "agent,model": { ok: true, data: multiModelAgent },
+    day: { ok: true, data: multiDay },
+  });
+  await page.getByTestId("agent-dashboard-c-banner-retry").click();
+  await pwExpect(page.getByTestId("agent-dashboard-c-banner-offline")).not.toHaveClass(/is-visible/);
+  await pwExpect(page.getByTestId("agent-dashboard-c-chart-trend")).toBeVisible();
+  // 掉线 → 等轮询那一拍(30s 间隔; 用 toHaveClass 覆盖超时而不是硬 sleep)
+  await seedAgentUsageMulti(page, {
+    agent: { ok: false, reason: "unreachable" },
+    "agent,model": { ok: false, reason: "unreachable" },
+    day: { ok: false, reason: "unreachable" },
+  });
+  await pwExpect(page.getByTestId("agent-dashboard-c-banner-offline")).toHaveClass(/is-visible/, {
+    timeout: 45_000,
+  });
+  await pwExpect(page.getByTestId("agent-dashboard-c-chart-trend")).toBeVisible(); // 快照曲线仍在
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-table")).toBeVisible(); // 快照表仍在
+  const fullSnap = await page.evaluate(() => {
+    const dash = document.querySelector(".agent-dashboard-c") as HTMLElement;
+    const detail = document.querySelector(".dash-p-detail") as HTMLElement;
+    const split = document.querySelector(".dash-p-split") as HTMLElement;
+    return {
+      ch: dash.clientHeight,
+      sh: dash.scrollHeight,
+      bottom: Math.round(dash.getBoundingClientRect().bottom),
+      detailBottom: Math.round(detail.getBoundingClientRect().bottom),
+      splitBottom: Math.round(split.getBoundingClientRect().bottom),
+    };
+  });
+  expect(
+    fullSnap.sh,
+    `全快照降级态纵向溢出(scrollHeight ${fullSnap.sh} > clientHeight ${fullSnap.ch}; ` +
+      `detail/split bottom=${fullSnap.detailBottom}/${fullSnap.splitBottom} vs 容器底 ${fullSnap.bottom})`,
+  ).toBeLessThanOrEqual(fullSnap.ch + 1);
+  expect(fullSnap.detailBottom, "明细面板在降级态被容器裁切").toBeLessThanOrEqual(fullSnap.bottom + 0.5);
+  expect(fullSnap.splitBottom, "三分项面板在降级态被容器裁切").toBeLessThanOrEqual(fullSnap.bottom + 0.5);
+});
+
+/**
+ * SL-03(SC-03) 面板级降级: 单维拉取失败但旧快照仍在(H7 只读缓存语义) →
+ * 该面板保持快照数据 + 标降级(3px 状态色顶缘/data-stale) + footer 时效标注与重试动作;
+ * 其余面板不受影响。冷失败(无快照)仍走面板内「数据拉取失败」+重试(既有语义不回退)。
+ */
+test("SL-03 SC-03 面板级降级: model 掉线但有旧快照 → 面板标降级不丢数据 + 其余面板正常", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  // 起手: summary 成功, model/day 冷失败(trend 面板的失败态 = 本用例的 tick 触发器)
+  await page.getByTestId("consent-agree").click();
+  await seedAgentUsageMulti(page, {
+    agent: { ok: true, data: multiAgent },
+    "agent,model": { ok: false, reason: "unreachable" },
+    day: { ok: false, reason: "unreachable" },
+  });
+  await page.goto("?view=agent-dashboard&standalone=1");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  // 冷失败语义(基线不回退): 面板内显式文案 + 重试
+  await pwExpect(page.getByTestId("dash-model-empty")).toContainText("数据拉取失败");
+  await pwExpect(page.getByTestId("dash-model-empty-retry")).toBeVisible();
+
+  // 一拍成功 → model 拿到快照(day 仍失败, 保住 tick 触发器)
+  await seedAgentUsageMulti(page, {
+    agent: { ok: true, data: multiAgent },
+    "agent,model": { ok: true, data: multiModelAgent },
+    day: { ok: false, reason: "unreachable" },
+  });
+  await page.getByTestId("dash-model-empty-retry").click();
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-table")).toBeVisible();
+
+  // model 单维掉线(其余成功): 旧快照保留 + 面板级降级标记
+  await seedAgentUsageMulti(page, {
+    agent: { ok: true, data: multiAgent },
+    "agent,model": { ok: false, reason: "unreachable" },
+    day: { ok: false, reason: "unreachable" },
+  });
+  await page.getByTestId("dash-trend-empty-retry").click();
+
+  // 面板级降级: is-stale/data-stale 标位 + 快照数据仍在(不退化成失败空态)
+  const modelPanel = page.locator(".dash-p-model");
+  await pwExpect(modelPanel).toHaveClass(/is-stale/);
+  await pwExpect(modelPanel).toHaveAttribute("data-stale", "1");
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-table")).toBeVisible();
+  await pwExpect(page.getByTestId("dash-model-empty")).toHaveCount(0);
+  // 顶缘状态色真落地(程序化读计算值, 非目检)
+  const edge = await modelPanel.evaluate((el) => getComputedStyle(el).boxShadow);
+  expect(edge, "面板降级顶缘(3px 状态色)未生效").toContain("rgb(250, 204, 21)");
+
+  // 其余面板正常: KPI/明细/三分项不标降级; 趋势仍是冷失败态(独立失败域)
+  await pwExpect(page.locator(".dash-kpi.is-stale")).toHaveCount(0);
+  await pwExpect(page.locator(".dash-p-detail")).not.toHaveClass(/is-stale/);
+  await pwExpect(page.getByTestId("dash-trend-empty")).toContainText("数据拉取失败");
+  // KPI 数据不受面板级降级影响
+  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148,400");
+
+  // footer: 面板级降级摘要(时效标注 H7) + 重试动作(SC-03 恢复入口)
+  await pwExpect(page.getByTestId("agent-dashboard-c-foot-degraded")).toContainText("部分面板拉取失败");
+  const before = (await getCapturedInvokes(page)).filter((c) => c.cmd === "mcp_usage_summary").length;
+  await page.getByTestId("agent-dashboard-c-retry").click();
+  const after = (await getCapturedInvokes(page)).filter((c) => c.cmd === "mcp_usage_summary").length;
+  expect(after, "footer 重试必须重新发起 3 查(并行)").toBeGreaterThanOrEqual(before + 3);
+});

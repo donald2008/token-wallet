@@ -34,6 +34,18 @@
 | dash-trend-note | 趋势面板头注（均值等） |
 | dash-model-empty | Model 面板空态/失败态 |
 
+## SL-03 新增项（SC-02/SC-03 降级形态；已在代码，纳入契约）
+
+| testid | 语义 |
+|---|---|
+| agent-dashboard-c-banner-retry | SC-02 整屏降级横幅的「重新连接」（恢复动作；横幅既有 testid 不变） |
+| agent-dashboard-c-foot-degraded | 降级态时效标注（「上次刷新失败/部分面板拉取失败 · 显示快照 MM-DD HH:MM」） |
+| agent-dashboard-c-retry | 降级态 footer 重试（局部降级时唯一恢复入口；整屏降级时与横幅同源动作） |
+
+配套（非 testid，e2e/SL-05 可依赖）：根容器降级态 `data-snapshot="1"` + `.is-snapshot`（数据区降饱和快照语义）；
+受影响面板 `.is-stale` + `data-stale="1"`（该维最近一次拉取失败但旧快照仍在，3px 状态色顶缘）。
+既有 22 项 testid 本卡零改动（横幅 / 面板空态 / 明细表 testid 全部沿用）。
+
 ## 裁定记录（人工终审 W1，2026-09-18）
 
 明细表第 7 列 = **「成本」**（对齐锁定参考 ops-wall 第 7 列），替换现「模型」列；渲染规则按继承清单 H3：cost=null 留空、混币种分行不换汇。实现归 SL-02（含 e2e/单测同步）。原「模型」数由 `agent-dashboard-c-models` 锚位承载（KPI 带），信息不丢。

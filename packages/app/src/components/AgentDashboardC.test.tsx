@@ -13,7 +13,16 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AgentDashboardC, buildTrend, splitGroupDims, seriesVar, weekdayLabel } from "./AgentDashboardC";
+import {
+  AgentDashboardC,
+  buildTrend,
+  splitGroupDims,
+  seriesVar,
+  weekdayLabel,
+  snapshotStamp,
+  snapshotAge,
+} from "./AgentDashboardC";
+import type { AgentDashboardCProps } from "./AgentDashboardC.types";
 import type { McpQueryResult } from "../mcpQuery";
 import type { UsageSummaryOutput, SummaryRow } from "../mcpQueryTypes";
 
@@ -115,6 +124,8 @@ function mountDash(
   summary: UsageSummaryOutput = fakeSummary,
   modelSummary: McpQueryResult<UsageSummaryOutput> = okResult,
   trendSummary: McpQueryResult<UsageSummaryOutput> = okDayResult,
+  /** SL-03: 降级形态 props(offline / *Stale / onRetry)透传 —— 既有调用点零改动 */
+  extra: Partial<AgentDashboardCProps> = {},
 ) {
   return mount(
     <AgentDashboardC
@@ -124,6 +135,7 @@ function mountDash(
       generatedAt={summary.generated_at}
       onBack={() => {}}
       onRetry={() => {}}
+      {...extra}
     />,
   );
 }
@@ -529,5 +541,125 @@ describe("AgentDashboardC(t_5cf22ba4 展示品质回归锁)", () => {
     );
     expect(cell?.textContent).toBe("");
     expect(cell?.className).toContain("cost-empty");
+  });
+});
+
+describe("AgentDashboardC(SL-03 降级形态 SC-02/SC-03)", () => {
+  it("快照时效格式契约: snapshotStamp MM-DD HH:MM / snapshotAge 相对时长", () => {
+    // 本地时区构造 → 断言与运行机 TZ 无关
+    const localNoon = new Date(2026, 8, 9, 12, 0, 0);
+    const iso = localNoon.toISOString();
+    expect(snapshotStamp(iso)).toBe("09-09 12:00");
+    expect(snapshotStamp("不可解析")).toBe("不可解析");
+    const base = localNoon.getTime();
+    expect(snapshotAge(iso, base + 30_000)).toBe("刚刚");
+    expect(snapshotAge(iso, base + 5 * 60_000)).toBe("5 分钟前");
+    expect(snapshotAge(iso, base + 3 * 3_600_000)).toBe("3 小时前");
+    expect(snapshotAge(iso, base + 50 * 3_600_000)).toBe("2 天前");
+    // 不可解析 / 未来时间 → 空串(不渲染假时效)
+    expect(snapshotAge("不可解析")).toBe("");
+    expect(snapshotAge(iso, base - 60_000)).toBe("");
+  });
+
+  it("SC-02: offline → 横幅显式(状态明确+快照时效+重试) + 数据区快照降饱和标记, 快照数据保留", () => {
+    const { container: c } = mountDash(fakeSummary, okResult, okDayResult, { offline: true });
+    const banner = c.querySelector('[data-testid="agent-dashboard-c-banner-offline"]');
+    expect(banner?.className).toContain("is-visible");
+    expect(banner?.textContent).toContain("DAEMON 未连接"); // 状态明确
+    expect(banner?.textContent).toContain("三维查询全部失败");
+    expect(banner?.textContent).toMatch(/数据截至 \d{2}-\d{2} \d{2}:\d{2}/); // 快照时效(绝对)
+    expect(banner?.querySelector('[data-testid="agent-dashboard-c-banner-retry"]')).toBeTruthy(); // 恢复动作
+    // 数据区降饱和快照语义(root 标位) + 旧快照仍在(不清空成空态 — H7 同源)
+    const rootEl = c.querySelector('[data-testid="agent-dashboard-c"]');
+    expect(rootEl?.className).toContain("is-snapshot");
+    expect(rootEl?.getAttribute("data-snapshot")).toBe("1");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81,000");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-detail-list"]')?.querySelectorAll("tbody tr")).toHaveLength(2);
+    // footer 降级摘要(时效标注) + 重试入口
+    expect(c.querySelector('[data-testid="agent-dashboard-c-foot-degraded"]')?.textContent).toContain("上次刷新失败");
+    expect(c.querySelector(".dash-foot-live")?.className).toContain("is-degraded");
+  });
+
+  it("SC-02: 横幅重试与 footer 重试均触发 onRetry(恢复动作可点)", () => {
+    const onRetry = vi.fn();
+    const { container: c } = mountDash(fakeSummary, failResult, failResult, { offline: true, onRetry });
+    const bannerRetry = c.querySelector('[data-testid="agent-dashboard-c-banner-retry"]') as HTMLButtonElement;
+    act(() => bannerRetry.click());
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    const footRetry = c.querySelector('[data-testid="agent-dashboard-c-retry"]') as HTMLButtonElement;
+    act(() => footRetry.click());
+    expect(onRetry).toHaveBeenCalledTimes(2);
+  });
+
+  it("SC-02: 常态(offline 未置) → 横幅不可见 + 无快照标记 + footer 无降级块", () => {
+    const { container: c } = mountDash();
+    expect(c.querySelector('[data-testid="agent-dashboard-c-banner-offline"]')?.className).not.toContain("is-visible");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-banner-offline"]')?.getAttribute("aria-hidden")).toBe("true");
+    const rootEl = c.querySelector('[data-testid="agent-dashboard-c"]');
+    expect(rootEl?.className).not.toContain("is-snapshot");
+    expect(rootEl?.getAttribute("data-snapshot")).toBeNull();
+    expect(c.querySelector('[data-testid="agent-dashboard-c-foot-degraded"]')).toBeNull();
+    expect(c.querySelectorAll(".dash-panel.is-stale")).toHaveLength(0);
+    expect(c.querySelector(".dash-foot-live")?.className).not.toContain("is-degraded");
+  });
+
+  it("SC-03: model 单维失败但旧快照仍在 → 该面板标降级不丢数据(H7), 其余面板正常 + footer 时效/重试", () => {
+    const onRetry = vi.fn();
+    const { container: c } = mountDash(fakeSummary, okResult, okDayResult, { modelStale: true, onRetry });
+    const modelPanel = c.querySelector(".dash-p-model");
+    expect(modelPanel?.className).toContain("is-stale");
+    expect(modelPanel?.getAttribute("data-stale")).toBe("1");
+    // 缓存数据保留: 迷你表仍在, 不得退化成失败空态
+    expect(c.querySelector('[data-testid="agent-dashboard-c-model-table"]')).toBeTruthy();
+    expect(c.querySelector('[data-testid="dash-model-empty"]')).toBeNull();
+    // 其余面板不标(失败域隔离)
+    expect(c.querySelector(".dash-p-trend")?.className).not.toContain("is-stale");
+    expect(c.querySelectorAll(".dash-kpi.is-stale")).toHaveLength(0);
+    expect(c.querySelector(".dash-p-trend")?.getAttribute("data-stale")).toBeNull();
+    // footer: 面板级降级摘要 + 重试(SC-03 恢复动作)
+    expect(c.querySelector('[data-testid="agent-dashboard-c-foot-degraded"]')?.textContent).toContain("部分面板拉取失败");
+    const footRetry = c.querySelector('[data-testid="agent-dashboard-c-retry"]') as HTMLButtonElement;
+    act(() => footRetry.click());
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("SC-03: trend 单维失败 → 趋势面板标降级 + 缓存曲线仍在; KPI/明细不受影响", () => {
+    const { container: c } = mountDash(fakeSummary, okResult, okDayResult, { trendStale: true });
+    expect(c.querySelector(".dash-p-trend")?.className).toContain("is-stale");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-chart-trend"]')).toBeTruthy();
+    expect(c.querySelector('[data-testid="dash-trend-empty"]')).toBeNull();
+    expect(c.querySelector(".dash-p-model")?.className).not.toContain("is-stale");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81,000");
+  });
+
+  it("SC-03: summary 维失败 → KPI 带/明细/三分项(同源 summary 派生)标降级, 趋势与 Model 不标", () => {
+    const { container: c } = mountDash(fakeSummary, okResult, okDayResult, { summaryStale: true });
+    expect(c.querySelectorAll(".dash-kpi.is-stale")).toHaveLength(4);
+    expect(c.querySelector(".dash-p-detail")?.className).toContain("is-stale");
+    expect(c.querySelector(".dash-p-split")?.className).toContain("is-stale");
+    expect(c.querySelector(".dash-p-trend")?.className).not.toContain("is-stale");
+    expect(c.querySelector(".dash-p-model")?.className).not.toContain("is-stale");
+  });
+
+  it("SC-02/SC-03 分层: 整屏降级时面板级标记让位(防双重告警)", () => {
+    const { container: c } = mountDash(fakeSummary, okResult, okDayResult, {
+      offline: true,
+      summaryStale: true,
+      modelStale: true,
+      trendStale: true,
+    });
+    expect(c.querySelectorAll(".dash-panel.is-stale")).toHaveLength(0);
+    expect(c.querySelector('[data-testid="agent-dashboard-c-banner-offline"]')?.className).toContain("is-visible");
+    expect(c.querySelector('[data-testid="agent-dashboard-c"]')?.className).toContain("is-snapshot");
+  });
+
+  it("SC-03: 面板冷失败(无旧快照)语义不回退 → 面板内「数据拉取失败」+重试, 不标降级", () => {
+    const { container: c } = mountDash(fakeSummary, failResult, failResult);
+    expect(c.querySelector('[data-testid="dash-model-empty"]')?.textContent).toContain("数据拉取失败");
+    expect(c.querySelector('[data-testid="dash-model-empty-retry"]')).toBeTruthy();
+    expect(c.querySelector('[data-testid="dash-trend-empty"]')?.textContent).toContain("数据拉取失败");
+    expect(c.querySelector('[data-testid="dash-trend-empty-retry"]')).toBeTruthy();
+    expect(c.querySelectorAll(".dash-panel.is-stale")).toHaveLength(0);
+    expect(c.querySelector('[data-testid="agent-dashboard-c-foot-degraded"]')).toBeNull();
   });
 });
