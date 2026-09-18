@@ -66,6 +66,10 @@ subagent，其对人工门禁卡误 complete（不查交付物、自报「已修
   页为空，本轮补建 v0.2.9 release + 附件；「API 成功≠下载路径已更新」——双渠道全部匿名
   curl 实测（latest.yml 版本号 / exe Content-Length / 整包 sha256 比对构建产物一致）。
 - SHA256SUMS.txt 与 .sha256 sidecar 停在 v0.2.0 时代，本轮刷新至 v0.2.9 并入树。
+- asar 实锤加强法（比 grep 特征串更硬）：解包包内 dist/assets + main.cjs 与当前树 dist/
+  sha256 逐字节比对全同 = 包内容=tag f05f560 树。⚠️ 自写解包器二踩 offset 语义坑
+  （asar header offset 相对数据区基址 8+pickle_size，非绝对位置，v0.2.1 时代已实锤入
+  asar-fix-verify.py 文档串——本轮又踩，教训=优先用现成脚本别复写解析）。
 - 遗留记档（无真实压力不修）：SL-08 顶栏删减后 `app-dash.css` 残留 3 处
   `.dash-titlebar-controls` 死规则（DOM 零引用，纯冗余）。
 
