@@ -242,6 +242,11 @@ test("详情按钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明细�
   await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("4,555,000");
   await pwExpect(page.getByTestId("agent-dashboard-c-hero-cost")).toContainText("13.57 USD");
   await pwExpect(page.getByTestId("agent-dashboard-c-active")).toHaveText("2"); // njbx02 + njbx02-heavy 都是 active
+  // KPI 带 4 面板包裹锚(SL-05 契约表 agent-dashboard-c-kpi-{tokens,cost,hit,active})
+  await pwExpect(page.getByTestId("agent-dashboard-c-kpi-tokens")).toContainText("4,555,000");
+  await pwExpect(page.getByTestId("agent-dashboard-c-kpi-cost")).toContainText("13.57 USD");
+  await pwExpect(page.getByTestId("agent-dashboard-c-kpi-hit")).toContainText("80.0%");
+  await pwExpect(page.getByTestId("agent-dashboard-c-kpi-active")).toContainText("2/4"); // 2 active / 4 agent
   // KPI tokens 副行: 调用 = total.calls(100 + 8000 + 50 + 0)
   await pwExpect(page.locator(".dash-kpi.t1 .dash-kpi-sub")).toContainText("8,150");
   // 命中率 = hit/(hit+miss) = 3,370,760 / 4,213,450 ≈ 80.0%
@@ -896,6 +901,9 @@ test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + �
   // Model 分布: njbx02 有 glm + kimi 两个模型 → 模型计数 2(真实多模型, 非单 slice 占位)
   await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("2");
   await pwExpect(page.getByTestId("agent-dashboard-c-chart-model")).toHaveCount(1);
+  // 环形中心总量(S7 契约表 agent-dashboard-c-model-total) = 当前 agent 模型 tokens 合计
+  // njbx02: glm(105k) + kimi(23k) = 128,000; 切 home 后 = (7000+3400+1600)+(5000+2600+800) = 20,400
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-total")).toContainText("128,000");
   // 无占位 slice: 旧退路的 model:"tokens" 不得出现(canvas labels 无法直读,
   // 用「模块空态不出现 + 模型计数真实」双重锚定)
   await pwExpect(page.getByTestId("dash-model-empty")).toHaveCount(0);
@@ -924,6 +932,8 @@ test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + �
   // KPI 保持全局口径(148,400), Model 分布联动
   await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148,400");
   await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("2"); // glm + deepseek
+  // 环形中心总量联动切换: home-computer = glm(12,000) + deepseek(8,400) = 20,400
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-total")).toContainText("20,400");
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-home-computer")).toHaveClass(/is-selected/);
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02")).not.toHaveClass(/is-selected/);
 });
