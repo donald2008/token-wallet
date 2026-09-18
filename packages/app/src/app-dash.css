@@ -39,21 +39,28 @@
   background: var(--accent);
   flex: none;
 }
+.dash-titlebar-sub {
+  color: var(--fg-dim);
+  font-weight: 400;
+  margin-left: var(--space-8, 8px);
+  font-size: var(--font-12, 12px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
 .dash-titlebar-title {
+  display: flex; /* 副题与主标题同行: 副题限宽省略, 防止 titlebar 换行撑高(实测 97px 溢出根因) */
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
   margin: 0;
   font-size: var(--font-13, 13px);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--fg);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.dash-titlebar-sub {
-  color: var(--fg-dim);
-  font-weight: 400;
-  margin-left: var(--space-8, 8px);
-  font-size: var(--font-12, 12px);
 }
 .dash-titlebar-controls {
   display: flex;
@@ -96,7 +103,7 @@
 }
 .theme-toggle button[aria-pressed="true"] {
   background: var(--accent);
-  color: #0b0d10;
+  color: var(--bg);
   font-weight: 600;
 }
 
@@ -266,14 +273,17 @@
 .dash-pbody-model {
   display: flex;
   gap: var(--space-12, 12px);
-  align-items: stretch;
-  flex-wrap: wrap;
+  align-items: center;
+  flex-wrap: nowrap; /* span4 内不换行: 换行会把表顶出面板致 900×600 溢出(e2e 实测) */
+  min-height: 0;
+  overflow: hidden;
 }
 .dash-pbody-model .chart-wrap-model {
   position: relative;
-  flex: 1 1 112px;
-  min-width: 112px;
-  min-height: 112px;
+  flex: 0 0 auto;
+  width: 112px;
+  height: 112px;
+  min-height: 0;
 }
 .dash-model-table {
   flex: 1 1 120px;
@@ -517,7 +527,7 @@
   color: var(--fg);
 }
 .dash-agent-tab.active {
-  color: #0b0d10;
+  color: var(--bg);
   background: var(--accent);
   border-color: var(--accent);
   font-weight: 600;

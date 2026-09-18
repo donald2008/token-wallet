@@ -2616,5 +2616,3 @@ body {
   border-bottom-color: var(--accent);
 }
 
-/* ---- Agent 用量大屏样式段已迁移至 app-dash.css(t_15397c99 SL-01 Ops Wall 重构) ---- */
-@import "./app-dash.css";

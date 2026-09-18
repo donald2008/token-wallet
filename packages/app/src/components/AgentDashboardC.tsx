@@ -480,7 +480,11 @@ export function AgentDashboardC({
         <i className="dash-titlebar-dot" aria-hidden="true" />
         <h1 className="dash-titlebar-title">
           Agent 用量
-          <span className="dash-titlebar-sub">token 消耗 · 成本 · 缓存命中 · {windowLabel}</span>
+          <span className="dash-titlebar-sub">
+            token 消耗 · 成本 · 缓存命中 ·{" "}
+            {/* testid 契约保留项: agent-dashboard-c-window(原时间窗显示位, SL-01 维持显示语义) */}
+            <span data-testid="agent-dashboard-c-window">{windowLabel}</span>
+          </span>
         </h1>
         <div className="dash-titlebar-controls">
           <div className="theme-toggle" role="group" aria-label="主题切换">
@@ -809,8 +813,8 @@ export function AgentDashboardC({
         </section>
       </div>
 
-      {/* footer 24px: daemon 状态点 · 来源 · 快照时间 */}
-      <footer className="dash-foot" data-testid="agent-dashboard-c-meta">
+      {/* footer 24px: daemon 状态点 · 来源 · 快照时间(agent-dashboard-c-footer 兼容类保留, e2e 断言用) */}
+      <footer className="dash-foot agent-dashboard-c-footer" data-testid="agent-dashboard-c-meta">
         <i className="dash-foot-live" aria-hidden="true" />
         <span>DAEMON usage_summary · {windowLabel}</span>
         <b className="dash-num">数据快照 {generatedAt || summary.generated_at} · generated_at</b>
