@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { t, getLang, setLang, setCurrentLang, tKey, LANGS } from "./i18n";
+import * as i18nModule from "./i18n";
 
 describe("i18n 字典骨架", () => {
   it("缺省语言 = zh(既有文案原样搬)", () => {
@@ -43,5 +44,58 @@ describe("i18n 字典骨架", () => {
 
   it("LANGS 固定 zh+en", () => {
     expect(LANGS).toEqual(["zh", "en"]);
+  });
+});
+
+/** t_36b7ecb1 SL-04: zh/en 结构性零缺漏断言。
+ * Dict = typeof zh 只在编译期兜底; 本测试在运行时锁死 zh/en 叶键路径集合全等,
+ * 防止后续卡片绕过类型检查(如 as any / 动态拼键)漏补 en。 */
+describe("i18n 结构性断言(zh/en key 零缺漏)", () => {
+  /** 递归收集字典叶键路径(值为 string 的节点) */
+  function leafPaths(dict: unknown, prefix = ""): string[] {
+    if (typeof dict !== "object" || dict === null) return [];
+    const out: string[] = [];
+    for (const [k, v] of Object.entries(dict as Record<string, unknown>)) {
+      const p = prefix ? `${prefix}.${k}` : k;
+      if (typeof v === "string") out.push(p);
+      else out.push(...leafPaths(v, p));
+    }
+    return out.sort();
+  }
+
+  it("zh/en 叶键路径集合全等(零缺漏)", () => {
+    const { zh, en } = i18nModule;
+    const zhKeys = leafPaths(zh);
+    const enKeys = leafPaths(en);
+    expect(zhKeys.length).toBeGreaterThan(0);
+    expect(enKeys).toEqual(zhKeys);
+  });
+
+  it("en 每个键都有非空文案(防漏译留空串)", () => {
+    const { zh, en } = i18nModule;
+    for (const path of leafPaths(zh)) {
+      const segs = path.split(".");
+      let node: unknown = en;
+      for (const s of segs) node = (node as Record<string, unknown>)?.[s];
+      expect(typeof node).toBe("string");
+      expect(node as string).not.toBe("");
+    }
+  });
+
+  it("dash 命名空间(大屏文案)双语抽查", () => {
+    setCurrentLang("zh");
+    expect(t("dash.title")).toBe("Agent 用量");
+    expect(t("dash.bannerTitle")).toBe("DAEMON 未连接");
+    expect(t("dash.retry")).toBe("重试");
+    expect(t("dash.kpiTokens", { window: "09-12 ~ 09-18" })).toBe("Tokens · 09-12 ~ 09-18");
+    setLang("en");
+    expect(t("dash.title")).toBe("Agent Usage");
+    expect(t("dash.bannerTitle")).toBe("DAEMON not connected");
+    expect(t("dash.retry")).toBe("Retry");
+    expect(t("dash.pTrend")).toBe("Trend · tokens");
+    expect(t("dash.weekday.3" as never)).toBe("Wed");
+    setLang("zh");
+    expect(tKey("dash.weekday.3")).toBe("周三");
+    expect(t("dash.fetchFailed")).toBe("数据拉取失败");
   });
 });

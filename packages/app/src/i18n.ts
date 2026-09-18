@@ -21,8 +21,9 @@ type DictPaths<T, P extends string = ""> = T extends string
   ? P
   : { [K in keyof T & string]: DictPaths<T[K], P extends "" ? K : `${P}.${K}`> }[keyof T & string];
 
-/** zh 字典(canonical): 全量既有用户可见文案原样搬入 */
-const zh = {
+/** zh 字典(canonical): 全量既有用户可见文案原样搬入
+ * (t_36b7ecb1 SL-04: 导出供 i18n.test.ts 结构性断言遍历 zh/en 键位)。 */
+export const zh = {
   common: {
     add: "添加 Provider",
     back: "← 返回",
@@ -116,6 +117,7 @@ const zh = {
     now: "刚刚",
     minutes: "{n} 分钟前",
     hours: "{n} 小时前",
+    days: "{n} 天前",
   },
   reset: {
     soon: "即将重置",
@@ -153,6 +155,59 @@ const zh = {
     requests: "次",
     tokens: "tokens",
     credits: "credits",
+  },
+  /* 大屏(AgentDashboardC)产品语言文案(t_36b7ecb1 SL-04): zh canonical。
+   * 术语直出(S13): cache hit/tokens/hit rate 等技术同行术语不解释。
+   * en 侧为翻译; Dict=typeof zh 编译期兜住 en 漏键。 */
+  dash: {
+    title: "Agent 用量",
+    subtitle: "token 消耗 · 成本 · 缓存命中 · {window}",
+    themeGroup: "主题切换",
+    back: "← 返回",
+    bannerTitle: "DAEMON 未连接",
+    bannerSub: "三维查询全部失败 · 显示上次快照 · 数据截至 {stamp}",
+    reconnect: "重新连接",
+    retry: "重试",
+    kpiTokens: "Tokens · {window}",
+    callsPre: "调用 ",
+    callsPost: " 次",
+    kpiCost: "成本 · {window}",
+    pricingPre: "计价 ",
+    kpiHitRate: "Cache 命中率",
+    kpiActive: "活跃 Agent",
+    modelsSuffix: " 个模型参与",
+    pTrend: "趋势 · tokens 消耗",
+    trendNote: "日粒度 · 均值 {avg}",
+    trendAccumulating: "数据积累中（{n} 天）",
+    fetchFailed: "数据拉取失败",
+    pModel: "Model 分布",
+    agentTabsAria: "Agent 切换",
+    tokensShare: "tokens 占比",
+    donutTotal: "TOTAL",
+    thModel: "模型",
+    thCalls: "调用",
+    thShare: "占比",
+    thHitRate: "命中率",
+    pDetail: "明细 · 按 agent",
+    detailNote: "tokens · 成本",
+    thCost: "成本",
+    idleTag: "空闲",
+    pSplit: "三分项拆分",
+    noModelData: "暂无模型数据",
+    footSource: "DAEMON usage_summary · {window}",
+    footSnapshot: "数据快照 {stamp} · generated_at",
+    footRefreshFailed: "上次刷新失败",
+    footPartialFailed: "部分面板拉取失败",
+    footSnapshotOf: "显示快照 {stamp}",
+    weekday: {
+      "0": "周日",
+      "1": "周一",
+      "2": "周二",
+      "3": "周三",
+      "4": "周四",
+      "5": "周五",
+      "6": "周六",
+    },
   },
   consent: {
     title: "欢迎使用 token-wallet",
@@ -358,8 +413,9 @@ const zh = {
 type Writable<T> = { -readonly [K in keyof T]: T[K] extends string ? string : Writable<T[K]> };
 export type Dict = Writable<typeof zh>;
 
-/** en 字典: 类型强制与 zh 键位完全对齐(漏键/多键编译期报错) */
-const en: Dict = {
+/** en 字典: 类型强制与 zh 键位完全对齐(漏键/多键编译期报错)
+ * (t_36b7ecb1 SL-04: 导出供 i18n.test.ts 结构性断言遍历)。 */
+export const en: Dict = {
   common: {
     add: "Add provider",
     back: "← Back",
@@ -451,6 +507,7 @@ const en: Dict = {
     now: "just now",
     minutes: "{n} min ago",
     hours: "{n} h ago",
+    days: "{n} d ago",
   },
   reset: {
     soon: "resets soon",
@@ -487,6 +544,58 @@ const en: Dict = {
     requests: "times",
     tokens: "tokens",
     credits: "credits",
+  },
+  /* Agent dashboard (AgentDashboardC) copy (t_36b7ecb1 SL-04): en side.
+   * Terms stay raw per S13 (cache hit / tokens / hit rate are not explained). */
+  dash: {
+    title: "Agent Usage",
+    subtitle: "token spend · cost · cache hit · {window}",
+    themeGroup: "Theme",
+    back: "← Back",
+    bannerTitle: "DAEMON not connected",
+    bannerSub: "all three queries failed · showing last snapshot · data as of {stamp}",
+    reconnect: "Reconnect",
+    retry: "Retry",
+    kpiTokens: "Tokens · {window}",
+    callsPre: " ",
+    callsPost: "calls",
+    kpiCost: "Cost · {window}",
+    pricingPre: "pricing ",
+    kpiHitRate: "Cache hit rate",
+    kpiActive: "Active agents",
+    modelsSuffix: " models",
+    pTrend: "Trend · tokens",
+    trendNote: "daily · mean {avg}",
+    trendAccumulating: "accumulating data ({n} days)",
+    fetchFailed: "fetch failed",
+    pModel: "Model distribution",
+    agentTabsAria: "Agent switch",
+    tokensShare: "token share",
+    donutTotal: "TOTAL",
+    thModel: "Model",
+    thCalls: "Calls",
+    thShare: "Share",
+    thHitRate: "Hit rate",
+    pDetail: "Details · by agent",
+    detailNote: "tokens · cost",
+    thCost: "Cost",
+    idleTag: "idle",
+    pSplit: "Split breakdown",
+    noModelData: "no model data",
+    footSource: "DAEMON usage_summary · {window}",
+    footSnapshot: "snapshot {stamp} · generated_at",
+    footRefreshFailed: "last refresh failed",
+    footPartialFailed: "some panels failed to fetch",
+    footSnapshotOf: "showing snapshot {stamp}",
+    weekday: {
+      "0": "Sun",
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat",
+    },
   },
   consent: {
     title: "Welcome to token-wallet",

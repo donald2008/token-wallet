@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SummaryRow, UsageSummaryOutput } from "../mcpQueryTypes";
 import type { AgentDashboardCProps, TrendBucket, ModelSlice, DetailRow } from "./AgentDashboardC.types";
+import { t, tKey } from "../i18n";
 
 type ThemeMode = "dark" | "light";
 
@@ -47,12 +48,13 @@ export function seriesVar(i: number): string {
   return SERIES_VARS[i % SERIES_VARS.length]!;
 }
 
-/** 趋势 X 轴标签: YYYY-MM-DD → 中文星期(appendix 数据接线: label 中文星期, daemon 本地时区)。
- * 数据层 buildTrend 仍出 YYYY-MM-DD(排序/补桶稳定), 本函数仅渲染层映射。 */
+/** 趋势 X 轴标签: YYYY-MM-DD → 星期(appendix 数据接线: label 星期, daemon 本地时区)。
+ * 数据层 buildTrend 仍出 YYYY-MM-DD(排序/补桶稳定), 本函数仅渲染层映射。
+ * t_36b7ecb1 SL-04: 文案走 i18n(tKey 动态拼键 dash.weekday.{0-6}, en 侧出英文星期)。 */
 export function weekdayLabel(day: string): string {
   const ms = Date.parse(`${day}T00:00:00`);
   if (!Number.isFinite(ms)) return day;
-  return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][new Date(ms).getDay()]!;
+  return tKey(`dash.weekday.${new Date(ms).getDay()}`);
 }
 
 /** t_12c28686: 多维 group 字段解析 — 按维度名顺序拆 "a|b|c"。
@@ -77,18 +79,19 @@ export function snapshotStamp(iso: string): string {
 }
 
 /** SC-02 快照时效(SL-03): 距生成时间的相对时长文案(H7 时效标注)。
- * 时间不可解析/未来时间 → 空串(不渲染假时效)。 */
+ * 时间不可解析/未来时间 → 空串(不渲染假时效)。
+ * t_36b7ecb1 SL-04: 文案走 i18n(ago.* 双语; t() 参数化分钟/小时/天数)。 */
 export function snapshotAge(iso: string, now: number = Date.now()): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "";
   const diff = now - ms;
   if (diff < 0) return "";
   const min = Math.floor(diff / 60_000);
-  if (min < 1) return "刚刚";
-  if (min < 60) return `${min} 分钟前`;
+  if (min < 1) return t("ago.now");
+  if (min < 60) return t("ago.minutes", { n: min });
   const hour = Math.floor(min / 60);
-  if (hour < 24) return `${hour} 小时前`;
-  return `${Math.floor(hour / 24)} 天前`;
+  if (hour < 24) return t("ago.hours", { n: hour });
+  return t("ago.days", { n: Math.floor(hour / 24) });
 }
 
 function rowTokens(r: SummaryRow): number {
@@ -256,7 +259,7 @@ function ModuleEmpty({
           data-testid={`${testid}-retry`}
           onClick={onRetry}
         >
-          重试
+          {t("dash.retry")}
         </button>
       )}
     </div>
@@ -538,15 +541,15 @@ export function AgentDashboardC({
       <header className="dash-titlebar">
         <i className="dash-titlebar-dot" aria-hidden="true" />
         <h1 className="dash-titlebar-title">
-          Agent 用量
+          {t("dash.title")}
           <span className="dash-titlebar-sub">
-            token 消耗 · 成本 · 缓存命中 ·{" "}
+            {t("dash.subtitle", { window: "" })}
             {/* testid 契约保留项: agent-dashboard-c-window(原时间窗显示位, SL-01 维持显示语义) */}
             <span data-testid="agent-dashboard-c-window">{windowLabel}</span>
           </span>
         </h1>
         <div className="dash-titlebar-controls">
-          <div className="theme-toggle" role="group" aria-label="主题切换">
+          <div className="theme-toggle" role="group" aria-label={t("dash.themeGroup")}>
             <button
               type="button"
               data-theme="dark"
@@ -572,7 +575,7 @@ export function AgentDashboardC({
             onClick={onBack}
             data-testid="agent-dashboard-c-back"
           >
-            ← 返回
+            {t("dash.back")}
           </button>
         </div>
       </header>
@@ -588,9 +591,9 @@ export function AgentDashboardC({
         aria-hidden={offline ? undefined : "true"}
       >
         <i className="dash-banner-dot" aria-hidden="true" />
-        <b>DAEMON 未连接</b>
+        <b>{t("dash.bannerTitle")}</b>
         <span className="dash-banner-sub">
-          三维查询全部失败 · 显示上次快照 · 数据截至 {snapshot.stamp}
+          {t("dash.bannerSub", { stamp: snapshot.stamp })}
           {snapshot.age ? ` · ${snapshot.age}` : ""}
         </span>
         <button
@@ -599,7 +602,7 @@ export function AgentDashboardC({
           data-testid="agent-dashboard-c-banner-retry"
           onClick={onRetry}
         >
-          重新连接
+          {t("dash.reconnect")}
         </button>
       </div>
 
@@ -608,19 +611,21 @@ export function AgentDashboardC({
         {/* KPI 带 span3×4, 顶缘 3px 系列色(S5); 大数字锚 + 精确数(H: 全数字, 禁 K/M 简写) */}
         <section className={panelCls("dash-panel dash-kpi t1", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <div className="dash-kpi-body">
-            <div className="dash-label">Tokens · {windowLabel}</div>
+            <div className="dash-label">{t("dash.kpiTokens", { window: windowLabel })}</div>
             <div className="dash-kpi-v" data-testid="agent-dashboard-c-kpi-tokens">
               <span data-testid="agent-dashboard-c-hero-tokens">{fmtTokens(totalTokens)}</span>
               <small>tokens</small>
             </div>
             <div className="dash-kpi-sub">
-              调用 <b className="dash-num">{fmtWhole.format(summary.total.calls)}</b> 次
+              {t("dash.callsPre")}
+              <b className="dash-num">{fmtWhole.format(summary.total.calls)}</b>
+              {t("dash.callsPost")}
             </div>
           </div>
         </section>
         <section className={panelCls("dash-panel dash-kpi t2", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <div className="dash-kpi-body">
-            <div className="dash-label">成本 · {windowLabel}</div>
+            <div className="dash-label">{t("dash.kpiCost", { window: windowLabel })}</div>
             {/* H3: cost=null 留空不显 0(is-empty 隐藏大数字, 副行仍给调用数) */}
             <div
               className={`dash-kpi-v${totalCost === "" ? " is-empty" : ""}`}
@@ -630,13 +635,14 @@ export function AgentDashboardC({
               <span data-testid="agent-dashboard-c-hero-cost">{totalCost}</span>
             </div>
             <div className="dash-kpi-sub">
-              计价 <b>{summary.total.currency ?? "—"}</b>
+              {t("dash.pricingPre")}
+              <b>{summary.total.currency ?? "—"}</b>
             </div>
           </div>
         </section>
         <section className={panelCls("dash-panel dash-kpi t3", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <div className="dash-kpi-body">
-            <div className="dash-label">Cache 命中率</div>
+            <div className="dash-label">{t("dash.kpiHitRate")}</div>
             <div className="dash-kpi-v" data-testid="agent-dashboard-c-kpi-hit">
               <span data-testid="agent-dashboard-c-hit-rate">{hitRate}</span>
             </div>
@@ -648,13 +654,14 @@ export function AgentDashboardC({
         </section>
         <section className={panelCls("dash-panel dash-kpi t4", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <div className="dash-kpi-body">
-            <div className="dash-label">活跃 Agent</div>
+            <div className="dash-label">{t("dash.kpiActive")}</div>
             <div className="dash-kpi-v" data-testid="agent-dashboard-c-kpi-active">
               <span data-testid="agent-dashboard-c-active">{activeCount}</span>
               <small>/{detailRows.length}</small>
             </div>
             <div className="dash-kpi-sub">
-              <span data-testid="agent-dashboard-c-models">{slices.length}</span> 个模型参与
+              <span data-testid="agent-dashboard-c-models">{slices.length}</span>
+              {t("dash.modelsSuffix")}
             </div>
           </div>
         </section>
@@ -662,10 +669,10 @@ export function AgentDashboardC({
         {/* 趋势 span8: 柱状 + 均值虚线(S8); 桶计数/均值在 phead note */}
         <section className={panelCls("dash-panel dash-span8 dash-p-trend", panelStale.trend)} data-stale={staleAttr(panelStale.trend)}>
           <header className="dash-phead">
-            <h2>趋势 · tokens 消耗</h2>
+            <h2>{t("dash.pTrend")}</h2>
             <span className="dash-pnote" data-testid="dash-trend-note">
               {trendState === "ok"
-                ? `日粒度 · 均值 ${fmtTokens(Math.round(avgOf(trend)))}`
+                ? t("dash.trendNote", { avg: fmtTokens(Math.round(avgOf(trend))) })
                 : "—"}
             </span>
           </header>
@@ -677,10 +684,10 @@ export function AgentDashboardC({
             ) : trendState === "accumulating" ? (
               <ModuleEmpty
                 testid="dash-trend-empty"
-                text={`数据积累中（${trend.length} 天）`}
+                text={t("dash.trendAccumulating", { n: trend.length })}
               />
             ) : (
-              <ModuleEmpty testid="dash-trend-empty" text="数据拉取失败" onRetry={onRetry} />
+              <ModuleEmpty testid="dash-trend-empty" text={t("dash.fetchFailed")} onRetry={onRetry} />
             )}
           </div>
         </section>
@@ -688,12 +695,12 @@ export function AgentDashboardC({
         {/* Model span4: 环形 + 中心总量 + chips 表(S5/S7); agent tab(H4) 落 phead */}
         <section className={panelCls("dash-panel dash-span4 dash-p-model", panelStale.model)} data-stale={staleAttr(panelStale.model)}>
           <header className="dash-phead">
-            <h2>Model 分布</h2>
+            <h2>{t("dash.pModel")}</h2>
             {detailRows.length > 1 ? (
               <div
                 className="dash-agent-tabs"
                 role="tablist"
-                aria-label="Agent 切换"
+                aria-label={t("dash.agentTabsAria")}
                 data-testid="dash-agent-tabs"
               >
                 {detailRows.map((r) => (
@@ -711,7 +718,7 @@ export function AgentDashboardC({
                 ))}
               </div>
             ) : (
-              <span className="dash-pnote">tokens 占比</span>
+              <span className="dash-pnote">{t("dash.tokensShare")}</span>
             )}
           </header>
           <div className="dash-pbody dash-pbody-model">
@@ -722,17 +729,17 @@ export function AgentDashboardC({
                   {/* appendix 数据接线: 环形+中心总量(当前 agent 全模型 tokens 合计) */}
                   <div className="dash-donut-center" data-testid="agent-dashboard-c-model-total">
                     <b className="dash-num">{fmtTokens(slices.reduce((a, x) => a + x.tokens, 0))}</b>
-                    <span>TOTAL</span>
+                    <span>{t("dash.donutTotal")}</span>
                   </div>
                 </div>
                 <table className="dash-model-table" data-testid="agent-dashboard-c-model-table">
                   <thead>
                     <tr>
-                      <th scope="col">模型</th>
-                      <th scope="col" className="num">调用</th>
+                      <th scope="col">{t("dash.thModel")}</th>
+                      <th scope="col" className="num">{t("dash.thCalls")}</th>
                       <th scope="col" className="num">tokens</th>
-                      <th scope="col" className="num">占比</th>
-                      <th scope="col" className="num">命中率</th>
+                      <th scope="col" className="num">{t("dash.thShare")}</th>
+                      <th scope="col" className="num">{t("dash.thHitRate")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -766,9 +773,9 @@ export function AgentDashboardC({
                 </table>
               </>
             ) : modelState === "empty" ? (
-              <ModuleEmpty testid="dash-model-empty" text="暂无模型数据" />
+              <ModuleEmpty testid="dash-model-empty" text={t("dash.noModelData")} />
             ) : (
-              <ModuleEmpty testid="dash-model-empty" text="数据拉取失败" onRetry={onRetry} />
+              <ModuleEmpty testid="dash-model-empty" text={t("dash.fetchFailed")} onRetry={onRetry} />
             )}
           </div>
         </section>
@@ -778,10 +785,10 @@ export function AgentDashboardC({
          *  第 7 列 = 成本(W1 人工终审裁定, 对齐锁定参考 ops-wall 第 7 列) */}
         <section className={panelCls("dash-panel dash-span8 dash-p-detail", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <header className="dash-phead">
-            <h2>明细 · 按 agent</h2>
+            <h2>{t("dash.pDetail")}</h2>
             {/* W1 裁定: 第 7 列=成本(对齐锁定参考 ops-wall), pricing 已接入(cost_total/currency);
              *  null 成本行留空(H3), 币种混排时每行带原币种不换汇(D-055) */}
-            <span className="dash-pnote">tokens · 成本</span>
+            <span className="dash-pnote">{t("dash.detailNote")}</span>
           </header>
           <div className="dash-pbody dash-pbody-detail">
             <table className="dash-detail-table" data-testid="agent-dashboard-c-detail-list">
@@ -789,11 +796,11 @@ export function AgentDashboardC({
                 <tr>
                   <th>Agent</th>
                   <th className="num">Tokens</th>
-                  <th className="num">占比</th>
+                  <th className="num">{t("dash.thShare")}</th>
                   <th className="num">Cache hit</th>
                   <th className="num">Output</th>
-                  <th className="num">调用</th>
-                  <th className="num">成本</th>
+                  <th className="num">{t("dash.thCalls")}</th>
+                  <th className="num">{t("dash.thCost")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -814,7 +821,7 @@ export function AgentDashboardC({
                           aria-hidden="true"
                         />
                         {r.agent_id}
-                        {r.idle && <span className="dash-idle-tag">空闲</span>}
+                        {r.idle && <span className="dash-idle-tag">{t("dash.idleTag")}</span>}
                       </td>
                       <td className="num">{r.idle ? "—" : fmtTokens(r.tokens)}</td>
                       <td className="num">{share}%</td>
@@ -847,7 +854,7 @@ export function AgentDashboardC({
         {/* 三分项 span4: 堆叠条 + 行式三行(大写标签, S4) */}
         <section className={panelCls("dash-panel dash-span4 dash-p-split", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <header className="dash-phead">
-            <h2>三分项拆分</h2>
+            <h2>{t("dash.pSplit")}</h2>
             <span className="dash-pnote">{`${pctHit}% / ${pctMiss}% / ${pctOut}%`}</span>
           </header>
           <div className="dash-pbody dash-pbody-split">
@@ -900,11 +907,12 @@ export function AgentDashboardC({
           className={`dash-foot-live${degraded ? " is-degraded" : ""}`}
           aria-hidden="true"
         />
-        <span>DAEMON usage_summary · {windowLabel}</span>
-        <b className="dash-num">数据快照 {generatedAt || summary.generated_at} · generated_at</b>
+        <span>{t("dash.footSource", { window: windowLabel })}</span>
+        <b className="dash-num">{t("dash.footSnapshot", { stamp: generatedAt || summary.generated_at })}</b>
         {degraded && (
           <span className="dash-foot-stale" data-testid="agent-dashboard-c-foot-degraded">
-            {offline ? "上次刷新失败" : "部分面板拉取失败"} · 显示快照 {snapshot.stamp}
+            {offline ? t("dash.footRefreshFailed") : t("dash.footPartialFailed")} ·{" "}
+            {t("dash.footSnapshotOf", { stamp: snapshot.stamp })}
           </span>
         )}
         {degraded && (
@@ -914,7 +922,7 @@ export function AgentDashboardC({
             data-testid="agent-dashboard-c-retry"
             onClick={onRetry}
           >
-            重试
+            {t("dash.retry")}
           </button>
         )}
       </footer>
