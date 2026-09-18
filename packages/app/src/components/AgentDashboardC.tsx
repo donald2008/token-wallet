@@ -718,12 +718,14 @@ export function AgentDashboardC({
         </section>
 
         {/* 明细 span8: agent 维全量一行一 agent(appendix 数据接线), 24px 行高 + 右对齐成列(S4/S6);
-         *  当前 agent 行高亮 = H4 联动语义保留; 状态点 active/idle/off(S11 小面积) */}
+         *  当前 agent 行高亮 = H4 联动语义保留; 状态点 active/idle/off(S11 小面积);
+         *  第 7 列 = 成本(W1 人工终审裁定, 对齐锁定参考 ops-wall 第 7 列) */}
         <section className="dash-panel dash-span8 dash-p-detail">
           <header className="dash-phead">
             <h2>明细 · 按 agent</h2>
-            {/* t_5cf22ba4(问题 5) 继承: pricing 未接入, 标注只写 tokens, 不展示空金额占位 */}
-            <span className="dash-pnote">tokens</span>
+            {/* W1 裁定: 第 7 列=成本(对齐锁定参考 ops-wall), pricing 已接入(cost_total/currency);
+             *  null 成本行留空(H3), 币种混排时每行带原币种不换汇(D-055) */}
+            <span className="dash-pnote">tokens · 成本</span>
           </header>
           <div className="dash-pbody dash-pbody-detail">
             <table className="dash-detail-table" data-testid="agent-dashboard-c-detail-list">
@@ -735,7 +737,7 @@ export function AgentDashboardC({
                   <th className="num">Cache hit</th>
                   <th className="num">Output</th>
                   <th className="num">调用</th>
-                  <th className="num">模型</th>
+                  <th className="num">成本</th>
                 </tr>
               </thead>
               <tbody>
@@ -763,7 +765,10 @@ export function AgentDashboardC({
                       <td className="num cell-dim">{fmtTokens(r.hit)}</td>
                       <td className="num cell-dim">{fmtTokens(r.out)}</td>
                       <td className="num cell-dim">{fmtWhole.format(r.calls)}</td>
-                      <td className="num cell-dim">{r.models}</td>
+                      <td className={`num cell-dim${r.cost === null ? " cost-empty" : ""}`}>
+                        {/* W1 裁定(H3): cost=null 留空不显 0; 混币种分行不换汇 — 每行带原币种 */}
+                        {fmtCost(r.cost, r.currency)}
+                      </td>
                     </tr>
                   );
                 })}
@@ -775,7 +780,7 @@ export function AgentDashboardC({
                     <td className="num">—</td>
                     <td className="num">—</td>
                     <td className="num">—</td>
-                    <td className="num">—</td>
+                    <td className="num" />
                   </tr>
                 )}
               </tbody>

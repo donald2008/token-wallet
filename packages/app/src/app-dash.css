@@ -408,6 +408,10 @@
 .dash-detail-table .cell-dim {
   color: var(--fg-dim);
 }
+/* W1(H3): cost=null 成本单元格留空 — 占位结构不丢, 视觉留白 */
+.dash-detail-table td.cost-empty {
+  color: var(--fg-dim);
+}
 .dash-ast {
   width: 7px;
   height: 7px;

@@ -282,8 +282,21 @@ test("详情按钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明细�
   await pwExpect(detailHeavy).toContainText("njbx02-heavy");
   await pwExpect(detailHeavy).toContainText("4,474,000");
   await pwExpect(detailHeavy).toHaveAttribute("data-selected", "true");
-  // pricing 未接入: 明细表无金额列(标注同步只写 tokens)
-  await pwExpect(detailHeavy.locator(".cost")).toHaveCount(0);
+  // W1 裁定(SL-02): 明细第 7 列 = 成本(cost_total/currency 接线, 对齐锁定参考 ops-wall)
+  await pwExpect(list.locator("thead th")).toHaveText([
+    "Agent",
+    "Tokens",
+    "占比",
+    "Cache hit",
+    "Output",
+    "调用",
+    "成本",
+  ]);
+  await pwExpect(detailHeavy.locator("td:last-child")).toContainText("12.34 USD");
+  // SC-06 H3: cost=null 行成本单元格留空(home-computer cost_total=null, 不显 0)
+  await pwExpect(
+    page.getByTestId("agent-dashboard-c-detail-home-computer").locator("td:last-child"),
+  ).toHaveText("");
   // H4 agent tab 落 Model 面板头: 切 home-computer → 明细高亮切行(选中态 = is-selected 类)
   await page.getByTestId("dash-agent-tab-home-computer").click();
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-home-computer")).toHaveClass(/is-selected/);
@@ -900,6 +913,9 @@ test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + �
   await pwExpect(list.locator("tbody tr")).toHaveCount(2);
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02")).toHaveAttribute("data-selected", "true");
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02")).toContainText("128,000");
+  // W1 成本列: 各行带原币种原值, 不做跨行换汇(D-055 混币种语义)
+  await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02").locator("td:last-child")).toContainText("2.46 USD");
+  await pwExpect(page.getByTestId("agent-dashboard-c-detail-home-computer").locator("td:last-child")).toContainText("0.60 USD");
 
   // 切 agent → KPI 保持全局口径, Model 分布/明细高亮联动(选中态 = is-selected 类)
   await page.getByTestId("dash-agent-tab-home-computer").click();

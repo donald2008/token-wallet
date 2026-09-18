@@ -193,11 +193,13 @@ describe("AgentDashboardC(Ops Wall 常态渲染 SC-01)", () => {
     expect(table?.tagName).toBe("TABLE"); // DOM 契约: ul→table
     expect(table?.querySelectorAll("tbody tr")).toHaveLength(2); // 全量, 不只当前 agent
     expect(table?.querySelectorAll("thead th")).toHaveLength(7);
+    // W1 裁定(2026-09-18 人工终审): 第 7 列「模型」→「成本」, 对齐锁定参考 ops-wall 第 7 列
+    expect(table?.querySelectorAll("thead th")[6]?.textContent).toBe("成本");
     const njbx02 = table?.querySelector('[data-testid="agent-dashboard-c-detail-njbx02"]');
     expect(njbx02?.textContent).toContain("njbx02");
     expect(njbx02?.querySelector(".num")?.textContent).toMatch(/64,000/);
-    // pricing 未接入: 无金额列(H: t_5cf22ba4 口径延续)
-    expect(table?.textContent).not.toContain("1.23 USD");
+    // W1 成本列接线: cost_total/currency 进第 7 列(H3: null 留空)
+    expect(njbx02?.querySelector("td:last-child")?.textContent).toContain("1.23 USD");
     // 当前 agent(njbx02, tokens 最大)行高亮 = H4 联动语义保留
     expect(njbx02?.getAttribute("data-selected")).toBe("true");
     const home = table?.querySelector('[data-testid="agent-dashboard-c-detail-home-computer"]');
@@ -479,13 +481,13 @@ describe("AgentDashboardC(t_5cf22ba4 展示品质回归锁)", () => {
     expect(c.querySelector('[data-testid="agent-dashboard-c-seg-out"]')).toBeTruthy();
   });
 
-  it("明细卡头标注=tokens(问题 5): 不再出现「tokens + 金额」文案", () => {
+  it("明细卡头标注=tokens · 成本(W1): 第 7 列裁定为成本后标注同步", () => {
     const { container: c } = mountDash();
     const note = c.querySelector(".dash-p-detail .dash-pnote");
-    expect(note?.textContent).toBe("tokens");
+    expect(note?.textContent).toBe("tokens · 成本");
   });
 
-  it("明细行扩列 — 调用/Hit/Output/占比/模型数全在场(Hit/Miss/Output 列)", () => {
+  it("明细行扩列 — 调用/Hit/Output/占比全在场 + 成本列(W1 裁定)", () => {
     const { container: c } = mountDash(fakeSummary, okResult);
     const njbx02 = c.querySelector('[data-testid="agent-dashboard-c-detail-njbx02"]');
     expect(njbx02?.textContent).toContain("64,000"); // tokens 列
@@ -493,6 +495,39 @@ describe("AgentDashboardC(t_5cf22ba4 展示品质回归锁)", () => {
     expect(njbx02?.textContent).toContain("50,000"); // cache hit 列
     expect(njbx02?.textContent).toContain("4,000"); // output 列
     expect(njbx02?.textContent).toContain("100"); // 调用列
-    expect(njbx02?.textContent).toMatch(/2/); // 模型数(modelSummary 过滤 njbx02 = 2)
+    expect(njbx02?.textContent).toContain("1.23 USD"); // 成本列(W1: cost_total/currency 接线)
+  });
+
+  it("W1/SC-06 混币种: 明细成本各行带原币种, 分行不换汇(D-055)", () => {
+    const mixed: UsageSummaryOutput = {
+      ...fakeSummary,
+      rows: [
+        { ...rows[0]!, cost_total: 1.23, currency: "USD" },
+        { ...rows[1]!, cost_total: 4.5, currency: "CNY" },
+      ],
+    };
+    const { container: c } = mountDash(mixed);
+    const table = c.querySelector('[data-testid="agent-dashboard-c-detail-list"]');
+    // 第 7 列表头 = 成本(W1 裁定, 对齐锁定参考 ops-wall 第 7 列)
+    expect(table?.querySelector("thead th:last-child")?.textContent).toBe("成本");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-detail-njbx02"]')?.textContent).toContain(
+      "1.23 USD",
+    );
+    expect(c.querySelector('[data-testid="agent-dashboard-c-detail-home-computer"]')?.textContent).toContain(
+      "4.50 CNY",
+    );
+  });
+
+  it("W1/SC-06 H3: cost=null 明细成本单元格留空不显 0(cost-empty)", () => {
+    const nullCost: UsageSummaryOutput = {
+      ...fakeSummary,
+      rows: [{ ...rows[0]!, cost_total: null, currency: null }],
+    };
+    const { container: c } = mountDash(nullCost);
+    const cell = c.querySelector(
+      '[data-testid="agent-dashboard-c-detail-njbx02"] td:last-child',
+    );
+    expect(cell?.textContent).toBe("");
+    expect(cell?.className).toContain("cost-empty");
   });
 });
