@@ -301,6 +301,15 @@ test("详情按钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明细�
 /** L2 冒烟 3: 主题切换(深/浅) aria-pressed 同步 */
 test("大屏方案 C 主题切换 aria-pressed 同步 + html data-theme 同步", async ({ hostPage, page }) => {
   void hostPage;
+  // 初始主题断言需要确定性起点: prePaintTheme(D-010) 默认 system → e2e 浏览器
+  // prefers-color-scheme 默认 light, 若不锚定则初始 data-theme=light(非 dark),
+  // 与真实桌面壳(WebView2 跟随 OS, 用户深色系统默认 dark)形态不符。
+  // emulate dark + 显式 seed theme.v1=dark, 与 spec 其他主题测试(round-6 等)同套路。
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.addInitScript(() => {
+    localStorage.setItem("token-wallet.theme.v1", "dark");
+  });
+  await page.reload();
   await agreeAndSeed(page);
   await page.getByTestId("agent-detail-njbx02").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
