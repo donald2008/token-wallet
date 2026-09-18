@@ -41,6 +41,12 @@ const ISO_8601_RE =
 
 const FILTERS: Record<PipeFilter, (v: unknown) => unknown> = {
   number: (v) => {
+    // t_be136794 防御加固: null/空串/纯空白经 Number() 都收敛成 0, 把「数据缺失」
+    // 静默洗成「已用 0」—— 数据缺失 ≠ 0, 一律 MappingError 让缺数显式暴露;
+    // undefined(路径 miss)依旧 NaN 抛错。合法 0 不受影响(0 === 0)。
+    if (v === null || typeof v === "string" && v.trim() === "") {
+      throw new MappingError(`数据缺失无法转 number: ${JSON.stringify(v)}`);
+    }
     const n = Number(v);
     if (Number.isNaN(n)) throw new MappingError(`无法转 number: ${typeof v}`);
     return n;

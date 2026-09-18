@@ -66,6 +66,29 @@ describe("ms_epoch pipe(毫秒 epoch → unix 秒, zai nextResetTime D-0xx)", ()
   });
 });
 
+describe("number pipe 防御加固(数据缺失 ≠ 0, t_be136794)", () => {
+  it("null / 空串 / 纯空白 → MappingError(Number() 会把它们洗成 0)", () => {
+    expect(() => applyPipe(null, ["number"])).toThrow(MappingError);
+    expect(() => applyPipe("", ["number"])).toThrow(MappingError);
+    expect(() => applyPipe("   ", ["number"])).toThrow(MappingError);
+  });
+
+  it("合法 0 与数字字符串不受影响; undefined(路径 miss)维持抛错", () => {
+    expect(applyPipe(0, ["number"])).toBe(0);
+    expect(applyPipe("0", ["number"])).toBe(0);
+    expect(applyPipe(" 42.5 ", ["number"])).toBe(42.5); // 数字夹空白仍合法
+    expect(() => applyPipe(undefined, ["number"])).toThrow(MappingError);
+  });
+
+  it("invert_percent 链: remaining 数字串先过 number 再反转(kimi 修复路径)", () => {
+    expect(applyPipe("29", ["number", "invert_percent"])).toBe(71);
+    expect(applyPipe("0", ["number", "invert_percent"])).toBe(100);
+    expect(applyPipe("100", ["number", "invert_percent"])).toBe(0);
+    // 加固后 null 无法再借道洗成 used=100
+    expect(() => applyPipe(null, ["number", "invert_percent"])).toThrow(MappingError);
+  });
+});
+
 describe("FieldMapping.const + percent + iso_epoch 组合(GenericHttpAdapter 全链路)", () => {
   const MAPPING: GenericHttpMapping = {
     url: "https://example.test/usage",

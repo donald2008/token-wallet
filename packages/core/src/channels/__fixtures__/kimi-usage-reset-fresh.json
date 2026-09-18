@@ -1,0 +1,38 @@
+{
+  "_provenance": "2026-09-18 njbx02 真 key 实测 api.kimi.com/coding/v1/usages(周期重置后形态, t_be136794); userId/boosterWallet.id 等标识符一律 <redacted>。kimi 为非官方接口可能再变, 三形态对照见 src/channels/kimi.ts 头注释",
+  "_known_fields": "重置后形态特征: usage 与 limits[0].detail 都只剩 limit/remaining/resetTime —— used 字段整体消失; usages.limit_5h.used_ratio(1.6e-05)为服务端真实回显",
+  "user": {
+    "userId": "<redacted>",
+    "region": "REGION_CN",
+    "membership": { "level": "LEVEL_INTERMEDIATE" }
+  },
+  "limited": false,
+  "usage": {
+    "limit": "100",
+    "remaining": "100",
+    "resetTime": "2026-09-25T01:21:10.687248Z"
+  },
+  "limits": [
+    {
+      "window": { "duration": 300, "timeUnit": "TIME_UNIT_MINUTE" },
+      "detail": {
+        "limit": "100",
+        "remaining": "100",
+        "resetTime": "2026-09-18T09:21:10.687248Z"
+      }
+    }
+  ],
+  "parallel": { "limit": "20" },
+  "authentication": { "method": "METHOD_API_KEY", "scope": "FEATURE_CODING" },
+  "subType": "TYPE_PURCHASE",
+  "boosterWallet": {
+    "id": "<redacted>",
+    "balance": { "feature": "FEATURE_OMNI", "type": "BOOSTER", "unit": "UNIT_CURRENCY" },
+    "status": "STATUS_DISABLED",
+    "allowTopup": true
+  },
+  "usages": {
+    "limit_5h": { "used_ratio": 1.6e-5, "reset_time": "2026-09-18T09:21:10.687248Z" },
+    "limit_7d": { "used_ratio": 3e-6, "reset_time": "2026-09-25T01:21:10.687248Z" }
+  }
+}

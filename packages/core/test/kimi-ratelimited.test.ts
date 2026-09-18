@@ -6,8 +6,8 @@
  * 注册/落地链路, 不在网络。
  *
  * 根因(2026-08-31 真 key 探针实锤, key 未落库):
- * kimi 限流态(usage.used=100/100)响应中 limits[0].detail = {limit, remaining,
- * resetTime} —— **没有 used 字段**(未受限时才有)。于是:
+ * kimi 限流态响应中 limits[0].detail = {limit, remaining, resetTime} ——
+ * **没有 used 字段**(未受限时才有)。于是:
  *   1. $.limits[0].detail.used → JSONPath 无匹配 → undefined
  *   2. number pipe: Number(undefined) = NaN → MappingError
  *   3. GenericHttpAdapter.fetchSnapshot 的 metrics 段无 try/catch → 异常抛出
@@ -19,6 +19,11 @@
  *      其余窗口照常映射(「单窗口数据缺失是数据, 不是故障」, 对齐 D-036
  *      opencode 单窗 status 协议); 全部指标失败才转 error 卡。
  *   B. 采集异常必须落一条显式 error 快照, 绝不静默蒸发(scheduler 层)。
+ *
+ * ⚠️ t_be136794 语义更新: used 改由 remaining 反推(invert_percent, 三形态
+ * remaining 恒存在)。限流态 detail.remaining:"0" → used=100 恒红 —— 原先
+ * 「rolling_5h 跳过」的断言改为有值(限流被正确显示为 100% 用满); weekly 主窗
+ * (usage 无 remaining, 8/31 取证形态)按数据缺失跳过。
  */
 import { describe, expect, it, vi } from "vitest";
 import { GenericHttpAdapter } from "../src/generic-http.js";
@@ -73,17 +78,23 @@ function fetchJson(json: unknown) {
 }
 
 describe("kimi/coding 限流态(整卡缺失 bug 复现, t_5b52b633)", () => {
-  it("A. 限流态响应: rolling_5h 缺 used → 跳过该指标 + warn alert, weekly 窗照常出数", async () => {
+  it("A. 限流态响应: rolling_5h remaining=0 → used 反推 100(恒红), weekly 缺 remaining 跳过", async () => {
     const adapter = new GenericHttpAdapter(KIMI_CODING_MAPPING, fetchJson(RATE_LIMITED_RESPONSE));
     const snap = await adapter.fetchSnapshot(KIMI_CODING, INSTANCE, makeCtx());
 
     // 整卡不是 error(采集本身成功; 单窗口字段缺失是数据形态, 不是故障)
     expect(snap.status).toBe("ok");
-    // weekly 主窗(usage.used 存在)照常映射
     const byKey = Object.fromEntries(snap.metrics.map((m) => [m.key, m]));
-    expect(byKey["weekly"]).toMatchObject({ used: 100, limit: 100 });
-    // rolling_5h 缺 used → 跳过, 不产出假数据
-    expect(byKey["rolling_5h"]).toBeUndefined();
+    // rolling_5h: detail.remaining "0" → number 0 → invert_percent → used=100(限流恒红, 不再跳过)
+    expect(byKey["rolling_5h"]).toMatchObject({
+      kind: "window",
+      unit: "percent",
+      used: 100,
+      limit: 100,
+      reset_at: 1_788_168_070, // 2026-08-31T09:21:10.687248Z
+    });
+    // weekly 主窗: 8/31 取证的 usage 无 remaining → 数据缺失跳过, 不产出假数据
+    expect(byKey["weekly"]).toBeUndefined();
     // 跳过原因对用户可见(warn alert)
     expect(snap.alerts.some((a) => a.level === "warn")).toBe(true);
   });
