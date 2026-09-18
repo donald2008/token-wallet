@@ -1,10 +1,10 @@
 {
   "cycle": "2026-09-18-dashboard-redesign",
   "gate": 2,
-  "status": "selected_awaiting_owner_flip",
-  "approved": false,
-  "approver": null,
-  "at": null,
+  "status": "approved",
+  "approved": true,
+  "approver": "老大",
+  "at": "2026-09-18T13:31:30+08:00",
   "note": "approved 只能由老大亲手翻（管线铁律④：代码里没有写 true 的路径）；选型裁定已由老大在 GATE 2 对话中给出（2026-09-18）",
   "selection": {
     "winner": "ops-wall",
@@ -26,9 +26,18 @@
     "40-handoff/"
   ],
   "mocks": [
-    { "name": "ops-wall", "result": "WINNER" },
-    { "name": "terminal-ink", "result": "runner-up" },
-    { "name": "console", "result": "archived" }
+    {
+      "name": "ops-wall",
+      "result": "WINNER"
+    },
+    {
+      "name": "terminal-ink",
+      "result": "runner-up"
+    },
+    {
+      "name": "console",
+      "result": "archived"
+    }
   ],
   "design_qa": "60-design-qa/report.md（三层全过，否决项清零）",
   "seal": null
