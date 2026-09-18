@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Ops Wall — Agent 用量</title>
+<style>
+  /* ===== Ops Wall · dk-a3 监控墙立场 · S1-S14 基线 ===== */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --canvas: #111217; --panel: #181b1f; --border: #2c3238;
+    --text: #d8d9da; --muted: #9fa7b3; --dim: #8492a6;
+    --accent: #5794f2; --ok: #73bf69; --warn: #f2cc0c; --crit: #e02f44;
+    --s1: #5794f2; --s2: #b877d9; --s3: #73bf69; --s4: #f2cc0c; --s5: #ff9830; --s6: #e02f44;
+    --hairline: 1px solid var(--border);
+  }
+  html, body { background: #08090b; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--text); -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px 0 40px;
+  }
+  .mono, .num { font-family: ui-monospace, "SF Mono", Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
+  .label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+
+  /* 窗口框 900×640（D-024 无边框家族） */
+  .window {
+    width: 900px; height: 640px; background: var(--canvas);
+    border: var(--hairline); border-radius: 8px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+
+  /* 顶栏 40px：产品语言标题（S10）+ 时间窗 + 主题点 */
+  .titlebar {
+    height: 40px; flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 0 12px; border-bottom: var(--hairline); background: var(--panel);
+  }
+  .titlebar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+  .titlebar h1 { font-size: 13px; font-weight: 600; letter-spacing: .02em; }
+  .titlebar h1 span { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 12px; }
+  .titlebar .seg { display: flex; gap: 2px; margin-left: auto; background: var(--canvas); border: var(--hairline); border-radius: 6px; padding: 2px; }
+  .titlebar .seg button {
+    border: 0; background: transparent; color: var(--muted); font-size: 11px;
+    padding: 4px 8px; border-radius: 4px; cursor: pointer;
+  }
+  .titlebar .seg button.on { background: var(--accent); color: #fff; }
+  .titlebar .themes { display: flex; gap: 4px; align-items: center; margin-left: 8px; }
+  .titlebar .themes i { width: 10px; height: 10px; border-radius: 50%; border: var(--hairline); display: block; }
+  .titlebar .themes i:nth-child(1) { background: #e6e8e8; }
+  .titlebar .themes i:nth-child(2) { background: #111217; border-color: #3a4048; }
+
+  /* 主体 12px 网格（S6） */
+  .grid { flex: 1; display: grid; grid-template-columns: repeat(12, 1fr); grid-auto-rows: min-content; gap: 12px; padding: 12px; min-height: 0; }
+  .panel { background: var(--panel); border: var(--hairline); border-radius: 6px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .panel .phead {
+    flex: none; display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border-bottom: var(--hairline);
+  }
+  .panel .phead h2 { font-size: 13px; font-weight: 500; }
+  .panel .phead .note { font-size: 10px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
+  .panel .pbody { flex: 1; padding: 12px; min-height: 0; }
+
+  /* KPI 带：4 面板，顶缘 3px 系列色（S5） */
+  .kpi { grid-column: span 3; }
+  .kpi::before { content: ""; display: block; height: 3px; flex: none; }
+  .kpi.t1::before { background: var(--s1); } .kpi.t2::before { background: var(--s2); }
+  .kpi.t3::before { background: var(--s3); } .kpi.t4::before { background: var(--s4); }
+  .kpi .pbody { padding: 10px 12px 12px; }
+  .kpi .v { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; }
+  .kpi .v small { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
+  .kpi .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .kpi .sub b { color: var(--text); font-weight: 600; }
+
+  /* 趋势面板（span 8） */
+  .p-trend { grid-column: span 8; }
+  .p-trend .pbody { display: flex; flex-direction: column; }
+  .trend { flex: 1; display: flex; align-items: flex-end; gap: 8px; position: relative; padding-top: 8px; }
+  .trend .bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; height: 100%; }
+  .trend .bar i { display: block; background: var(--s1); border-radius: 2px 2px 0 0; opacity: .85; }
+  .trend .bar:hover i { opacity: 1; }
+  .trend .bar em { font-style: normal; font-size: 10px; color: var(--dim); text-align: center; }
+  .trend .bar .bv { font-size: 10px; color: var(--muted); text-align: center; }
+  /* S8 均值虚线 */
+  .meanline { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--warn); opacity: .7; }
+  .meanline b { position: absolute; right: 0; top: -14px; font-size: 9px; font-weight: 400; color: var(--warn); letter-spacing: .08em; }
+
+  /* Model 分布（span 4）：环形带数值标注（S7）+ chips 图例（S5） */
+  .p-model { grid-column: span 4; }
+  .p-model .pbody { display: flex; gap: 12px; align-items: center; }
+  .donut { width: 128px; height: 128px; border-radius: 50%; flex: none; position: relative;
+    background: conic-gradient(var(--s1) 0 41%, var(--s2) 41% 64%, var(--s3) 64% 79%, var(--s4) 79% 91%, var(--s5) 91% 97%, var(--s6) 97% 100%); }
+  .donut::after { content: ""; position: absolute; inset: 28px; border-radius: 50%; background: var(--panel); }
+  .donut .dc { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1; }
+  .donut .dc b { font-size: 15px; letter-spacing: -0.02em; }
+  .donut .dc span { font-size: 9px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; }
+  .legend { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .legend .li { display: flex; align-items: center; gap: 6px; font-size: 11px; height: 16px; }
+  .legend .li i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .legend .li .nm { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .legend .li .pc { margin-left: auto; color: var(--muted); }
+
+  /* 明细表（span 8）：24px 行高 + 数字右对齐成列（S4/S6） */
+  .p-detail { grid-column: span 8; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-weight: 400; text-align: right; padding: 0 8px 6px 0; border-bottom: var(--hairline); }
+  thead th:first-child { text-align: left; padding-left: 0; }
+  tbody td { height: 24px; padding: 0 8px 0 0; text-align: right; border-bottom: 1px solid transparent; color: var(--text); white-space: nowrap; }
+  tbody td:first-child { text-align: left; padding-left: 0; display: flex; align-items: center; gap: 6px; }
+  tbody tr:hover td { background: rgba(87,148,242,.06); }
+  tbody tr:last-child td { border-bottom: 0; }
+  .ast { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .ast.on { background: var(--ok); } .ast.idle { background: var(--dim); } .ast.off { background: var(--crit); }
+  .cell-dim { color: var(--muted); }
+  .barcell { position: relative; }
+  .barcell i { position: absolute; right: 0; bottom: 2px; height: 3px; border-radius: 2px; background: var(--s1); opacity: .5; }
+
+  /* 三分项（span 4）：堆叠条 + 大写标签 */
+  .p-split { grid-column: span 4; }
+  .p-split .pbody { display: flex; flex-direction: column; gap: 10px; }
+  .stack { height: 12px; border-radius: 3px; overflow: hidden; display: flex; }
+  .stack i { height: 100%; }
+  .stack .h { background: var(--s1); } .stack .m { background: var(--s5); } .stack .o { background: var(--s3); }
+  .splitrows { display: flex; flex-direction: column; }
+  .splitrows .r { display: flex; align-items: baseline; gap: 8px; height: 24px; font-size: 11px; border-bottom: var(--hairline); }
+  .splitrows .r:last-child { border-bottom: 0; }
+  .splitrows .r i { width: 8px; height: 8px; border-radius: 2px; align-self: center; flex: none; }
+  .splitrows .r b { margin-left: auto; letter-spacing: -0.02em; }
+  .splitrows .r span { color: var(--muted); }
+
+  /* footer 24px */
+  .foot { flex: none; height: 24px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-top: var(--hairline); font-size: 10px; color: var(--dim); letter-spacing: .05em; }
+  .foot .live { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+  .foot b { margin-left: auto; font-weight: 400; }
+
+  /* ===== 降级态（S14：同品质壳 + 明确状态）===== */
+  .window.offline .grid > .panel .pbody { filter: saturate(.25) brightness(.82); pointer-events: none; }
+  .banner {
+    display: none; align-items: center; gap: 10px;
+    margin: 12px 12px 0; padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
+    border-radius: 6px; background: color-mix(in srgb, var(--warn) 8%, var(--panel));
+    font-size: 12px;
+  }
+  .banner i { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+  .banner b { font-weight: 600; }
+  .banner span { color: var(--muted); }
+  .banner button {
+    margin-left: auto; border: var(--hairline); background: transparent; color: var(--text);
+    font-size: 11px; padding: 5px 10px; border-radius: 5px; cursor: pointer;
+  }
+  .banner button:hover { border-color: var(--accent); color: var(--accent); }
+  .window.offline .banner { display: flex; }
+  .window.offline .foot .live { background: var(--warn); }
+
+  /* 演示控制（窗口外） */
+  .demo { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #666; }
+  .demo button { border: 1px solid #333; background: #15161a; color: #aaa; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .demo button.on { border-color: #5794f2; color: #9cc0ff; }
+</style>
+</head>
+<body>
+  <div class="demo">
+    <button id="bOn" class="on" onclick="setMode(false)">常态</button>
+    <button id="bOff" onclick="setMode(true)">无 daemon 降级态</button>
+    <span>900×640 · Ops Wall · dk-a3 面板墙立场</span>
+  </div>
+
+  <div class="window" id="win">
+    <header class="titlebar">
+      <i class="dot"></i>
+      <h1>Agent 用量<span>token 消耗 · 成本 · 缓存命中</span></h1>
+      <div class="seg mono">
+        <button>近5小时</button><button class="on">本周</button><button>本月</button>
+      </div>
+      <div class="themes"><i></i><i></i></div>
+    </header>
+
+    <div class="banner"><i></i><b>DAEMON 未连接</b><span>显示上次快照 · 数据截至 09:41</span><button onclick="setMode(false)">重新连接</button></div>
+
+    <div class="grid">
+      <!-- KPI 带 -->
+      <section class="panel kpi t1"><div class="pbody">
+        <div class="label">Tokens · 本周</div>
+        <div class="v num">184.6<small>M</small></div>
+        <div class="sub">精确 <b class="num">184,627,391</b></div>
+      </div></section>
+      <section class="panel kpi t2"><div class="pbody">
+        <div class="label">成本 · 本周</div>
+        <div class="v num">$46.18</div>
+        <div class="sub">调用 <b class="num">1,284</b> 次</div>
+      </div></section>
+      <section class="panel kpi t3"><div class="pbody">
+        <div class="label">Cache 命中率</div>
+        <div class="v num">87.3<small>%</small></div>
+        <div class="sub">hit <b class="num">96.4M</b> / miss <b class="num">14.0M</b></div>
+      </div></section>
+      <section class="panel kpi t4"><div class="pbody">
+        <div class="label">活跃 Agent</div>
+        <div class="v num">3<small>/4</small></div>
+        <div class="sub">6 个模型参与</div>
+      </div></section>
+
+      <!-- 趋势 -->
+      <section class="panel p-trend">
+        <div class="phead"><h2>趋势 · tokens 消耗</h2><span class="note">日粒度 · 均值 26.4M</span></div>
+        <div class="pbody">
+          <div class="trend">
+            <div class="meanline" style="bottom: 34%"><b>MEAN 26.4M</b></div>
+            <div class="bar"><span class="bv num">31.2</span><i style="height: 58%"></i><em>周五</em></div>
+            <div class="bar"><span class="bv num">18.4</span><i style="height: 34%"></i><em>周六</em></div>
+            <div class="bar"><span class="bv num">12.7</span><i style="height: 24%"></i><em>周日</em></div>
+            <div class="bar"><span class="bv num">38.9</span><i style="height: 72%"></i><em>周一</em></div>
+            <div class="bar"><span class="bv num">26.1</span><i style="height: 48%"></i><em>周二</em></div>
+            <div class="bar"><span class="bv num">29.8</span><i style="height: 55%"></i><em>周三</em></div>
+            <div class="bar"><span class="bv num">27.5</span><i style="height: 51%"></i><em>周四</em></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Model 分布 -->
+      <section class="panel p-model">
+        <div class="phead"><h2>Model 分布</h2><span class="note">tokens 占比</span></div>
+        <div class="pbody">
+          <div class="donut"><div class="dc"><b class="num">184.6M</b><span>total</span></div></div>
+          <div class="legend">
+            <div class="li"><i style="background:var(--s1)"></i><span class="nm">glm-5.3-flash</span><b class="pc num">41%</b></div>
+            <div class="li"><i style="background:var(--s2)"></i><span class="nm">kimi-k2</span><b class="pc num">23%</b></div>
+            <div class="li"><i style="background:var(--s3)"></i><span class="nm">deepseek-v4-flash</span><b class="pc num">15%</b></div>
+            <div class="li"><i style="background:var(--s4)"></i><span class="nm">claude-sonnet-4.5</span><b class="pc num">12%</b></div>
+            <div class="li"><i style="background:var(--s5)"></i><span class="nm">gpt-5-codex</span><b class="pc num">6%</b></div>
+            <div class="li"><i style="background:var(--s6)"></i><span class="nm">qwen-max</span><b class="pc num">3%</b></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 明细 -->
+      <section class="panel p-detail">
+        <div class="phead"><h2>明细 · 按 agent</h2><span class="note">本周</span></div>
+        <div class="pbody" style="padding-top: 8px;">
+          <table>
+            <thead><tr><th>Agent</th><th>Tokens</th><th>占比</th><th>Cache hit</th><th>Output</th><th>调用</th><th>成本</th></tr></thead>
+            <tbody class="mono">
+              <tr><td><i class="ast on"></i>njbx02</td><td>98,132,204</td><td class="barcell">53%<i style="width: 53%"></i></td><td class="cell-dim">51.2M</td><td class="cell-dim">39.1M</td><td class="cell-dim">682</td><td>$24.40</td></tr>
+              <tr><td><i class="ast on"></i>home-computer</td><td>52,641,880</td><td class="barcell">29%<i style="width: 29%"></i></td><td class="cell-dim">27.4M</td><td class="cell-dim">21.3M</td><td class="cell-dim">365</td><td>$13.10</td></tr>
+              <tr><td><i class="ast on"></i>desktop-e5jupfs</td><td>33,853,307</td><td class="barcell">18%<i style="width: 18%"></i></td><td class="cell-dim">17.8M</td><td class="cell-dim">13.8M</td><td class="cell-dim">236</td><td>$8.68</td></tr>
+              <tr><td><i class="ast idle"></i>home-computer-win</td><td class="cell-dim">12,014,655</td><td class="barcell cell-dim">6%<i style="width: 6%"></i></td><td class="cell-dim">6.3M</td><td class="cell-dim">4.9M</td><td class="cell-dim">86</td><td class="cell-dim">$2.90</td></tr>
+              <tr><td><i class="ast off"></i>laptop-old</td><td class="cell-dim">—</td><td class="cell-dim">—</td><td class="cell-dim">—</td><td class="cell-dim">—</td><td class="cell-dim">0</td><td class="cell-dim">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 三分项 -->
+      <section class="panel p-split">
+        <div class="phead"><h2>三分项拆分</h2><span class="note">tokens</span></div>
+        <div class="pbody">
+          <div class="stack"><i class="h" style="width:52%"></i><i class="m" style="width:8%"></i><i class="o" style="width:40%"></i></div>
+          <div class="splitrows mono">
+            <div class="r"><i style="background:var(--s1)"></i><span>Cache hit</span><b>96.4M</b><span>52%</span></div>
+            <div class="r"><i style="background:var(--s5)"></i><span>Cache miss</span><b>14.0M</b><span>8%</span></div>
+            <div class="r"><i style="background:var(--s3)"></i><span>Output</span><b>74.2M</b><span>40%</span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="foot"><i class="live"></i><span>DAEMON 10.200.1.110:9131</span><b class="num">数据快照 09:41:23 · generated_at</b></footer>
+  </div>
+
+<script>
+  function setMode(off) {
+    document.getElementById('win').classList.toggle('offline', off);
+    document.getElementById('bOn').classList.toggle('on', !off);
+    document.getElementById('bOff').classList.toggle('on', off);
+  }
+</script>
+</body>
+</html>
