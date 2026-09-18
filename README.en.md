@@ -20,9 +20,9 @@ countdowns, and "days remaining" estimated from your consumption rate.
 > dies at 3 a.m. and you only find out after digging through terminals: one platform's quota
 > ran out two hours ago. **token-wallet deletes this failure mode from your workflow.**
 
-| Dark | Light | Glass |
-|------|-------|-------|
-| ![dark](docs/screenshots/panel-dark.png) | ![light](docs/screenshots/panel-light.png) | ![glass](docs/screenshots/panel-glass.png) |
+| Agent Usage Dashboard (Dark / Light / Glass) |
+|------|
+| ![dashboard dark](docs/screenshots/dashboard-dark.png) |
 
 **Paste a key and go (HTTP channels) · One-click authorize in app (CLI channels, auto-opens browser) · Zero telemetry · Data never leaves your machine**
 

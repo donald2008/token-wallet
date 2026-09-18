@@ -17,9 +17,9 @@
 > **多 Agent 时代的隐形炸弹**：token 消耗散落在各家套餐里 —— 5 小时滚动窗、周窗、月窗、按量余额。
 > 深夜的长任务挂了，你翻遍终端才发现：某家的额度两小时前就没了。**token-wallet 把这种死法从你的工作流里删除。**
 
-| Dark | Light | Glass |
-|------|-------|-------|
-| ![dark](docs/screenshots/panel-dark.png) | ![light](docs/screenshots/panel-light.png) | ![glass](docs/screenshots/panel-glass.png) |
+| Agent 用量大屏（Dark / Light / Glass） |
+|------|
+| ![dashboard dark](docs/screenshots/dashboard-dark.png) |
 
 **填 Key 即用（HTTP 通道）· app 内一键授权（CLI 通道，自动打开浏览器）· 零遥测 · 数据不出本机**
 
