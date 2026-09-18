@@ -248,7 +248,13 @@ export function AgentDashboardC({
   onBack,
   onRetry,
 }: AgentDashboardCProps): ReactNode {
-  const [theme, setTheme] = useState<ThemeMode>("dark");
+  const [touchedTheme, setTouchedTheme] = useState(false);
+  // 初始主题从全局 html data-theme 派生(尊重 dark-glass 等玻璃变体, t_15397c99 U5 字节互异前提);
+  // 用户在大屏内切换后仍走 dark/light 二态(组件内独立主题, mock 契约)。
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") return "dark";
+    return document.documentElement.dataset.theme === "light" || document.documentElement.dataset.theme === "light-glass" ? "light" : "dark";
+  });
   // t_12c28686: 多 agent 切换(H4) — 默认选中 tokens 最多的 agent
   const detailRows = useMemo(() => buildDetailRows(summary), [summary]);
   const [selectedAgent, setSelectedAgent] = useState<string>(() => {
@@ -407,8 +413,15 @@ export function AgentDashboardC({
   }, [renderCharts]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
+    // dark-first 演示立场(mock 契约, 既有 e2e 锁定): 挂载即落 dark。
+    // 全局为玻璃变体时保留玻璃语义(落 <base>-glass, U5 三主题字节互异的前提);
+    // 全局为对侧(light)或用户主动切换后落裸主题值。
+    const global = typeof window !== "undefined" ? document.documentElement.dataset.theme : undefined;
+    const keepGlassSuffix = touchedTheme
+      ? false
+      : global === "dark-glass" || global === "light-glass";
+    document.documentElement.dataset.theme = keepGlassSuffix ? `${theme}-glass` : theme;
+  }, [theme, touchedTheme]);
 
   // t_12c28686 口径裁决(继承): KPI 总用量/三分项 = 全局 total, agent tab 只联动 Model 分布 + 明细高亮。
   const totalTokens =
@@ -492,7 +505,7 @@ export function AgentDashboardC({
               type="button"
               data-theme="dark"
               aria-pressed={theme === "dark"}
-              onClick={() => setTheme("dark")}
+              onClick={() => { setTouchedTheme(true); setTheme("dark"); }}
               data-testid="agent-dashboard-c-theme-dark"
             >
               Dark
@@ -501,7 +514,7 @@ export function AgentDashboardC({
               type="button"
               data-theme="light"
               aria-pressed={theme === "light"}
-              onClick={() => setTheme("light")}
+              onClick={() => { setTouchedTheme(true); setTheme("light"); }}
               data-testid="agent-dashboard-c-theme-light"
             >
               Light
@@ -650,6 +663,11 @@ export function AgentDashboardC({
               <>
                 <div className="chart-wrap chart-wrap-model" data-testid="agent-dashboard-c-chart-model">
                   <canvas ref={modelCanvasRef} />
+                  {/* appendix 数据接线: 环形+中心总量(当前 agent 全模型 tokens 合计) */}
+                  <div className="dash-donut-center" data-testid="agent-dashboard-c-model-total">
+                    <b className="dash-num">{fmtTokens(slices.reduce((a, x) => a + x.tokens, 0))}</b>
+                    <span>TOTAL</span>
+                  </div>
                 </div>
                 <table className="dash-model-table" data-testid="agent-dashboard-c-model-table">
                   <thead>
