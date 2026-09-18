@@ -1,11 +1,21 @@
 {
   "cycle": "2026-09-18-dashboard-redesign",
   "gate": 2,
-  "status": "pending",
+  "status": "selected_awaiting_owner_flip",
   "approved": false,
   "approver": null,
   "at": null,
-  "note": "approved 只能由老大在 GATE 2 亲手翻（管线铁律④：代码里没有写 true 的路径）",
+  "note": "approved 只能由老大亲手翻（管线铁律④：代码里没有写 true 的路径）；选型裁定已由老大在 GATE 2 对话中给出（2026-09-18）",
+  "selection": {
+    "winner": "ops-wall",
+    "stance": "dk-a3 监控墙立场：12列面板网格，KPI带+趋势/环形+明细/三分项",
+    "decisions": [
+      "GATE 2 选型 = Ops Wall（老大裁定：全局对比与 3 秒三问最强）",
+      "KPI「精确数」副行保留（老大裁定：同行观众要精确数，量级+精确双给，S13 密度拉满）",
+      "Terminal Ink / Console 归档为落选 IA（50-design/ 保留可查）",
+      "可选杂交项：Console 离线面板（S14 降级形态候选，实现卡定夺）"
+    ]
+  },
   "inputs": [
     "00-context-lock.md",
     "05-north-star.md",
@@ -15,7 +25,11 @@
     "references-locked.md",
     "40-handoff/"
   ],
-  "mocks": [],
-  "design_qa": null,
+  "mocks": [
+    { "name": "ops-wall", "result": "WINNER" },
+    { "name": "terminal-ink", "result": "runner-up" },
+    { "name": "console", "result": "archived" }
+  ],
+  "design_qa": "60-design-qa/report.md（三层全过，否决项清零）",
   "seal": null
 }
