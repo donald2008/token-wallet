@@ -456,7 +456,9 @@ export const ipcMocks: Record<string, IpcHandler> = {
           limits: [
             {
               window: { duration: 300, timeUnit: "TIME_UNIT_MINUTE" },
-              detail: { limit: "100", used: "100", resetTime: "2026-08-29T09:21:10.687248Z" },
+              // e860cf9 后映射只认 detail.remaining(反推 used); 8/31 限流取证形态
+              // detail={limit,remaining:"0"} → rolling_5h 反推 100 恒红(耗尽徽章语义保留)
+              detail: { limit: "100", used: "100", remaining: "0", resetTime: "2026-08-29T09:21:10.687248Z" },
             },
           ],
           parallel: { limit: "20" },
