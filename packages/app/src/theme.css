@@ -33,6 +33,15 @@
   --bad-fg: #f87171;
   --unknown-fg: #9ca3af;
 
+  /* t_15397c99 SL-01: chart 系列色序(S3, 锚点 dk-a3 series palette) — 图形角色, 两主题共用。
+   * 值 = docs/design-tokens/tokens.css --c-chart-series-N(先更 design-tokens 三层再引用, H9 纪律) */
+  --chart-1: #5794f2;
+  --chart-2: #b877d9;
+  --chart-3: #73bf69;
+  --chart-4: #f2cc0c;
+  --chart-5: #ff9830;
+  --chart-6: #e02f44;
+
   color-scheme: dark;
 }
 
@@ -77,6 +86,14 @@
   --warn-fg: #92600a;
   --bad-fg: #b91c1c;
   --unknown-fg: #6b7280;
+
+  /* t_15397c99 SL-01: chart 系列色序(S3) — 图形角色, 两主题共用(与 dark 段同值) */
+  --chart-1: #5794f2;
+  --chart-2: #b877d9;
+  --chart-3: #73bf69;
+  --chart-4: #f2cc0c;
+  --chart-5: #ff9830;
+  --chart-6: #e02f44;
 
   color-scheme: light;
 }
