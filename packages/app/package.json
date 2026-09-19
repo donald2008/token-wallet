@@ -47,7 +47,8 @@
       "dist/**",
       "dist-electron/**",
       "electron/icons/**",
-      "package.json"
+      "package.json",
+      "resources/token-wallet-mcp*"
     ],
     "win": {
       "target": [
@@ -75,6 +76,9 @@
     "publish": {
       "provider": "generic",
       "url": "https://gitee.com/ITEater/token-wallet/releases/download/stable/"
-    }
+    },
+    "asarUnpack": [
+      "resources/token-wallet-mcp*"
+    ]
   }
 }

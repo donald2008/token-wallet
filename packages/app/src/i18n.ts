@@ -339,7 +339,8 @@ export const zh = {
     mcpStatusRunning: "运行中",
     mcpStatusStopped: "未运行",
     mcpStatusProbe: "正在探测…",
-    mcpStatusNotInstalled: "未找到 daemon 可执行文件",
+    mcpStatusNotInstalled:
+      "未找到 daemon 可执行文件（安装包应自带；开发场景请先在 Windows 侧构建: powershell -ExecutionPolicy Bypass -File packages\\mcp-server\\deploy\\build-exe.ps1）",
     mcpStart: "一键启动",
     mcpStop: "停止",
     mcpRestarting: "重启中…",
@@ -726,7 +727,8 @@ export const en: Dict = {
     mcpStatusRunning: "Running",
     mcpStatusStopped: "Stopped",
     mcpStatusProbe: "Probing…",
-    mcpStatusNotInstalled: "Daemon executable not found",
+    mcpStatusNotInstalled:
+      "Daemon executable not found (the installer should bundle it; in dev, build it first on Windows: powershell -ExecutionPolicy Bypass -File packages\\mcp-server\\deploy\\build-exe.ps1)",
     mcpStart: "Start",
     mcpStop: "Stop",
     mcpRestarting: "Restarting…",
