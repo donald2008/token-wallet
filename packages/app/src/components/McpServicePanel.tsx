@@ -39,7 +39,9 @@ export function McpServicePanel() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   // OB-03: 引导链接复制成功的瞬态反馈(与 key 复制同款 1.5s)
+  // P2-2(review #1683): 主钮/内联钮各自独立瞬态, 修文案串扰
   const [guideCopied, setGuideCopied] = useState(false);
+  const [guideIconCopied, setGuideIconCopied] = useState(false);
   // 重生成 key 时的二次确认(避免误点导致已配 agent 失联)
   const [confirmGenKey, setConfirmGenKey] = useState(false);
   // 重生成 key 后短时提示
@@ -192,11 +194,12 @@ export function McpServicePanel() {
   // S9 修订: daemon 离线也不做静态兜底 — 复制 URL 即引导语义的全部, agent 拿链接自适配。
   const guideUrl = endpoint.replace(/\/mcp$/, "/guide");
 
-  const onCopyGuide = async () => {
+  const onCopyGuide = async (which: "main" | "icon") => {
     try {
       await navigator.clipboard.writeText(guideUrl);
-      setGuideCopied(true);
-      setTimeout(() => setGuideCopied(false), 1500);
+      const set = which === "main" ? setGuideCopied : setGuideIconCopied;
+      set(true);
+      setTimeout(() => set(false), 1500);
     } catch {
       setError(t("set.mcpErrorGeneric", { msg: "clipboard denied" }));
     }
@@ -236,7 +239,7 @@ export function McpServicePanel() {
           className="btn btn-primary"
           data-testid="mcp-copy-guide"
           disabled={!config}
-          onClick={() => void onCopyGuide()}
+          onClick={() => void onCopyGuide("main")}
         >
           {guideCopied ? t("set.mcpGuideLinkCopied") : t("set.mcpCopyGuideLink")}
         </button>
@@ -287,9 +290,9 @@ export function McpServicePanel() {
               data-testid="mcp-guide-copy"
               aria-label={t("set.mcpCopyGuideLink")}
               disabled={!config}
-              onClick={() => void onCopyGuide()}
+              onClick={() => void onCopyGuide("icon")}
             >
-              {guideCopied ? t("set.mcpGuideLinkCopied") : t("set.mcpGuideCopy")}
+              {guideIconCopied ? t("set.mcpGuideLinkCopied") : t("set.mcpGuideCopy")}
             </button>
           </dd>
         </div>

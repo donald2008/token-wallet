@@ -37,7 +37,7 @@ const PLAN = [
   { themeId: "dark", scenario: "not-installed", what: "panel" },
   { themeId: "dark", scenario: "stopped", what: "panel" },
   { themeId: "dark", scenario: "running", what: "panel" },
-  // OB-03: 原 AgentGuideModal 弹窗证据面已整链拆除。
+  // OB-03: 旧引导弹窗证据面已整链拆除 → 截 mcp-panel
   // 唯一新证据面 = settings-modal 全宽(390 视口下 mcp-panel 铺满 section,
   // 「复制引导链接」钮在列); mcp-panel 局部截在 dark/light/glass 三主题下
   // 背景全被面板体覆盖、仅边框 1px 之差 → md5 互异门禁在此构图下无判别力。
