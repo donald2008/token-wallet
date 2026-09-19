@@ -63,3 +63,23 @@ cp -r packages/hook-usage-reporter ~/.hermes/plugins/hook_usage_reporter
 cd packages/hook-usage-reporter
 python -m pytest tests/ -v   # 10 passed（映射/护栏/flush/重发/超时丢弃/uuidv7 pattern/信封错误）
 ```
+
+## 参考实现定位（其他 agent 如何自适配）
+
+本包是 token-wallet 用量上报的 **Hermes 官方参考实现**（t_0ea1d8b6 交付，协议符合性经人工终审）。
+其他 harness 的 agent（claude-code / opencode / 任意自定义 agent）**不需要也不应该直接移植本包代码**——
+上报通道是开放的 MCP 工具 `report_usage`（AgentUsageReport v1，见
+[`docs/mcp-protocol.md`](../../docs/mcp-protocol.md)），任何能发 MCP 请求的运行时都可自行实现上报。
+
+参考路径 = 借鉴本包的 **hook 触发点设计**，用你所在 harness 的等价机制自行实现：
+
+| 设计点 | 本包做法（Hermes gateway） | 自适配时你要找的等价物 |
+|---|---|---|
+| 提取点 | `post_api_request` hook（usage 只在此事件，`post_llm_call` 无 usage）| 你 harness 的「LLM 请求完成」事件/回调，取 canonical usage 字段 |
+| 字段归一 | canonical 三 shape 统一 → `input_cache_hit/input_cache_miss/output` 三分项（reasoning 归 output）| 把平台原始 usage 归一成协议三分项 + `total` |
+| buffer 策略 | 内存 buffer，50 条 ∨ 60s ∨ 会话结束 flush；断线排队，连续不可达 30min 丢 buffer 防 OOM | 任何本地攒批 + 定时/定量/退出时落盘或上报机制 |
+| 批量上报 | MCP `report_usage` 批量信封（1-100 条），event_id=uuidv7 幂等，失败整批重发 | 同协议批量调用，`event_id` 逐条生成并保证重试不变 |
+| 零阻塞 | 上报失败静默排队，绝不阻塞 agent 主流程 | 同样原则：计量永远不能拖慢业务 |
+
+本包 README 上方的「hook payload 实测结论」「字段映射」「协议符合性要点」三节就是自适配时最常踩坑的
+实证清单（usage 在哪个事件、cancel 不发事件、429 双计护栏、uuidv7 pattern、信封级 `is_error`）。

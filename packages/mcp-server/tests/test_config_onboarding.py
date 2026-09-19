@@ -294,7 +294,7 @@ class TestGuideHttp:
         # 与参考实现 <a href> — 二者均非外部资源加载
         external_srcs = re.findall(r'(?:src|href)\s*=\s*"(https?://[^"]+)"', body)
         for url in external_srcs:
-            assert url.startswith("https://gitee.com/IT_codef/token-wallet"), url
+            assert url.startswith("https://gitee.com/ITEater/token-wallet"), url
 
     def test_mcp_endpoint_still_requires_bearer(self, tmp_path):
         """guide 开放不放松 /mcp 鉴权面。"""

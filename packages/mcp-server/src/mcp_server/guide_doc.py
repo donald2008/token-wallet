@@ -9,8 +9,9 @@ tests/test_doc_consistency.py 与权威源逐字比对, 篡改任一字符即红
 from __future__ import annotations
 
 # 参考实现 (S5 单条目自适配标准 + REQ-05; OB-02 并 master 后该路径真实存在)
+# gitee 树形 URL 结构 = /blob/<branch>/<path> (2026-09-19 实测: /-/tree/ 与 /tree/ 均 404)
 REFERENCE_IMPL_URL = (
-    "https://gitee.com/IT_codef/token-wallet/-/tree/master/packages/hook-usage-reporter"
+    "https://gitee.com/ITEater/token-wallet/blob/master/packages/hook-usage-reporter"
 )
 
 # AgentUsageReport v1 全 schema — 逐字 = docs/mcp-protocol.md §1.1
