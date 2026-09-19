@@ -172,9 +172,10 @@ describe("seriesVar/weekdayLabel(t_15397c99 SL-01 渲染层派生)", () => {
 describe("AgentDashboardC(Ops Wall 常态渲染 SC-01)", () => {
   it("KPI 带: tokens/cost/命中率/活跃 四卡 + 精确数副行(hero-* 映射为 KPI 大数字锚)", () => {
     const { container: c } = mountDash();
-    // KPI tokens = 全局 total 81,000(tab 不联动 KPI)
-    expect(c.querySelector('[data-testid="agent-dashboard-c-kpi-tokens"]')?.textContent).toContain("81,000");
-    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81,000");
+    // DW-01: KPI 大数字 M 缩写回归设计稿(184.6M 形态); 精确数保千分位在副行(dash-kpi-sub)
+    expect(c.querySelector('[data-testid="agent-dashboard-c-kpi-tokens"]')?.textContent).toContain("81.0K");
+    expect(c.querySelector(".dash-kpi.t1 .dash-kpi-sub")?.textContent).toContain("81,000");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81.0K");
     // KPI cost = 1.73 USD(大数字锚 hero-cost)
     expect(c.querySelector('[data-testid="agent-dashboard-c-kpi-cost"]')?.textContent).toContain("1.73 USD");
     expect(c.querySelector('[data-testid="agent-dashboard-c-hero-cost"]')?.textContent).toBe("1.73 USD");
@@ -303,12 +304,12 @@ describe("AgentDashboardC(多维数据面 + agent tab H4)", () => {
     expect(tabs).toHaveLength(2);
     expect(c.querySelector('[data-testid="dash-agent-tab-njbx02"]')?.getAttribute("aria-selected")).toBe("true");
     expect(c.querySelector('[data-testid="dash-agent-tab-home-computer"]')?.getAttribute("aria-selected")).toBe("false");
-    // KPI = 全局 total 81,000(tab 不联动 KPI)
-    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81,000");
+    // KPI = 全局 total 81,000 → 81.0K(DW-01 M 缩写; tab 不联动 KPI)
+    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81.0K");
     // 切到 home-computer → KPI 不变, 明细高亮切行
     const homeTab = c.querySelector('[data-testid="dash-agent-tab-home-computer"]') as HTMLButtonElement;
     act(() => homeTab.click());
-    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81,000");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81.0K");
     const list = c.querySelector('[data-testid="agent-dashboard-c-detail-list"]');
     expect(list?.querySelector('[data-testid="agent-dashboard-c-detail-home-computer"]')?.getAttribute("data-selected")).toBe("true");
     expect(list?.querySelector('[data-testid="agent-dashboard-c-detail-njbx02"]')?.getAttribute("data-selected")).toBeNull();
@@ -325,20 +326,23 @@ describe("AgentDashboardC(多维数据面 + agent tab H4)", () => {
     expect(c.querySelector('[data-testid="agent-dashboard-c-models"]')?.textContent).toBe("2");
   });
 
-  it("Model 迷你数据表: 每模型一行(calls/tokens/占比/命中率) + chips 色点(S3 同源)", () => {
+  it("Model 图例(DW-01 设计稿形态): 每模型一行(模型名+占比) + chips 色点(S3 同源) + hover 详情", () => {
     const { container: c } = mountDash(fakeSummary, okResult);
-    const table = c.querySelector('[data-testid="agent-dashboard-c-model-table"]');
-    expect(table?.querySelectorAll("tbody tr")).toHaveLength(2);
-    const glm = table?.querySelector('[data-testid="agent-dashboard-c-model-row-glm-5.3-flash"]');
+    const legend = c.querySelector('[data-testid="agent-dashboard-c-model-table"]');
+    expect(legend?.tagName).toBe("UL"); // DW-01: 表→图例(设计稿 .legend), testid 契约沿用
+    expect(legend?.querySelectorAll("li")).toHaveLength(2);
+    const glm = legend?.querySelector('[data-testid="agent-dashboard-c-model-row-glm-5.3-flash"]');
     expect(glm?.textContent).toContain("glm-5.3-flash");
-    expect(glm?.textContent).toContain("64,000");
-    expect(glm?.textContent).toMatch(/50\.0%/);
-    expect(glm?.textContent).toMatch(/83\.3%/); // hit/(hit+miss) = 50000/60000
-    expect(table?.querySelectorAll("thead th")).toHaveLength(5);
+    // DW-01: 具体数值(tables 全精度)退役到 hover 详情行; 图例只留模型名+占比整数
+    expect(glm?.textContent).toContain("50%");
+    expect(legend?.querySelectorAll("thead th")).toHaveLength(0); // 无表头 — 图例形态
+    // hover 详情行在场(具体数值: 千分位 tokens + 调用 + 命中率)
+    const detail = c.querySelector('[data-testid="agent-dashboard-c-model-hoverdetail"]');
+    expect(detail?.textContent).toContain("悬停"); // hint 态
     // chips 色点 = var(--chart-N), 组件禁硬编码色值(H9)
     const chip = glm?.querySelector<HTMLDivElement>(".dash-chip");
     expect(chip?.getAttribute("style")).toContain("var(--chart-1)");
-    const kimi = table?.querySelector('[data-testid="agent-dashboard-c-model-row-kimi-k2"] .dash-chip');
+    const kimi = legend?.querySelector('[data-testid="agent-dashboard-c-model-row-kimi-k2"] .dash-chip');
     expect(kimi?.getAttribute("style")).toContain("var(--chart-2)");
   });
 
@@ -425,7 +429,12 @@ describe("AgentDashboardC(多维数据面 + agent tab H4)", () => {
     const glm = c.querySelector('[data-testid="agent-dashboard-c-model-row-glm-5.3-flash"]');
     expect(glm).toBeTruthy();
     expect(glm?.textContent).not.toMatch(/NaN|Infinity/);
-    expect(glm?.textContent).toContain("—");
+    // DW-01: 具体数值(holdout 命中率「—」)走 hover 详情行(hoverSlice 联动), 图例行无「—」;
+    // 守卫语义保留 = 详情行 hint 态不含 NaN/Infinity, 图例占比正常渲染
+    expect(c.querySelector('[data-testid="agent-dashboard-c-model-hoverdetail"]')?.textContent).not.toMatch(
+      /NaN|Infinity/,
+    );
+    expect(glm?.textContent).toMatch(/100%/); // 纯 output 行占比 = 100%
   });
 });
 
@@ -553,7 +562,7 @@ describe("AgentDashboardC(SL-03 降级形态 SC-02/SC-03)", () => {
     const rootEl = c.querySelector('[data-testid="agent-dashboard-c"]');
     expect(rootEl?.className).toContain("is-snapshot");
     expect(rootEl?.getAttribute("data-snapshot")).toBe("1");
-    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81,000");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81.0K"); // DW-01 M 缩写
     expect(c.querySelector('[data-testid="agent-dashboard-c-detail-list"]')?.querySelectorAll("tbody tr")).toHaveLength(2);
     // footer 降级摘要(时效标注) + 重试入口
     expect(c.querySelector('[data-testid="agent-dashboard-c-foot-degraded"]')?.textContent).toContain("上次刷新失败");
@@ -609,7 +618,7 @@ describe("AgentDashboardC(SL-03 降级形态 SC-02/SC-03)", () => {
     expect(c.querySelector('[data-testid="agent-dashboard-c-chart-trend"]')).toBeTruthy();
     expect(c.querySelector('[data-testid="dash-trend-empty"]')).toBeNull();
     expect(c.querySelector(".dash-p-model")?.className).not.toContain("is-stale");
-    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81,000");
+    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81.0K"); // DW-01 M 缩写
   });
 
   it("SC-03: summary 维失败 → KPI 带/明细/三分项(同源 summary 派生)标降级, 趋势与 Model 不标", () => {

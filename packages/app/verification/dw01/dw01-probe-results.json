@@ -1,0 +1,85 @@
+[
+  {
+    "shot": "dw01-dash-900x640-dark.png",
+    "w": 900,
+    "h": 640,
+    "theme": "dark",
+    "probe": {
+      "scrollH": 608,
+      "clientH": 608,
+      "footerBottom": 636,
+      "vh": 640
+    },
+    "hoverEvidence": {
+      "liHasHoverClass": true,
+      "detailText": "glm-5.3-flash2,237,000 tokens调用 8,000 次hit 80.0%",
+      "canvasHoverDetail": "glm-5.3-flash2,237,000 tokens调用 8,000 次hit 80.0%",
+      "canvasHoverLiClass": true
+    }
+  },
+  {
+    "shot": "dw01-dash-900x640-light.png",
+    "w": 900,
+    "h": 640,
+    "theme": "light",
+    "probe": {
+      "scrollH": 608,
+      "clientH": 608,
+      "footerBottom": 636,
+      "vh": 640
+    },
+    "hoverEvidence": null
+  },
+  {
+    "shot": "dw01-dash-900x640-glass.png",
+    "w": 900,
+    "h": 640,
+    "theme": "glass",
+    "probe": {
+      "scrollH": 608,
+      "clientH": 608,
+      "footerBottom": 636,
+      "vh": 640
+    },
+    "hoverEvidence": null
+  },
+  {
+    "shot": "dw01-dash-1920x1080-dark.png",
+    "w": 1920,
+    "h": 1080,
+    "theme": "dark",
+    "probe": {
+      "scrollH": 1048,
+      "clientH": 1048,
+      "footerBottom": 1072,
+      "vh": 1080
+    },
+    "hoverEvidence": null
+  },
+  {
+    "shot": "dw01-dash-1920x1080-light.png",
+    "w": 1920,
+    "h": 1080,
+    "theme": "light",
+    "probe": {
+      "scrollH": 1048,
+      "clientH": 1048,
+      "footerBottom": 1072,
+      "vh": 1080
+    },
+    "hoverEvidence": null
+  },
+  {
+    "shot": "dw01-dash-1920x1080-glass.png",
+    "w": 1920,
+    "h": 1080,
+    "theme": "glass",
+    "probe": {
+      "scrollH": 1048,
+      "clientH": 1048,
+      "footerBottom": 1072,
+      "vh": 1080
+    },
+    "hoverEvidence": null
+  }
+]

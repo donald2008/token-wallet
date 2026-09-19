@@ -16,7 +16,9 @@
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
-  overflow-y: auto; /* 极窄窗口兜底; 正常 900×640 零滚动(e2e 门禁断言) */
+  /* DW-01(卡体裁定①): overflow-y:auto(整页滚动逃生门)退役 — 行高预算由
+   * .dash-grid grid-template-rows 固定分配, 模块溢出走面板内滚; footer 钉底见 .dash-foot。 */
+  overflow: hidden;
   font-variant-numeric: tabular-nums;
 }
 
@@ -142,7 +144,7 @@
  * 只作用于数据承载元素, 不覆盖 .dash-module-empty —— SC-03 面板内失败文案与重试按钮必须保持可读可点。 */
 .agent-dashboard-c.is-snapshot .dash-kpi-body,
 .agent-dashboard-c.is-snapshot .chart-wrap,
-.agent-dashboard-c.is-snapshot .dash-model-table,
+.agent-dashboard-c.is-snapshot .dash-model-legend,
 .agent-dashboard-c.is-snapshot .dash-detail-table,
 .agent-dashboard-c.is-snapshot .dash-stack,
 .agent-dashboard-c.is-snapshot .dash-splitrows {
@@ -175,13 +177,19 @@
   flex: none;
 }
 
-/* ---- 12 列面板墙(S6) ---- */
+/* ---- 12 列面板墙(S6) ----
+ * DW-01(2026-09-19 卡体裁定): grid-auto-rows:min-content → 固定行高预算 —
+ * min-content 让行高随内容自由生长, 内容一涨整页滚动一屏收口破功(真机实锤①)。
+ * 行高权威 = grid-template-rows 分数分配, 模块内溢出由面板自身内滚消化。 */
 .dash-grid {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(12, 1fr);
-  grid-auto-rows: min-content;
+  /* KPI 带自适内容(auto) + 两行主面板按 1.2fr/1fr 分配剩余高度 —
+   * 全部分数(fr)会把行高钉死成均分, min-content 语义丢弃后内容被压缩变形;
+   * auto + fr 混合 = KPI 行按内容, 主区行吃满剩余预算且互不越界。 */
+  grid-template-rows: auto minmax(0, 1.2fr) minmax(0, 1fr);
   gap: var(--space-12, 12px);
   padding: var(--space-4, 4px);
 }
@@ -307,28 +315,27 @@
   min-height: 140px; /* 定值下限: chart.js responsive 尺寸循环锁死规避(t_5cf22ba4 实测) */
 }
 
-/* ---- Model(span4): 环形定容 + chips 表(S5/S7) ----
- * SL-08 修复①: 横排(donut 左 + 表右)在 span4(~283px)下表仅得 ~147px, 5 列完整千分位
- * (fmtTokens 无 K/M 简写契约)数学上放不下 — 旧 auto 布局直接右溢 127px 被面板裁切
- * (真机 900×640 实锤)。改纵向: donut 居中上浮, 表 100% 满宽在下方, 5 列 ~250px 可用。 */
+/* ---- Model(span4): 环左 128px 定容 + 图例右(DW-01 形态回归, 设计稿 ops-wall .p-model) ----
+ * SL-08 两轮纵向化/5 列表修复按本卡裁定退役(叠加漂移回设计稿形态)。
+ * 网格: 列 = donut 128px + 图例 1fr; 行 = 主区 1fr + hover 详情 auto —
+ * 具体数值走 hover(DW-01 裁定), 详情行定高防 hover 切换布局位移。 */
 .dash-pbody-model {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12, 12px);
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: var(--space-4, 4px) var(--space-12, 12px);
   align-items: center;
   min-height: 0;
   overflow: hidden;
-  /* SL-08 修复②: grid-auto-rows:min-content 由面板内容最高者定行高 —
-   * 单 agent 数据时 Model 面板(donut+表)比 1 行明细高, 同排明细 span8 被拉伸出
-   * 30px+ 空行隙(真机撑高变形实锤)。min-height:0 解除内容定高, 行高由明细面板
-   * 自身行数决定, 明细行数变化不再被兄弟面板顶撑变形。 */
 }
 .dash-pbody-model .chart-wrap-model {
   position: relative;
-  flex: 0 0 auto;
-  width: 112px;
-  height: 112px;
+  grid-column: 1;
+  grid-row: 1;
+  width: 128px;
+  height: 128px;
   min-height: 0;
+  align-self: center;
 }
 /* 环形中心总量(appendix 数据接线): overlay 居中于 donut 中心 */
 .dash-donut-center {
@@ -352,46 +359,70 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.dash-model-table {
-  flex: 1 1 auto;
+/* 图例(设计稿 .legend): chip + 模型名 + 占比两列; testid 契约沿用 model-table/model-row */
+.dash-model-legend {
+  grid-column: 2;
+  grid-row: 1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--space-4, 4px);
   min-width: 0;
-  width: 100%;
-  align-self: center;
-  border-collapse: collapse;
+  min-height: 0;
+  overflow: hidden;
   font-size: var(--font-11, 11px);
   color: var(--fg);
-  /* SL-08 修复①(配套): fixed 布局列宽由 CSS 决定 — 满宽 5 列(name 34% + 4 数值列 16.5%,
-   * 千分位 tokens ~64px 全可见), 长模型名截断省略不再顶爆表宽。 */
-  table-layout: fixed;
 }
-.dash-model-table th,
-.dash-model-table td {
-  padding: var(--space-4, 4px) var(--space-4, 4px);
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+.dash-model-legend-li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 4px);
+  height: 16px;
+  min-width: 0;
+  border-radius: var(--radius-4, 4px);
+}
+/* hover 高亮联动(DW-01): 图例行 ↔ canvas 扇区双向, 小面积 hover 色同源 */
+.dash-model-legend-li.is-hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.dash-model-legend-li .nm {
+  color: var(--fg);
   white-space: nowrap;
-}
-.dash-model-table th {
-  color: var(--fg-dim);
-  font-weight: 500;
-}
-.dash-model-table th:first-child,
-.dash-model-table td.name {
-  text-align: left;
-}
-/* SL-08 修复①(配套): fixed 布局按列内容实宽分配 — tokens 9 位千分位(2,237,000 ≈ 60px)
- * 是最宽内容列, 26% (~70px); name 27% 长模型名截断省略; 其余数值列 15~16.5%。 */
-.dash-model-table th:nth-child(1) { width: 27%; }
-.dash-model-table th:nth-child(2) { width: 15.5%; }
-.dash-model-table th:nth-child(3) { width: 26%; }
-.dash-model-table th:nth-child(4) { width: 15%; }
-.dash-model-table th:nth-child(5) { width: 16.5%; }
-.dash-model-table td.name {
-  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+}
+.dash-model-legend-li .pc {
+  margin-left: auto;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+/* hover 详情行(DW-01 裁定): 具体数值悬浮呈现; 定高 24px 防 hover 态切换位移 */
+.dash-model-hoverdetail {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-8, 8px);
+  height: 24px;
+  min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.dash-model-hoverdetail b {
+  color: var(--fg);
+  font-weight: 600;
+}
+.dash-model-hoverdetail .hint {
+  letter-spacing: 0.05em;
 }
 
 /* chips 图例色点(S5): 与扇区同源同序 */
@@ -402,21 +433,9 @@
   border-radius: 2px;
   flex: none;
 }
-.dash-model-table td.name {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4, 4px);
-  /* SL-08 修复①(配套): flex 容器吃掉单元格 text-overflow, 截断下沉到内层 <b>(文本承载) */
-  min-width: 0;
-}
-.dash-model-table td.name b {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-/* ---- 明细(span8): agent 维全量, 24px 行高 + 右对齐成列(S4/S6) ---- */
+/* ---- 明细(span8): agent 维全量, 24px 行高 + 右对齐成列(S4/S6) ----
+ * DW-01: 行数上限 + 自身内滚(卡体裁定 — 模块消化, 不吃整页预算) */
 .dash-pbody-detail {
   padding-top: var(--space-8, 8px);
   overflow: auto;
@@ -554,8 +573,15 @@
 .seg-miss-chip { background: var(--chart-5); }
 .seg-out-chip { background: var(--chart-3); }
 
-/* ---- footer 24px ---- */
+/* ---- footer 24px ----
+ * DW-01(卡体裁定②): footer 钉底 — 旧形态是滚动容器末尾元素, 内容超一屏被推走/叠压
+ * (真机实锤「数据快照」与三分项图例叠压)。sticky bottom:0 = 内容不超一屏时表现与
+ * 流内一致, 超一屏时钉在视口底缘兜底(不引入 flex 兄弟结构变更, 布局零位移)。 */
 .dash-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--bg);
   flex: 0 0 auto;
   min-height: 24px;
   display: flex;
@@ -722,17 +748,14 @@
   .dash-pbody-detail {
     padding-top: 0;
   }
-  .dash-pbody-model {
-    gap: var(--space-4, 4px);
+  /* DW-01(紧凑段): Model 回归环左+图例右后, donut 128px 在 560 窗口内吃掉行高预算 —
+   * 紧凑段收 donut 96px + hover 详情行 20px, 保一屏收口(SL-08 紧凑刻度经验复用)。 */
+  .dash-pbody-model .chart-wrap-model {
+    width: 96px;
+    height: 96px;
   }
-  .dash-model-table th,
-  .dash-model-table td {
-    padding-top: var(--space-4, 4px);
-    padding-bottom: 0;
-  }
-  .dash-model-table .dash-chip {
-    width: 7px;
-    height: 7px;
+  .dash-model-hoverdetail {
+    height: 20px;
   }
   .dash-module-empty {
     min-height: 80px;
@@ -761,9 +784,9 @@
   .dash-pnote,
   .dash-label,
   .dash-kpi-sub,
-  .dash-model-table,
-  .dash-model-table th,
-  .dash-model-table td,
+  .dash-model-legend,
+  .dash-model-legend-li,
+  .dash-model-hoverdetail,
   .dash-detail-table,
   .dash-detail-table thead th,
   .dash-detail-table tbody td,
