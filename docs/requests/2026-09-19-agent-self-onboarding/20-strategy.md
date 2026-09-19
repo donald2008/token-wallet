@@ -20,7 +20,7 @@ MCP onboarding 的产品哲学从「我们为每个 agent 造适配器」转向�
 | S6 | HTML 文档页技术形态：无前端框架（沿用 _render_guide_html 纯 HTML+CSS 路线）、单文件伺服、中文正文 + 英文代码/schema | R1-5 + D4 |
 | S7 | app 侧「复制引导链接」钮：位置在 MCP 面板 endpoint 行旁，复制 `http://<局域网IP>:9131/guide`（displayEndpoint 同源解析），含复制成功反馈；AgentGuideModal 改版为渲染新文档结构（或降级为跳转链接，P3 定） | R2-1/R2-4 |
 | S8 | hook 并 master：merge feat/hook-usage-reporter（无 rebase，长活分支纪律）；/guide plugin_url 更新为 master tree 真实路径 + README 补接入指引 | R3-3 + D1 |
-| S9 | 降级形态：daemon 未启动时引导页不可达 → app 设置页保留现有 AgentGuideModal 静态兜底内容（key/endpoint 展示），不因 daemon 离线而失去引导能力 | R2-2 状态机 + 大屏降级先例 |
+| S9 | ~~降级形态：daemon 未启动时引导页不可达 → app 设置页保留现有 AgentGuideModal 静态兜底内容~~ **GATE 2 修订（老大 2026-09-19）：删除**——引导 URL 本来就是给局域网内 agent 用的，daemon 不在线 = 无引导语义；AgentGuideModal 随 per-agent 条目删除一并移除（app 内不留静态兜底），daemon 离线时 MCP 面板仅显示状态与错误，引导能力完全由 /guide 在线提供 | 老大 GATE 2 裁定 |
 
 ## 不做清单（explicit drops）
 

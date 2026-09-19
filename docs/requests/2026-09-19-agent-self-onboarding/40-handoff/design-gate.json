@@ -1,0 +1,14 @@
+{
+  "cycle": "2026-09-19-agent-self-onboarding",
+  "gate": 2,
+  "status": "pending_owner_flip",
+  "approved": false,
+  "approver": null,
+  "at": null,
+  "note": "approved 只能由老大亲手翻（管线铁律④）。GATE 2 裁定已给出：S1-S8 定案 + S9 修订（删静态兜底，AgentGuideModal 移除）",
+  "revisions": [
+    { "item": "S9", "change": "删静态兜底；daemon 离线=无引导语义；AgentGuideModal 整体移除", "by": "老大", "at": "2026-09-19" }
+  ],
+  "inputs": ["00-context-lock.md", "05-north-star.md", "10-research.md", "15-gate1-record.md", "20-strategy.md", "30-spec.md"],
+  "seal": null
+}
