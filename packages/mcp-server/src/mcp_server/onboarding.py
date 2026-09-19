@@ -1,7 +1,9 @@
 """引导接口数据源 — 唯一入口 get_onboarding_guide / GET /guide 共用。
 
-静态引导数据硬编码 (独立产品不需要动态发现); agent 条目结构定死,
-后续由适配器扩展 (plugin_url/docs_url 可 null 占位)。
+OB-01 (onboarding 周期) 改版: 五段式文档分段数据 (guide_doc.doc_sections)
++ 单条目自适配标准 (S5, per-agent 占位条目删除)。兼容字段不动:
+endpoint / server_version / build_id / agents — app 侧 build_id 陈旧检测链路
+(t_1b396e2f) 与 mcp_get_guide IPC (OB-03 拆除前) 依赖这些键。
 """
 from __future__ import annotations
 
@@ -11,7 +13,10 @@ import sys
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
-# server_version: 包版本 (pyproject 0.1.0 纪元), 取不到时回退
+from . import guide_doc
+
+# server_version: 包版本 (pyproject version, 与 _FALLBACK_VERSION 同号 — 测试守护),
+# 取不到时回退
 _FALLBACK_VERSION = "0.2.8"
 
 # t_1b396e2f 版本一致性: daemon 自报 build_id, app 侧与本机 exe 内标记比对。
@@ -38,36 +43,18 @@ def build_id() -> str | None:
             pass
     return None
 
-# agents 列表: 静态引导数据, 结构定死 (id/name/plugin_url/docs_url/configure/verify)
-_AGENTS: list[dict] = [
-    {
-        "id": "hermes",
-        "name": "Hermes Agent",
-        "plugin_url": "https://gitee.com/IT_codef/token-wallet/-/tree/master/packages/hook-usage-reporter",
-        "docs_url": "https://gitee.com/IT_codef/token-wallet/-/blob/master/README.md",
-        "configure": (
-            "endpoint + key 填到 hermes 插件配置的 "
-            "TOKEN_WALLET_MCP_ENDPOINT / TOKEN_WALLET_MCP_KEY"
-        ),
-        "verify": "hermes 侧查 usage_summary 是否收到上报",
-    },
-    {
-        "id": "claude-code",
-        "name": "Claude Code",
-        "plugin_url": None,
-        "docs_url": None,
-        "configure": "（待适配器实现后补）",
-        "verify": "（待补）",
-    },
-    {
-        "id": "opencode",
-        "name": "OpenCode",
-        "plugin_url": None,
-        "docs_url": None,
-        "configure": "（待适配器实现后补）",
-        "verify": "（待补）",
-    },
-]
+
+# 自适配标准单条目 (S5/B1: per-agent 条目模型推翻)。保留 agents 数组键与
+# 条目字段形态 (id/name/plugin_url/docs_url/configure/verify) — JSON 视图
+# 既有程序化消费方 (app mcp_get_guide) 的结构兼容窗口。
+_AGENT_SELF_SERVICE: dict = {
+    "id": "self-service",
+    "name": "自适配标准（任何 agent）",
+    "plugin_url": guide_doc.REFERENCE_IMPL_URL,
+    "docs_url": None,
+    "configure": "按 /guide 文档页五段式标准自助接入（概述→认证→接口规格→真实示例→验证步骤）",
+    "verify": "上报一条 report_usage 后用 usage_summary / usage_report_echo 回读验证",
+}
 
 
 def server_version() -> str:
@@ -78,14 +65,22 @@ def server_version() -> str:
 
 
 def onboarding_guide(endpoint: str) -> dict:
-    """契约结构 (勿改): endpoint 根级 + server_version + agents 数组。
+    """契约结构 (勿改既有字段): endpoint 根级 + server_version + build_id + agents。
 
-    t_1b396e2f 追加字段 (不改既有字段语义): build_id — daemon 构建标识,
-    dev 源码运行为 None(JSON null); app 侧据此外判 daemon 是否陈旧。
+    t_1b396e2f: build_id — daemon 构建标识, dev 源码运行为 None(JSON null);
+    app 侧据此外判 daemon 是否陈旧。
+    OB-01 新增 doc 字段 (追加不改义): 五段式文档分段, 渲染归 _render_guide_html,
+    JSON 视图同样暴露 (程序化消费方可直接取分段)。
     """
     return {
         "endpoint": endpoint,
         "server_version": server_version(),
         "build_id": build_id(),
-        "agents": [dict(a) for a in _AGENTS],
+        "agents": [dict(_AGENT_SELF_SERVICE)],
+        "doc": {
+            "title": "token-wallet MCP — agent 自适配指南",
+            "endpoint": endpoint,
+            "server_version": server_version(),
+            "sections": guide_doc.doc_sections(),
+        },
     }
