@@ -17,7 +17,6 @@ import { t, tKey, type Lang } from "../i18n";
 import { useLang } from "../i18nReact";
 import { BrandLogo } from "./brand-logos";
 import { McpServicePanel } from "./McpServicePanel";
-import { AgentGuideModal } from "./AgentGuideModal";
 import { GLASS_ALPHA_MIN, GLASS_ALPHA_MAX, persistGlassAlpha } from "../theme";
 
 const THEME_OPTIONS: { id: ThemeMode; labelKey: string }[] = [
@@ -73,7 +72,6 @@ export function SettingsView({
   const [autoStart, setAutoStart] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [updater, setUpdater] = useState<UpdaterState | null>(null);
-  const [guideOpen, setGuideOpen] = useState(false);
 
   // 存储路径(D-019) + 开机自启(D-024), 默认关
   useEffect(() => {
@@ -264,10 +262,9 @@ export function SettingsView({
 
         <section className="settings-section" data-testid="mcp-sec">
           <h4>{t("set.mcpTitle")}</h4>
-          <McpServicePanel onGuideOpen={() => setGuideOpen(true)} />
+          <McpServicePanel />
         </section>
       </div>
-      <AgentGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );
 }

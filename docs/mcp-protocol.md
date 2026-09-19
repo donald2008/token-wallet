@@ -494,6 +494,7 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 ## 7. hook 适配规范（行为约定，实现归 hook 卡）
 
 - **提取点**：`post_llm_call`（成功调用 → `completed`）；`on_stream_end`（流被 cancel → 判 `partial`：拿到了部分 usage；`unknown`：拿不到 usage，`usage: null` 占位）；
+  > **实现偏离（留痕）**：hook 参考实现实际取 `post_api_request` —— 宿主实测 `post_llm_call` payload 无 usage（提取不到任何 token 数），偏离经 t_0ea1d8b6 人工终审确认成立，见 [`reviews/t_0ea1d8b6.md`](reviews/t_0ea1d8b6.md)。本节其余行为约定照旧。
 - **缓冲**：内存 buffer；flush 条件 = **满 50 条 ∨ 60s 定时 ∨ 会话结束**；
 - **断线排队**：daemon 不可达时内存排队，恢复后补发（整批原样重发，event_id 幂等，见 §2.1 语义 6）；
 - **零阻塞**：hook 本体只入 buffer，flush 全异步，绝不阻塞 agent 主流程；

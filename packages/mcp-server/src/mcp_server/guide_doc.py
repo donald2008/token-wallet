@@ -9,8 +9,9 @@ tests/test_doc_consistency.py 与权威源逐字比对, 篡改任一字符即红
 from __future__ import annotations
 
 # 参考实现 (S5 单条目自适配标准 + REQ-05; OB-02 并 master 后该路径真实存在)
+# gitee URL 结构 (2026-09-19 实测): 目录 = /tree/<branch>/<path> (GitLab 式 /-/tree/ 404), 文件 = /blob/<branch>/<path>
 REFERENCE_IMPL_URL = (
-    "https://gitee.com/IT_codef/token-wallet/-/tree/master/packages/hook-usage-reporter"
+    "https://gitee.com/ITEater/token-wallet/tree/master/packages/hook-usage-reporter"
 )
 
 # AgentUsageReport v1 全 schema — 逐字 = docs/mcp-protocol.md §1.1
@@ -179,8 +180,8 @@ def doc_sections() -> list[dict]:
                 ]},
                 {"type": "p", "text": (
                     "参考实现：Hermes 官方 hook 适配器 hook-usage-reporter——"
-                    "其他 agent 可参考其 hook 触发点设计（post_llm_call 提取点 / "
-                    "buffer 策略 / 批量上报）自行实现适配。"
+                    "其他 agent 可参考其 hook 触发点设计（post_api_request 提取点——"
+                    "post_llm_call 无 usage；buffer 策略 / 批量上报）自行实现适配。"
                 )},
                 {"type": "link", "text": "hook-usage-reporter（参考实现）", "href": REFERENCE_IMPL_URL},
             ],

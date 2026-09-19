@@ -137,3 +137,37 @@ class TestContentDiscipline:
         assert "usage_summary" in text
         assert "usage_report_echo" in text
         assert "duplicated" in text  # 幂等自证步骤
+
+    def test_guide_extraction_point_matches_hook_readme(self):
+        """OB-05 防漂移: /guide 提取点措辞与 hook README 同口径。
+
+        判别力自检（双向）:
+        - guide 提取点改回 post_llm_call（错误形态）→ 正向断言红;
+        - post_llm_call 出现但缺「无 usage」限定（误导形态）→ 限定断言红;
+        - hook README 改口径 → README 断言红。
+        """
+        blob = json.dumps(guide_doc.doc_sections(), ensure_ascii=False)
+        # 正向: post_api_request 是唯一被标注为提取点的 hook
+        assert "post_api_request 提取点" in blob
+        # 反向: 禁止把 post_llm_call 写成提取点（历史错误措辞）
+        assert "post_llm_call 提取点" not in blob
+        # 限定: post_llm_call 每次出现都带「无 usage」限定（至下一全角闭括号前）
+        for m in re.finditer(r"post_llm_call([^）]*)", blob):
+            assert "无 usage" in m.group(1), f"post_llm_call 缺「无 usage」限定: {m.group(0)!r}"
+        # 同口径: hook README 提取点行 (packages/hook-usage-reporter/README.md:78)
+        readme = (REPO_ROOT / "packages" / "hook-usage-reporter" / "README.md").read_text(
+            encoding="utf-8"
+        )
+        assert "`post_api_request` hook（usage 只在此事件，`post_llm_call` 无 usage）" in readme
+
+    def test_protocol_section7_deviation_note(self):
+        """OB-05: 协议 §7 偏离留痕在场 — 只加注不换契约。
+
+        判别力: §7 内无 post_api_request（偏离注被删）即红;
+        「payload 无 usage」实测依据缺失即红。
+        """
+        md = PROTOCOL_MD.read_text(encoding="utf-8")
+        s7 = md[md.index("## 7. hook 适配规范") : md.index("## 8.")]
+        assert "post_api_request" in s7
+        assert "post_llm_call` payload 无 usage" in s7
+        assert "t_0ea1d8b6" in s7

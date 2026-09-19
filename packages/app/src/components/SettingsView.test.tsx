@@ -31,7 +31,6 @@ const ipcMocks = vi.hoisted(() => ({
   mcpGenKey: vi.fn(),
   mcpGetAutostart: vi.fn(),
   mcpSetAutostart: vi.fn(),
-  mcpGetGuide: vi.fn(),
   maskMcpKey: (key: string): string => {
     if (key.length <= 12) return "•".repeat(key.length);
     return `${key.slice(0, 4)}-••••-••••-••••-${key.slice(-4)}`;
@@ -457,7 +456,7 @@ describe("MCP 服务区块(D-055 / t_4bd214de)", () => {
     expect(panel, "McpServicePanel 必须嵌入 mcp-sec 内").toBeTruthy();
   });
 
-  it("mcp 区块包含状态点 + 启停按钮 + 自启 toggle + key 行 + 引导入口", async () => {
+  it("mcp 区块包含状态点 + 启停按钮 + 自启 toggle + key 行 + 复制引导链接钮", async () => {
     const view = await renderSettings();
     const panel = view.querySelector('[data-testid="mcp-panel"]');
     expect(panel?.querySelector('[data-testid="mcp-status"]')).toBeTruthy();
@@ -466,6 +465,8 @@ describe("MCP 服务区块(D-055 / t_4bd214de)", () => {
     expect(panel?.querySelector('[data-testid="mcp-autostart"]')).toBeTruthy();
     expect(panel?.querySelector('[data-testid="mcp-endpoint"]')).toBeTruthy();
     expect(panel?.querySelector('[data-testid="mcp-key-masked"]')).toBeTruthy();
-    expect(panel?.querySelector('[data-testid="mcp-open-guide"]')).toBeTruthy();
+    // OB-03: 引导入口语义 = 复制引导链接(操作行 + endpoint 行旁各一枚)
+    expect(panel?.querySelector('[data-testid="mcp-copy-guide"]')).toBeTruthy();
+    expect(panel?.querySelector('[data-testid="mcp-guide-copy"]')).toBeTruthy();
   });
 });
