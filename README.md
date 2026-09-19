@@ -29,18 +29,9 @@
 
 **填 Key 即用（HTTP 通道）· app 内一键授权（CLI 通道，自动打开浏览器）· 零遥测 · 数据不出本机**
 
+[![下载 Windows 安装包](https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Windows_%E5%AE%89%E8%A3%85%E5%8C%85-6E56CF?logo=windows&logoColor=white)](https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe)
+
 </div>
-
-## 为什么是 token-wallet
-
-- **一瞥可读** —— 360×720 的紧凑面板直接看每个窗口的剩余与倒计时，不打开任何一家控制台
-- **提前预警** —— 按近期消耗速率外推「预计可用天数」，额度临近耗尽提前变色，不是事后报错
-- **异常显式化** —— key 失效 / CLI 缺失 / 会话过期，卡片直接告诉你怎么修，绝不显示假数据；火山方舟 SSO 失效时卡片自动弹出「请重新授权」按钮
-- **三种排版自适应** —— row/duo/hero/micro/ticker 容器，按窗口宽度自动切换（micro 形态下百分比常驻直显）
-- **玻璃主题可选** —— 设置页「外观」区可切换玻璃主题，拖动透明度滑槽实时调档，0-100% 停即存
-- **手动排序 = 拖拽 = 用户接管** —— 拖卡片浮起即接管排序，松手一次持久化，不引拖拽库
-- **cache-first** —— 快照落本地 SQLite，启动即出数、断网可看，UI 永远不等网络
-- **工程克制** —— 接新通道 = 声明式注册一份映射，零脚本零 eval；凭据只进 OS 钥匙串
 
 ## 解决什么问题
 
@@ -76,22 +67,13 @@
 
 ## 功能特点
 
-- 展示七家平台内置通道的额度余量，填 Key（或 app 内一键授权官方 CLI）即用
-- 统一视图呈现三种套餐原型：窗口制（多窗进度条 + 重置倒计时）/ 余额制（余额 + 预计可用天数）
-- CLI 通道 **app 内一键授权**：卡上点「授权」即弹出 OneClickAuth 面板，打开浏览器完成登录；完成态按钮点击 = 触发刷线（D-048），整个流程不碰命令行
-- 360×720px 紧凑面板；多窗口实例自动按 `P5MonitorShortSide` 排版：5h+周同一行两列，月窗全宽独立行
-- 卡片过滤（全部 / 可用 / 异常，icon 钮组绝对定位浮卡片列表右上角）
-- **手动拖拽排序**：拖卡浮起即接管排序，松手一次持久化；v0.2.8 起三档命名排序已收敛至「只手动」（D-039 + t_d086543b）
-- 排版变体：`row` / `duo` / `hero` / `micro` / `ticker` 五种容器形态自动适配窗口宽度；micro 形态下百分比常驻直显
-- 玻璃主题 + 透明度滑槽：设置页「外观」区可独立开关玻璃主题，0-100% 滑槽拖即变停即存
-- 删钮：卡 head 右上常显；hover 激活热区，点击弹气泡二次确认（防误删）
-- 异常显式化：key 失效、CLI 缺失、接口变更都给明确卡片与修复指引，绝不显示假数据
-- 火山方舟 SSO 失效自愈：所有锁竞争/会话失效 body 统一走 `auth_expired` 一键授权，不再判 stale 卡死用户
-- cache-first：快照落本地 SQLite，断网可看最后一次数据
-- 凭据存 OS 钥匙串（Windows 凭据管理器 / macOS Keychain），配置文件永不落密钥
-- dark / light / glass 三主题；主题默认跟随系统，支持手动切换
-- 中英双语：设置页「语言」分段控件切换 zh/en，重启保持
-- 零遥测、零上报、数据不出本机（首开须同意隐私声明）
+- **七家平台额度一屏**：窗口制（多窗进度条 + 重置倒计时）与余额制（余额 + 预计可用天数）统一呈现
+- **提前预警，而不是事后报错**：按近期消耗速率外推「预计可用天数」，额度吃紧卡片先变色
+- **异常显式化**：key 失效 / CLI 缺失 / 会话过期，卡片直接给修复指引或一键「重新授权」按钮，绝不显示假数据
+- **填 Key 即用，CLI 通道也不碰命令行**：HTTP 通道粘贴 Key 即用；百炼 / 火山方舟在 app 内一键安装 CLI 并弹浏览器授权
+- **三主题 + 玻璃透明度**：dark / light / glass 随系统或手动切换，玻璃档位拖动滑槽实时预览、停即保存
+- **手动拖拽排序**：拖卡片浮起即接管排序，松手一次持久化
+- **数据不出本机**：零遥测零上报，凭据存 OS 钥匙串，快照落本地 SQLite，断网可看最后一次数据
 
 ## 支持的通道
 
@@ -108,7 +90,7 @@
 > MiniMax（按量余额）、美团 LongCat、opencode zen 按量余额在规划中（见 docs/DESIGN.md §5.2）。
 > 接新通道 = 通道目录声明式注册，映射零代码（标准接口）；复杂接口用 TS 适配器。
 
-通道级前置：两个 CLI 通道需要额外装官方 CLI（首次添加实例时 app 内一键安装流程会给出指引，D-023），
+通道级前置：两个 CLI 通道需要额外装官方 CLI（首次添加实例时 app 内一键安装流程会给出指引），
 其余通道填 API Key 即用：
 
 | 通道 | 额外依赖 | 授权方式（app 内一键） |
@@ -125,10 +107,12 @@ token-wallet/
 ├── packages/
 │   ├── core/             采集核心（纯 TS 库）：适配器注册表 / 调度器 / 缓存 / schema
 │   ├── app/              Electron 桌面部件（React 19）：托盘 + 弹出面板 + 设置
-│   └── mcp-server/       MCP 数据面 daemon（规划中，内嵌 core）
-├── docs/                 DESIGN（架构）/ DECISIONS（决策）/ RELEASE（发版手册）
-├── scripts/              Windows 构建脚本
+│   └── mcp-server/       MCP 数据面 daemon（Python，内嵌 core）
+├── docs/                 USER_GUIDE / DESIGN（架构）/ DECISIONS（决策）/ RELEASE（发版手册）
+├── verification/         真机视觉验收快照（人工验收基准）
 ├── sketches/             UI 视觉 mockup（评审用，可丢弃）
+├── scripts/              Windows 构建脚本
+├── start-dev.mjs         开发环境检查 + Electron 开发壳入口
 └── package.json          pnpm workspace
 ```
 
@@ -148,9 +132,11 @@ https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_set
 - 校验：Release 附件中的 `SHA256SUMS.txt` 与安装包比对
 - 首次安装：安装包未做代码签名，SmartScreen 提示「未知发布者」时点
   「更多信息」→「仍要运行」即可（预期行为，签名将在后续版本解决）
-- 自动更新：v0.2.0+ 内置 `electron-updater` 自动更新（D-046，更新源 = gitee stable
+- 自动更新：v0.2.0+ 内置 `electron-updater` 自动更新（更新源 = gitee stable
   `https://gitee.com/ITEater/token-wallet/releases/download/stable/`），启动静默 check only；
   下载与安装始终用户点击触发，详见设置页「关于」区
+- 升级保留：实例配置、settings、SQLite 快照全部保留（NSIS `deleteAppDataOnUninstall:false`
+  + userData 目录稳定）。v0.2.0 之前的旧版本请先手动安装一次 v0.2.9，之后即走自动更新
 
 ### 从源码运行
 
@@ -184,7 +170,9 @@ corepack pnpm dev:web                    # 仅浏览器预览（无主进程 →
 
 Windows 双击 `start-dev.cmd`；`node start-dev.mjs --check` 只做环境检查不起壳。
 
-> ⚠️ **fresh clone 必跑** `corepack pnpm -C packages/core build`，否则 app typecheck 会因 core dist 缺失报一整墙 `@token-wallet/core/*` TS2307（即便本卡不动 core）。
+> [!WARNING]
+> fresh clone 后必须先跑 `corepack pnpm -C packages/core build` 构建 core 的 dist/，
+> 否则 app 的 typecheck 会因找不到 `@token-wallet/core/*` 而报错。
 
 ### 构建 Windows 安装包
 
@@ -211,49 +199,22 @@ corepack pnpm build:win    # = corepack pnpm -r build + corepack pnpm -C package
 | 智谱 bigmodel | bigmodel.cn → API Keys（Coding Plan 套餐 key，与 coding 推理 key 是同一个） |
 | MiniMax | platform.MiniMax.io → Token Plan 订阅管理（key 前缀 `sk-cp-`） |
 
-**Q：百炼（bl）怎么授权？为什么要装 CLI？**
-百炼的用量查询只认控制台登录会话（官方 CLI `bl` 自管），不接受 API Key。
-**v0.2.8 起全 app 内操作**：添加实例时若 `bl` 不在 PATH，app 内一键安装按钮自动执行（过程 stdout 实时流入 log 抽屉，D-023）；安装好后再次添加实例，卡上点「授权」→ OneClickAuth 面板自动打开百炼控制台完成登录。**全程不碰命令行**。
-CLI 会话由服务端控制时效（经验数天），过期后卡片转黄并提示重新授权（同样一键完成）。
-
-**Q：火山方舟（arkcli）怎么授权？**
-方舟用官方 CLI 的 SSO 设备码两段式登录：`arkcli auth login volc-sso --no-browser`，
-**v0.2.8 起同上**：app 内一键安装 arkcli（缺失时），再点卡上「授权」→ OneClickAuth
-面板自动拉起浏览器完成 SSO 验证。**全程不碰命令行**。
-CLI 会话过期或出现锁竞争文案（`please run arkcli auth login` /
-`requires Volcengine Ark SSO STS` 等）→ 卡片转黄并显示「请重新授权」按钮，
-**点击该按钮即可自助恢复，不再判 stale 卡死用户**（D-052 / t_f261dadb）。
-详见 [USER_GUIDE.md §4 火山 SSO 失效自助恢复](docs/USER_GUIDE.md)。
+**Q：百炼 / 火山方舟怎么授权？为什么要装 CLI？**
+两家平台的用量查询只认控制台登录会话（由官方 CLI `bl` / `arkcli` 自管），不接受 API Key。
+**v0.2.8 起全 app 内操作**：添加实例时若 CLI 不在 PATH，一键安装按钮自动执行；
+安装好后卡上点「授权」→ OneClickAuth 面板自动拉起浏览器完成登录（方舟走 SSO 设备码两段式验证）。**全程不碰命令行**。
+CLI 会话由服务端控制时效（经验数天），过期后卡片转黄并显示「请重新授权」按钮，点击即自助恢复
+（火山 SSO 失效自助恢复详见 [USER_GUIDE.md §4](docs/USER_GUIDE.md)）。
 
 **Q：面板显示黄色/红色卡片？**
 黄 = 需要关注（额度偏低或凭据过期，卡片上有具体修复命令可一键复制，或直接点「请重新授权」按钮自助恢复）；
 红 = 异常或额度耗尽；灰 = 未配置。把鼠标悬停在窗口进度条上可看各窗口剩余与重置时间。
 
-**Q：手动排序怎么用？**
-v0.2.8 起仅保留手动排序（D-039 + t_d086543b 收敛）：
-1. 在卡片列表里**长按并拖动**任一卡片（手柄为卡 head 左侧 16px 品牌色块，光标变 grab）
-2. 被拖卡片浮起，跟手移动，其他卡片让出位置显示落点指示线
-3. **松手时才持久化一次**（防快速连续拖动写盘抖动）
-4. 配置写在 settings.json → `sortConfig.order` 字段；切回手动排序恢复原顺序
-
-旧的「名称/紧要度」自动排序已废弃——若 settings.json 里残留旧配置，启动时会自动归一为 `manual`，
-`order` 数组保留（拖拽顺序不丢）。
-
-**Q：玻璃主题怎么开？**
-设置页「外观」区：
-1. 「玻璃主题」开关打开
-2. 「透明度」滑槽拖到喜欢的档位（默认 100% 不透明；15% / 50% 是常用档）
-3. **拖即变停即存**：滑动时面板实时预览，松手后 settings.json 落盘
-
 **Q：我的 Key 和用量数据安全吗？**
 Key 存 OS 钥匙串（Windows 凭据管理器 / macOS Keychain），配置文件只存引用不存明文；快照数据落本机
 SQLite。应用无任何遥测/上报代码，网络请求只有你在设置页添加的通道对应官方端点。
 
-**Q：从 v0.2.6 / 更早版本升级？**
-v0.2.9 内置自动更新（D-046）：设置页「关于」区点「检查更新」→ 自动下载最新 NSIS 包 →
-点「重启安装」完成更新；实例配置、settings、SQLite 快照全部保留
-（NSIS `deleteAppDataOnUninstall:false` + userData 目录稳定）。
-若仍在用早期 v0.2.0 之前的版本，先下载 v0.2.9 安装包手动装一次，之后即自动更新。
+> 卡片排序、玻璃主题、更新的具体操作见 [USER_GUIDE.md](docs/USER_GUIDE.md)。
 
 ## 文档
 
@@ -272,12 +233,12 @@ v0.2.9 内置自动更新（D-046）：设置页「关于」区点「检查更�
 
 ### 中期
 
-- MCP 数据面：本地 Agent token 消耗视图 + 「云 × 本地」对比（mcp-server 常驻 daemon）
+- MCP 数据面「云 × 本地」用量对比视角（mcp-server 数据面扩展）
 - 美团 LongCat、opencode zen 按量余额通道
 
 ### 远期
 
-- 代码签名（消除 SmartScreen 警告）、CI 自动化、GitHub 镜像同步
+- 代码签名（消除 SmartScreen 警告）、CI 自动化
 - macOS / Linux 安装包：代码层已兼容（safeStorage / 路径派生），需要真机验收后发布
 
 完整通道级规划见 [docs/DESIGN.md §5.2](docs/DESIGN.md)。

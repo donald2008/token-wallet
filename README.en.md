@@ -32,18 +32,9 @@ countdowns, and "days remaining" estimated from your consumption rate.
 
 **Paste a key and go (HTTP channels) · One-click authorize in app (CLI channels, auto-opens browser) · Zero telemetry · Data never leaves your machine**
 
+[![Download Windows installer](https://img.shields.io/badge/Download-Windows_installer-6E56CF?logo=windows&logoColor=white)](https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe)
+
 </div>
-
-## Why token-wallet
-
-- **Read at a glance** — a compact 360×720 panel shows remaining quota and countdowns for every window without opening a single provider console
-- **Early warning** — extrapolates "days remaining" from recent consumption rate; cards change color before quota runs out, not after
-- **Failures are explicit** — invalid key / missing CLI / expired session: the card tells you exactly how to fix it, never shows fake data; Volcengine Ark SSO expiry surfaces a one-click "re-authorize" button
-- **Five layout variants** — `row` / `duo` / `hero` / `micro` / `ticker` containers auto-switch by window width; `micro` keeps the percentage always visible
-- **Optional glass theme** — toggle in Settings → Appearance, drag a 0-100% transparency slider; preview while dragging, persist on release
-- **Drag-to-reorder = manual sort** — drag any card to take over ordering; persists exactly once on drop; no drag library
-- **Cache-first** — snapshots land in local SQLite; numbers appear on launch, readable offline, UI never waits on the network
-- **Engineering restraint** — adding a channel = registering one declarative mapping, zero scripts, zero eval; credentials only ever touch the OS keychain
 
 ## What problem it solves
 
@@ -80,22 +71,13 @@ countdowns, and consumption rates into one desktop widget — readable at a glan
 
 ## Features
 
-- Built-in channels for seven platforms; paste a key — or **authorize in-app** for the official CLI — and go
-- One unified view for three plan archetypes: window-based (multi-window progress bars + reset countdowns) / balance-based (balance + estimated days left)
-- CLI channels **one-click authorize in-app**: tap "Authorize" on the card → OneClickAuth panel pops up, browser opens for login; tapping the done-state button = trigger a refresh (D-048); the command line is never touched
-- 360×720px compact panel; multi-window instances auto-use `P5MonitorShortSide` layout: 5h + weekly on one row (two columns), monthly full-width on its own row
-- Card filtering (all / available / abnormal) — three icon buttons absolutely positioned at the top-right of the card list
-- **Drag-to-reorder = manual sort**: dragging a card takes over ordering; persists exactly once on drop. Since v0.2.8 the three-tier name/urgency sort is collapsed to **manual-only** (D-039 + t_d086543b)
-- Layout variants: `row` / `duo` / `hero` / `micro` / `ticker` — five container shapes auto-adapt to window width; `micro` keeps the percentage always visible
-- Glass theme + transparency slider: toggle in Settings → Appearance, drag 0-100% to preview live, persist on release
-- Delete button: always shown at the top-right of each card; hover activates the hit zone; click pops a confirm bubble (anti-misclick)
-- Explicit failures: invalid key, missing CLI, API changes all produce a readable card with fix instructions — never fake data
-- **Volcengine Ark SSO self-healing**: all lock-contention / session-expired bodies route to `auth_expired` one-click authorize (D-052), no more "stale" dead-ends
-- Cache-first: snapshots to local SQLite; last-known data visible offline
-- Credentials in the OS keychain (Windows Credential Manager / macOS Keychain); config files never hold secrets
-- dark / light / glass themes; theme follows the system by default, manual override available
-- zh / en bilingual: Settings → Language segmented control switches instantly; persists across restarts
-- Zero telemetry, zero reporting, data stays on your machine (privacy notice on first launch)
+- **Seven platforms on one screen**: window-based (multi-window progress bars + reset countdowns) and balance-based (balance + estimated days left) plans in a unified view
+- **Early warning, not after-the-fact errors**: "days remaining" extrapolated from recent consumption rate; cards change color before quota runs dry
+- **Failures are explicit**: invalid key / missing CLI / expired session — the card tells you how to fix it or offers a one-click "re-authorize" button, never fake data
+- **Paste a key and go — CLI channels included**: HTTP channels take an API key; Bailian / Volcengine Ark install their official CLI and authorize via browser, all in-app
+- **Three themes + glass transparency**: dark / light / glass, follow the system or pick manually; the glass slider previews live and persists on release
+- **Drag-to-reorder**: drag a card to take over ordering; persists exactly once on drop
+- **Data stays on your machine**: zero telemetry, credentials in the OS keychain, snapshots in local SQLite, last-known data readable offline
 
 ## Supported channels
 
@@ -114,7 +96,7 @@ countdowns, and consumption rates into one desktop widget — readable at a glan
 > for standard APIs; complex APIs use a TS adapter.
 
 Channel-level prerequisites: the two CLI channels need the official CLI installed (a one
-in-app install button handles it when missing the first time, D-023); all other channels
+in-app install button handles it when missing the first time); all other channels
 work with an API key:
 
 | Channel | Extra dependency | Authorization (in-app one-click) |
@@ -133,10 +115,12 @@ token-wallet/
 ├── packages/
 │   ├── core/             collection core (pure TS lib): adapter registry / scheduler / cache / schema
 │   ├── app/              Electron desktop widget (React 19): tray + popup + settings
-│   └── mcp-server/       MCP data-plane daemon (planned, embeds core)
-├── docs/                 DESIGN (architecture) / DECISIONS / RELEASE (release manual)
-├── scripts/              Windows build scripts
+│   └── mcp-server/       MCP data-plane daemon (Python, embeds core)
+├── docs/                 USER_GUIDE / DESIGN (architecture) / DECISIONS / RELEASE (release manual)
+├── verification/         real-machine visual acceptance snapshots (manual QA baseline)
 ├── sketches/             UI visual mockups (for review, can be discarded)
+├── scripts/              Windows build scripts
+├── start-dev.mjs         dev env check + Electron dev shell entry
 └── package.json          pnpm workspace
 ```
 
@@ -157,9 +141,12 @@ https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_set
 - Verify: compare the installer against `SHA256SUMS.txt` in the Release assets
 - First install: the installer is not code-signed; when SmartScreen says "Unknown publisher",
   click "More info" → "Run anyway" (expected behavior; signing is planned)
-- Auto-update: built-in `electron-updater` since v0.2.0 (D-046, update source = gitee stable
+- Auto-update: built-in `electron-updater` since v0.2.0 (update source = gitee stable
   `https://gitee.com/ITEater/token-wallet/releases/download/stable/`); startup does a silent
   check-only; download and install are always user-triggered; see Settings → About
+- Upgrades preserve everything: instances, settings, SQLite snapshots are kept
+  (NSIS `deleteAppDataOnUninstall:false` + stable userData directory). On a pre-v0.2.0
+  version, install v0.2.9 manually once, then auto-update takes over
 
 ### Run from source
 
@@ -193,9 +180,9 @@ corepack pnpm dev:web                    # browser preview only (no main process
 
 On Windows double-click `start-dev.cmd`; `node start-dev.mjs --check` only checks the environment.
 
-> ⚠️ **fresh clone must run** `corepack pnpm -C packages/core build`, otherwise app typecheck will report
-> a wall of `@token-wallet/core/*` TS2307 errors because `core/dist/` is missing (even if your task
-> doesn't touch core).
+> [!WARNING]
+> After a fresh clone you must run `corepack pnpm -C packages/core build` first,
+> otherwise the app typecheck fails to resolve `@token-wallet/core/*` because `core/dist/` is missing.
 
 ### Build the Windows installer
 
@@ -222,23 +209,15 @@ Expected for an unsigned app: "More info" → "Run anyway".
 | Zhipu bigmodel | bigmodel.cn → API Keys (Coding Plan key; same as the coding inference key) |
 | MiniMax | platform.MiniMax.io → Token Plan subscription management (key prefix `sk-cp-`) |
 
-**Q: How do I authorize Bailian (bl)? Why a CLI?**
-Bailian's usage API only accepts control-console login sessions (managed by the official CLI
-`bl`), not API keys. **Since v0.2.8 it's all in-app**: when adding an instance, if `bl` is missing
-from PATH, a one-click install button kicks off automatically (stdout streams live into the log drawer,
-D-023); after install, add the instance again, tap "Authorize" on the card → OneClickAuth panel
-opens the Bailian console for browser login. **Never touch the command line.**
-Sessions are server-side time-limited (empirically a few days); when expired, the card turns yellow
-and prompts re-authorize (also one-click).
-
-**Q: How do I authorize Volcengine Ark (arkcli)?**
-Ark uses the official CLI's SSO device-code flow: `arkcli auth login volc-sso --no-browser`.
-**Since v0.2.8 same flow**: one-click install arkcli in app when missing, then tap "Authorize" on the
-card → OneClickAuth panel pulls up the browser for SSO verification. **Never touch the command line.**
-CLI session expiry or lock-contention bodies (`please run arkcli auth login` /
-`requires Volcengine Ark SSO STS` etc.) → the card turns yellow and shows a "Please re-authorize" button;
-**click that button to self-heal, no more "stale" dead-ends** (D-052 / t_f261dadb).
-See [USER_GUIDE.md §4 Volcengine SSO self-heal](docs/USER_GUIDE.md).
+**Q: How do I authorize Bailian / Volcengine Ark? Why a CLI?**
+Both platforms' usage APIs only accept control-console login sessions (managed by the official
+CLI `bl` / `arkcli`), not API keys. **Since v0.2.8 it's all in-app**: when adding an instance,
+if the CLI is missing from PATH, a one-click install button kicks off automatically; then tap
+"Authorize" on the card → the OneClickAuth panel opens the browser for login (Ark uses the SSO
+device-code flow). **Never touch the command line.**
+Sessions are server-side time-limited (empirically a few days); when expired, the card turns
+yellow and shows a "Please re-authorize" button — click it to self-heal
+(Volcengine SSO self-heal: see [USER_GUIDE.md §4](docs/USER_GUIDE.md)).
 
 **Q: What does a yellow/red card mean?**
 Yellow = needs attention (quota low or credentials expired; the card carries the exact fix
@@ -246,32 +225,12 @@ command (one click to copy), or a "Please re-authorize" button for one-click sel
 Red = abnormal or quota exhausted; gray = not configured.
 Hover a window progress bar to see remaining quota and reset time.
 
-**Q: How do I reorder cards?**
-v0.2.8 ships with manual-only sort (D-039 + t_d086543b):
-1. **Long-press and drag** any card (handle = the 16px brand-color block on the left edge of the card head, cursor turns `grab`)
-2. The dragged card lifts, follows your pointer, other cards make way and show a drop-line indicator
-3. **Persistence happens exactly once on drop** (no write thrash on rapid drags)
-4. Configured in `settings.json` → `sortConfig.order`; switching back to manual restores the saved order
-
-The legacy "name / urgency" auto-sort is removed. If `settings.json` still has an old config, the
-launcher normalizes it to `manual` and keeps the `order` array (your drag order is preserved).
-
-**Q: How do I enable the glass theme?**
-Settings → Appearance:
-1. Flip the "Glass" switch on
-2. Drag the "Transparency" slider to your taste (default 100% opaque; 15% / 50% are common presets)
-3. **Preview while dragging, persist on release** — the panel previews live, settings.json writes on slider release
-
 **Q: Are my keys and usage data safe?**
 Keys live in the OS keychain (Windows Credential Manager / macOS Keychain); config files store references,
 never plaintext. Snapshots land in local SQLite. The app has no telemetry/reporting code;
 the only network requests are to the official endpoints of channels you added on the Settings page.
 
-**Q: Upgrading from v0.2.6 or earlier?**
-v0.2.9 ships with auto-update (D-046): Settings → About → "Check for updates" → auto-download the latest
-NSIS installer → "Restart to install" → done. Instances, settings, SQLite snapshots are all preserved
-(NSIS `deleteAppDataOnUninstall:false` + stable userData directory).
-If you're on a pre-v0.2.0 version, download the v0.2.9 installer manually once, then auto-update kicks in.
+> For card reordering, the glass theme, and updates, see the [USER_GUIDE.md](docs/USER_GUIDE.md).
 
 ## Docs
 
@@ -290,12 +249,12 @@ If you're on a pre-v0.2.0 version, download the v0.2.9 installer manually once, 
 
 ### Mid term
 
-- MCP data plane: local Agent token consumption view + "cloud × local" comparison (mcp-server daemon)
+- MCP data plane "cloud × local" usage comparison view (mcp-server data-plane extension)
 - Meituan LongCat, opencode zen pay-as-you-go channels
 
 ### Long term
 
-- Code signing (remove SmartScreen warning), CI automation, GitHub mirror
+- Code signing (remove SmartScreen warning), CI automation
 - macOS / Linux installers: code-ready (safeStorage / derived paths), needs real-machine validation before publishing
 
 Full channel-level plan: [docs/DESIGN.md §5.2](docs/DESIGN.md).
