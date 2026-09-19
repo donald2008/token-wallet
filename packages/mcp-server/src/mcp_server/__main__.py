@@ -110,10 +110,11 @@ def build_server(
 
     @mcp.tool
     def get_onboarding_guide() -> dict:
-        """agent 接入引导 (唯一入口): 返回 endpoint + server_version + agents 列表。
+        """agent 自适配引导 (唯一入口): endpoint + server_version + build_id + agents + doc。
 
-        agents 每条 = {id, name, plugin_url, docs_url, configure, verify};
-        plugin_url/docs_url 可为 null (待适配器实现后补)。
+        agents = 单条目「自适配标准」(S5, OB-01 起 per-agent 占位条目删除);
+        doc = 五段式文档分段 (概述→认证→接口规格→真实示例→验证步骤), 渲染归
+        _render_guide_html, JSON 视图同样暴露 (程序化消费方直接取分段)。
         HTTP 同源视图: GET /guide (Accept: application/json | text/html)。
         """
         return onboarding.onboarding_guide(endpoint)
@@ -160,58 +161,73 @@ def build_server(
 # ---------------------------------------------------------------- /guide ----
 
 def _render_guide_html(guide: dict) -> str:
-    """同一数据源的简单 HTML 步骤页 (浏览器人看), 不引前端框架。"""
-    agents_html: list[str] = []
-    for a in guide["agents"]:
-        plugin = (
-            f'<a href="{a["plugin_url"]}">{a["plugin_url"]}</a>'
-            if a["plugin_url"]
-            else "<em>null</em>"
-        )
-        docs = (
-            f'<a href="{a["docs_url"]}">{a["docs_url"]}</a>'
-            if a["docs_url"]
-            else "<em>null</em>"
-        )
-        agents_html.append(
-            "<tr>"
-            f'<td>{a["id"]}</td>'
-            f'<td>{a["name"]}</td>'
-            f"<td>{plugin}</td>"
-            f"<td>{docs}</td>"
-            f"<td>{a['configure']}</td>"
-            f"<td>{a['verify']}</td>"
-            "</tr>"
-        )
+    """五段式文档页 (S1/S6): 纯 HTML+CSS, 无框架, 单文件自包含零外部资源 (REQ-07)。
+
+    中文正文 + 英文代码/schema (S4/D4); 视觉沿用 daemon 伺服说明页的克制风格。
+    """
+    import html as _html
+
+    doc = guide["doc"]
+    esc = _html.escape
+
+    def _render_item(it: dict) -> str:
+        t = it["type"]
+        if t == "p":
+            return f"<p>{esc(it['text'])}</p>"
+        if t == "ul":
+            lis = "".join(f"<li>{esc(x)}</li>" for x in it["items"])
+            return f"<ul>{lis}</ul>"
+        if t == "ol":
+            lis = "".join(f"<li>{esc(x)}</li>" for x in it["items"])
+            return f"<ol>{lis}</ol>"
+        if t == "link":
+            return f'<p><a href="{esc(it["href"])}">{esc(it["text"])}</a></p>'
+        if t == "code":
+            body = esc(it["code"])
+            return f'<pre class="code"><code>{body}</code></pre>'
+        return ""
+
+    def _render_section(sec: dict) -> str:
+        items = "".join(_render_item(it) for it in sec["items"])
+        return f'<section id="{esc(sec["id"])}">\n<h2>{esc(sec["title"])}</h2>\n{items}\n</section>'
+
+    sections_html = "\n".join(_render_section(s) for s in doc["sections"])
     return f"""<!doctype html>
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<title>token-wallet MCP — agent 接入引导</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{esc(doc["title"])}</title>
 <style>
-body {{ font-family: system-ui, sans-serif; margin: 2rem; color: #222; }}
-code, .endpoint {{ background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }}
-.endpoint {{ font-size: 1.1em; }}
-table {{ border-collapse: collapse; margin-top: 1rem; width: 100%; }}
-th, td {{ border: 1px solid #ddd; padding: 6px 10px; text-align: left; vertical-align: top; }}
-th {{ background: #f8f8f8; }}
+:root {{ color-scheme: light; }}
+* {{ box-sizing: border-box; }}
+body {{ font-family: system-ui, sans-serif; margin: 0; color: #222;
+       background: #fafafa; line-height: 1.65; }}
+main {{ max-width: 60rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }}
+h1 {{ font-size: 1.5rem; border-bottom: 2px solid #e0e0e0; padding-bottom: .6rem; }}
+h2 {{ font-size: 1.15rem; margin-top: 2.2rem; }}
+.meta {{ color: #666; font-size: .92rem; }}
+.meta .endpoint {{ font-weight: 600; }}
+code {{ background: #f0f0f0; padding: 1px 5px; border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-size: .88em; }}
+pre.code {{ background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px;
+            padding: .9rem 1rem; overflow-x: auto; }}
+pre.code code {{ background: none; padding: 0; font-size: .82rem; line-height: 1.5; }}
+ul, ol {{ padding-left: 1.4rem; }}
+li {{ margin: .3rem 0; }}
+a {{ color: #0b62c4; }}
+section {{ margin-bottom: 1rem; }}
 </style>
 </head>
 <body>
-<h1>token-wallet MCP — agent 接入引导</h1>
-<p>endpoint: <span class="endpoint">{guide["endpoint"]}</span></p>
-<p>server_version: <code>{guide["server_version"]}</code></p>
-<h2>接入步骤</h2>
-<ol>
-<li>从 mcp.env (~/.config/token-wallet/mcp.env) 取 TOKEN_WALLET_MCP_KEY</li>
-<li>按下方对应 agent 行的 configure 说明配置 endpoint + key</li>
-<li>按 verify 说明验证上报是否收到 (MCP 工具 <code>usage_summary</code>)</li>
-</ol>
-<h2>agents</h2>
-<table>
-<tr><th>id</th><th>name</th><th>plugin_url</th><th>docs_url</th><th>configure</th><th>verify</th></tr>
-{''.join(agents_html)}
-</table>
+<main>
+<h1>{esc(doc["title"])}</h1>
+<p class="meta">endpoint: <span class="endpoint"><code>{esc(doc["endpoint"])}</code></span>
+&nbsp;·&nbsp; server_version: <code>{esc(doc["server_version"])}</code></p>
+<p class="meta">本文档面向任何 agent 的 LLM：按五段式标准自助完成 MCP 接入与用量上报。</p>
+{sections_html}
+</main>
 </body>
 </html>"""
 

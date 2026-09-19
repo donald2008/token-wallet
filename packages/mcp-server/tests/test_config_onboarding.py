@@ -4,13 +4,14 @@
 - mcp.env 加载 (文件→dict, ~ 展开, 注释/空行跳过)
 - 优先级: env > mcp.env > 缺省; 缺 KEY fatal exit 1
 - TOKEN_WALLET_HOST 缺省 127.0.0.1 (独立产品本机优先)
-- get_onboarding_guide MCP 工具契约结构 (endpoint 根级 + agents 含 null plugin_url)
-- GET /guide JSON 与 MCP 工具同源; Accept: text/html → HTML 步骤页
+- get_onboarding_guide MCP 工具契约结构 (endpoint 根级 + agents 单条目 + doc 分段)
+- GET /guide JSON 与 MCP 工具同源; Accept: text/html → 五段式文档页 (OB-01)
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -130,6 +131,8 @@ class TestResolveConfig:
 
 # --------------------------------------------------------- 引导接口数据源 --
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
 HOST, PORT = "127.0.0.1", 9131
 
 
@@ -153,26 +156,54 @@ def _tool_data(mcp, name: str) -> dict:
     return json.loads(result.content[0].text)
 
 
+class TestVersionPolicy:
+    def test_fallback_version_matches_pyproject(self):
+        """版本策略: _FALLBACK_VERSION 与 pyproject 声明同号 (读包版本源优先,
+        回退值仅兜底 — 两者漂移 = 版本报数失真)。"""
+        import tomllib
+
+        pyproject = REPO_ROOT / "packages" / "mcp-server" / "pyproject.toml"
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        assert onboarding._FALLBACK_VERSION == data["project"]["version"]
+
+
 class TestOnboardingGuide:
     def test_tool_contract_structure(self, tmp_path):
-        """契约: endpoint 根级 + server_version + agents 数组; hermes 有 url,
-        claude-code/opencode 的 plugin_url/docs_url 为 null。"""
+        """契约 (OB-01 改版): endpoint 根级 + server_version + build_id + agents
+        单条目 (S5 自适配标准, per-agent 占位删除) + doc 五段式分段。"""
         mcp = _build(tmp_path)
         data = _tool_data(mcp, "get_onboarding_guide")
-        # t_1b396e2f 追加 build_id (追加不改义): dev 运行无 frozen exe → None
-        assert set(data) == {"endpoint", "server_version", "agents", "build_id"}
+        # 兼容字段 (t_1b396e2f 追加不改义): dev 运行无 frozen exe → build_id None
+        assert set(data) == {"endpoint", "server_version", "agents", "build_id", "doc"}
         assert data["endpoint"] == f"http://{HOST}:{PORT}/mcp"
         assert isinstance(data["server_version"], str) and data["server_version"]
         assert data["build_id"] is None or isinstance(data["build_id"], str)
 
-        agents = {a["id"]: a for a in data["agents"]}
-        assert set(agents) == {"hermes", "claude-code", "opencode"}
-        for a in agents.values():
-            assert set(a) == {"id", "name", "plugin_url", "docs_url", "configure", "verify"}
-        assert agents["hermes"]["plugin_url"] and agents["hermes"]["docs_url"]
-        assert agents["claude-code"]["plugin_url"] is None
-        assert agents["claude-code"]["docs_url"] is None
-        assert agents["opencode"]["plugin_url"] is None
+        # agents 单条目: 字段形态保留 (JSON 视图既有消费方结构兼容窗口)
+        assert len(data["agents"]) == 1
+        agent = data["agents"][0]
+        assert set(agent) == {"id", "name", "plugin_url", "docs_url", "configure", "verify"}
+        assert agent["id"] == "self-service"
+        assert agent["plugin_url"]  # 参考实现链接在场
+        assert agent["docs_url"] is None
+
+        # doc 分段: 五段式完整
+        doc = data["doc"]
+        assert doc["endpoint"] == data["endpoint"]
+        assert [s["id"] for s in doc["sections"]] == [
+            "overview", "auth", "api", "example", "verify",
+        ]
+
+    def test_build_id_compat_field(self, tmp_path):
+        """H2 继承: build_id 字段与语义保留 — app 陈旧检测链路依赖 (REQ-06)。"""
+        monkey = pytest.MonkeyPatch()
+        try:
+            monkey.setenv("TOKEN_WALLET_BUILD_ID", "compat-abc")
+            mcp = _build(tmp_path)
+            data = _tool_data(mcp, "get_onboarding_guide")
+            assert data["build_id"] == "compat-abc"
+        finally:
+            monkey.undo()
 
     def test_build_id_env_override(self, tmp_path, monkeypatch):
         """t_1b396e2f: env TOKEN_WALLET_BUILD_ID 优先 — 版本一致性自报源。"""
@@ -224,14 +255,46 @@ class TestGuideHttp:
         assert r.status_code == 200
 
     def test_guide_html_view(self, tmp_path):
+        """SC-01: 五段式文档页完整渲染, 中文正文 + 英文代码/schema (S1/S4)。"""
         client = self._client(tmp_path)
         r = client.get("/guide", headers={"Accept": "text/html"})
         assert r.status_code == 200
         assert "text/html" in r.headers["content-type"]
         body = r.text
         assert f"http://{HOST}:{PORT}/mcp" in body
-        assert "Hermes Agent" in body
-        assert "Claude Code" in body
+        # 五段式骨架 (S1)
+        for anchor in ("overview", "auth", "api", "example", "verify"):
+            assert f'id="{anchor}"' in body
+        for title in ("概述", "认证", "接口规格", "真实示例", "验证步骤"):
+            assert title in body
+        # schema 段全文嵌入 (英文 schema, P3 checklist; esc 后 $defs 带转义引号)
+        assert "AgentUsageReport" in body
+        assert "&quot;$defs&quot;" in body
+        assert "input_cache_hit" in body
+        # 真实 payload (F1) 与 JSONRPC 框架
+        assert "tools/call" in body
+        assert "report_usage" in body
+        # 认证段: Bearer 占位 + key 来源说明, 无真实 key (S4)
+        assert "Bearer" in body
+        assert "TOKEN_WALLET_MCP_KEY" in body
+        # 参考实现链接 (S5)
+        assert "hook-usage-reporter" in body
+
+    def test_guide_html_self_contained(self, tmp_path):
+        """SC-07 / REQ-07: 自包含离线渲染 — 零外部资源依赖。"""
+        client = self._client(tmp_path)
+        r = client.get("/guide", headers={"Accept": "text/html"})
+        body = r.text
+        # 无外链资源: 无外链 css/js/字体/@import (REQ-07)
+        assert "<link" not in body
+        assert "<script" not in body
+        assert "@import" not in body
+        assert 'src="http' not in body
+        # 页面里出现的 http URL 只有: 本页 endpoint (展示值, 非资源引用)
+        # 与参考实现 <a href> — 二者均非外部资源加载
+        external_srcs = re.findall(r'(?:src|href)\s*=\s*"(https?://[^"]+)"', body)
+        for url in external_srcs:
+            assert url.startswith("https://gitee.com/IT_codef/token-wallet"), url
 
     def test_mcp_endpoint_still_requires_bearer(self, tmp_path):
         """guide 开放不放松 /mcp 鉴权面。"""
