@@ -98,18 +98,28 @@ Claude Code / opencode / Codex 等）时，它们的 token 消耗与成本通过
 | `usage_summary` | 读聚合 | 按时间窗 / agent / provider / model 过滤聚合，成本按内置价目表补算 |
 | `usage_report_echo` | 读原文 | 回读上报原文，对账与验收自证 |
 
-**快速部署**（Linux/macOS，完整步骤见 [mcp-server/README](packages/mcp-server/README.md)）：
+**部署与配置（app 内一键）**：
 
-```bash
-cd packages/mcp-server
-python3 -m venv .venv && .venv/bin/pip install -e .
-# 生成 key 并写入 ~/.config/token-wallet/mcp.env
-mkdir -p ~/.config/token-wallet
-echo "TOKEN_WALLET_MCP_KEY=$(openssl rand -hex 32)" >> ~/.config/token-wallet/mcp.env
-# systemd user service 常驻（unit 文件在 deploy/，按本机路径调整）
-```
+安装包已内置 daemon（Python fastmcp sidecar），无需单独装 Python 环境。装好 app 后：
 
-数据明细默认保留 90 天（可配），每日自动聚合长期趋势数据。
+1. 设置页「**MCP 服务**」面板：状态一瞥（运行中 / 未运行），点「**一键启动**」即起在 `127.0.0.1:9131/mcp`
+2. 「**开机自启**」开关：登录系统自动拉起 daemon，不依赖桌面 app 是否打开
+3. **API Key 全自动管理**：app 生成随机 key 写入 `mcp.env`（Linux/macOS `~/.config/token-wallet/mcp.env`，
+   Windows `%APPDATA%\token-wallet\mcp.env`），面板内一键复制；「随机生成」换 key 后按提示重启 daemon 生效
+4. **Agent 接入**：面板「查看安装步骤」按你用的 harness（Hermes / Claude Code / opencode / Codex 等）
+   给出对应接入步骤与服务地址，照做即可
+5. 升级 app 后检测到旧版本 daemon 残留进程时，面板提示「一键重启」完成换代
+
+配置项（`mcp.env`，一般无需手改）：
+
+| 变量 | 缺省 | 说明 |
+|------|------|------|
+| `TOKEN_WALLET_MCP_KEY` | app 自动生成 | Bearer 鉴权 key（本机请求同样必须携带） |
+| `TOKEN_WALLET_PORT` | `9131` | daemon 监听端口 |
+| `USAGE_TTL_DAYS` | `90` | 明细保留天数（每日自动聚合长期趋势，聚合长期保留） |
+
+**无 app 环境**（服务器/无头机）：手动部署（venv + systemd user service）见
+[mcp-server/README](packages/mcp-server/README.md)，配置项同上。
 协议规范见 [docs/mcp-protocol.md](docs/mcp-protocol.md)（AgentUsageReport v1 / 判重 / TTL / 鉴权）。
 
 ## 支持的通道
