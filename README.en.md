@@ -207,6 +207,15 @@ Output: `packages/app/release/token-wallet_<version>_setup.exe`. The packaging c
 pure Node tooling (electron-builder) — no Rust / Visual Studio / WebView2 needed; see
 [RELEASE.md](RELEASE.md) for the full release manual (incl. WSL2 prereqs: wine64 + npmmirror).
 
+> **MCP daemon sidecar bundled with the installer** (lite-01): `dist:win` builds the MCP
+> daemon automatically before packaging (`packages/mcp-server/deploy/build-exe.ps1`,
+> PyInstaller onefile; requires a Windows host + Python ≥ 3.11, pip deps auto-installed)
+> and bundles it into the installer — the Settings "MCP Service" panel works out of the box.
+> When packaging from WSL2, first run that script once on the Windows host to produce
+> `packages/app/resources/token-wallet-mcp.exe` (gitignored), or set
+> `TW_SKIP_DAEMON_BUILD=1` to skip explicitly (the installed app will then show
+> "daemon executable not found" in the MCP panel — not recommended).
+
 ## FAQ
 
 **Q: SmartScreen blocks the install?**

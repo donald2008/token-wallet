@@ -14,8 +14,8 @@ import { test } from "./fixtures";
  *   - 微 meter = QuotaMeter[data-layout="micro"] 仍在窗口行直接子级(信息常驻)
  *   - 三态截图(dark/light/glass)仍取, 落 /tmp 取证主页 P1 形态
  *
- * 组件本身(BarRowTooltip.tsx)保留作为契约锚点 + 旧 BarRowTooltip 自身的 vitest 回归护栏;
- * 方案页 ProviderCardLayouts/QuotaGallery 也不再挂 BarRowTooltip(quota-gallery.spec.ts 沿检 .bar-tooltip == 0)。
+ * 组件本身(BarRowTooltip.tsx)保留作为契约锚点 + 旧 BarRowTooltip 自身的 vitest 回归护栏。
+ * [t_aeb0447b 2026-09-19] 排版方案页已拆除, 其零 tooltip 沿检 spec 同步删除。
  */
 
 /** 预置一个 opencode 实例(golden: rolling 0% / weekly 100% / monthly 48% → 三条 bar-row) */

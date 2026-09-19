@@ -7,7 +7,9 @@
  *  - **不是 row 布局**(卡体原文作废, 老大 9/7 修订明确: 卡内窗口展示 = 悬浮窗内那个 QuotaMeter 组件)
  *  - 不再单独挂 <BarRowTooltip>: micro 本就是 BarRowTooltip 内的形态, 卡内常驻 = micro 直接展开
  *  - 排版差异必须建立在**真排版维度**(卡头与三窗的空间关系/信息层级/密度), 不是头部装饰件堆叠
- *  - 不替换主页 ProviderCard; 纯方案页 QuotaGallery 渲染, 用户选型后另开实现卡
+ *  - 不替换主页 ProviderCard; 仅作排版变体真组件留存(BrandHandle 被 ProviderCard 复用)
+ *    [t_aeb0447b 2026-09-19] 四元素排版变体方案页已拆除, 本文件保留
+ *    BrandHandle/排版变体真组件本体, 不再挂方案页渲染入口
  *
  * 4 方案差异维度(每方案建立一个真维度):
  *   P1 · 基线竖排      头部 handle+name+状态 三件套一行 + 三窗 micro 各一行(4px gap)

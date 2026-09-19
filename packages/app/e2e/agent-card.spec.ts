@@ -374,7 +374,7 @@ test("daemon 不可达: 大屏方案 C 空态 + 返回按钮", async ({ hostPage
   await page.getByTestId("main-tab-local-agent").click();
 
   // 大屏方案 C 入口: 通过直接 state 触发不现实(主页 Agent 卡空态无详情按钮),
-  // 改用 settings/QuotaGallery 同样 view 切路径的等价验证: 大屏空态组件本身
+  // 改用 settings 同样 view 切路径的等价验证: 大屏空态组件本身
   // 由 App.tsx view="agent-dashboard" 分支 + mcpSummary.ok=false 触发。
   // 此处验空态组件契约: AgentCardEmpty 已在主页可见, 大屏空态用同一组件复用。
   // (大屏空态分支的端到端切换依赖主页 detail 按钮, daemon 断连时无 detail 按钮,
