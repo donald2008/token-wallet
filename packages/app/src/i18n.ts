@@ -332,14 +332,14 @@ export const zh = {
     aboutHint: "内置单色品牌图标, 离线可渲染(currentColor 随主题自适应)。",
     language: "语言",
     languageHint: "界面显示语言, 切换即生效, 重启后保持。",
-    quotaGallery: "四元素排版变体方案(theme-glass 实验)",
     // ---- D-055 / t_4bd214de: 设置页 [MCP 服务] 区块 ----
     mcpTitle: "MCP 服务",
     mcpSubtitle: "本地 MCP daemon 管理, agent 通过 127.0.0.1:{port}/mcp 接入。",
     mcpStatusRunning: "运行中",
     mcpStatusStopped: "未运行",
     mcpStatusProbe: "正在探测…",
-    mcpStatusNotInstalled: "未找到 daemon 可执行文件",
+    mcpStatusNotInstalled:
+      "未找到 daemon 可执行文件（安装包应自带；开发场景请先在 Windows 侧构建: powershell -ExecutionPolicy Bypass -File packages\\mcp-server\\deploy\\build-exe.ps1）",
     mcpStart: "一键启动",
     mcpStop: "停止",
     mcpRestarting: "重启中…",
@@ -377,34 +377,6 @@ export const zh = {
     downloading: "正在下载 {percent}%",
     installTo: "重启安装 v{version}",
     failed: "更新失败, 稍后重试",
-  },
-  quota: {
-    title: "Provider 卡片排版方案",
-    subtitle:
-      "同一套 kimi-code 三窗真实数据(rolling_5h + weekly + monthly, requests 计数制), 分别用 3 种卡头×三窗空间关系渲染。**三窗 QuotaMeter(layout=micro) 常驻直显**是信息主体(无 hover 依赖)—— micro 就是悬浮窗内 QuotaMeter 的同一形态(title+bar+(usage|reset) 三层 grid, 4px 条, font-10)。差异落在真排版维度, 不是头部装饰件堆叠。",
-    open: "查看方案页",
-    legendOk: "ok(健康)",
-    legendWarn: "warn(偏低)",
-    legendBad: "bad(耗尽)",
-    // t_73c110ea 9/7 重建: 3 方案 + 异常段 mock, 全部基于真排版维度差异(无头部装饰件堆叠)
-    // t_5b092750 9/7 加 P5(短窗并排) — 短窗两列 grid + 月独占一行, 来自 token-monitor 布局
-    // P3 三列 grid 在 360px 屏下实测文字重叠 + 列被裁切 —— 故本轮不交付 P3
-    // 留 4 个真维度方案: 空间结构(P1)/信息层级(P2)/头部承载(P4)/短窗并排(P5)
-    cardP1Name: "Provider 卡 · P1 基线竖排(主页同构)",
-    cardP1Desc:
-      "卡头 = handle + 名称 + StatusDot + 状态徽章(一行)。三窗 micro 各一行 QuotaMeter, 窗间 4px gap(micro = 悬浮窗内 QuotaMeter 的同一形态, title+bar+(usage|reset) 三层 grid)。**与主页 ProviderCard 形态对齐, 认知零成本**。",
-    cardP2Name: "Provider 卡 · P2 头部综合态(信息上抬, 无摘要条)",
-    cardP2Desc:
-      "卡头右侧合并「StatusDot + 综合态文字」一行(整卡 health 一瞥可读); 三窗 micro 同 P1。**不引入摘要条形态**——风险颜色仍走行内自身 color, 头部不抽警示带。",
-    cardP4Name: "Provider 卡 · P4 头部数字(最紧窗内联, 无摘要条)",
-    cardP4Desc:
-      "卡头右侧并入「最紧窗用量数字 + 窗名小字」一行, 该窗行隐藏用量避免重复(QuotaMeter 缺省即不渲染, 契约不破)。**风险数字内联到头部信息流, 不用摘要条形态**。",
-    cardP5Name: "Provider 卡 · P5 短窗并排(monitor 布局, 5h+周同窗/月独占)",
-    cardP5Desc:
-      "卡头同 P1; **5h+周两窗同一行两列 grid**(gap=8), **月窗独占下一行全宽**。三窗全复用 layout=\"micro\" QuotaMeter — **不重造单元, 只重排窗口间网格**。来自用户 9/7 拍板的 token-monitor 窗口布局。360px 双列实测无文字重叠 / 无裁切。",
-    cardAbnName: "Provider 卡 · 异常卡共用骨架(4 方案同一套)",
-    cardAbnDesc:
-      "auth_expired / error 共用 AbnormalBody(不计入独立布局): 状态灯 + 状态文字 + (auth_expired only) setup_hint 授权面板(复制命令) + 最近更新/alerts。结构与主页 ProviderCard AbnormalBody 同构。",
   },
 } as const;
 
@@ -719,14 +691,14 @@ export const en: Dict = {
     aboutHint: "Built-in monochrome brand logos render offline (currentColor follows theme).",
     language: "Language",
     languageHint: "UI display language; applies immediately and persists across restarts.",
-    quotaGallery: "Layout-variant gallery (theme-glass experiment)",
     // ---- D-055 / t_4bd214de: Settings [MCP Service] section ----
     mcpTitle: "MCP Service",
     mcpSubtitle: "Local MCP daemon manager. Agents connect via 127.0.0.1:{port}/mcp.",
     mcpStatusRunning: "Running",
     mcpStatusStopped: "Stopped",
     mcpStatusProbe: "Probing…",
-    mcpStatusNotInstalled: "Daemon executable not found",
+    mcpStatusNotInstalled:
+      "Daemon executable not found (the installer should bundle it; in dev, build it first on Windows: powershell -ExecutionPolicy Bypass -File packages\\mcp-server\\deploy\\build-exe.ps1)",
     mcpStart: "Start",
     mcpStop: "Stop",
     mcpRestarting: "Restarting…",
@@ -765,34 +737,6 @@ export const en: Dict = {
     downloading: "Downloading {percent}%",
     installTo: "Restart & install v{version}",
     failed: "Update failed, retry later",
-  },
-  quota: {
-    title: "Provider card layout options",
-    subtitle:
-      "The same kimi-code three-window real data (rolling_5h + weekly + monthly, requests count), rendered in 3 head × three-window spatial relations. **Three-window QuotaMeter (layout=micro) is always-on and direct** — that's the card's information main body, no hover dependency. micro = the same compact vertical stack as the hover tooltip's QuotaMeter (title+bar+(usage|reset) three-layer grid, 4px bar, font-10). Differences live in real layout dimensions, not in head decoration stacking.",
-    open: "View gallery",
-    legendOk: "ok (healthy)",
-    legendWarn: "warn (low)",
-    legendBad: "bad (exhausted)",
-    // t_73c110ea 9/7 rebuild: 3 schemes + abnormal skeleton, all based on real layout dimensions (no head decoration stacking)
-    // t_5b092750 9/7 add P5 (short-side-by-side) — two-col grid for short windows + monthly full-width row, from token-monitor layout
-    // P3 three-column grid had measured text overlap + column clipping at 360px panel — therefore dropped this round.
-    // Keep 4 real-dimension schemes: spatial (P1)/info hierarchy (P2)/head carrying (P4)/short-side (P5)
-    cardP1Name: "Provider card · P1 baseline vertical (home page aligned)",
-    cardP1Desc:
-      "Head = handle + name + StatusDot + status badge (one row). Three windows as QuotaMeter(micro) each on its own line, 4px gap between windows (micro = same compact stack as the hover tooltip's QuotaMeter, title+bar+(usage|reset) three-layer grid). **Aligned with home page ProviderCard, zero cognitive cost**.",
-    cardP2Name: "Provider card · P2 head carries rollup (info elevation, no summary strip)",
-    cardP2Desc:
-      "Head right side merges 'StatusDot + rollup label' into one line (whole-card health at a glance); three windows micro, same as P1. **No summary strip** — risk color stays on each row's own color, the head does not extract a warning band.",
-    cardP4Name: "Provider card · P4 head carries tightest number (no summary strip)",
-    cardP4Desc:
-      "Head right side embeds 'tightest-window usage number + window label sub-line'; that row hides its usage to avoid duplication (QuotaMeter omits when prop undefined, contract intact). **Risk number lives inside the head's information flow, no strip**.",
-    cardP5Name: "Provider card · P5 short-side-by-side (monitor layout, 5h+weekly same row / monthly full-width row)",
-    cardP5Desc:
-      "Head same as P1; **5h + weekly two windows share one row as two-column grid** (gap=8), **monthly window takes the next row full-width**. All three windows reuse layout=\"micro\" QuotaMeter — **no new unit, only the between-window grid is reshaped**. From the token-monitor window layout the user confirmed on 9/7. Measured at 360px: no text overlap, no clipping in the two-column row.",
-    cardAbnName: "Provider card · Abnormal skeleton (shared by all 4 schemes)",
-    cardAbnDesc:
-      "auth_expired / error share AbnormalBody (does NOT count as an independent layout): status lamp + status text + (auth_expired only) setup_hint auth panel (copy command) + last-update/alerts. Structurally isomorphic with the home page ProviderCard AbnormalBody.",
   },
 };
 

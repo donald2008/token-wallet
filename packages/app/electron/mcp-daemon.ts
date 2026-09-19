@@ -241,8 +241,17 @@ export function defaultPathShim(): PathShim {
       // dev 模式(_isPackaged=false)不期望有 resources/ → resolveDaemonPath 仍返回路径,
       // 由 exists() 决定实际可用性; UI 据此提示"未找到 daemon, 请先构建 resources/"
       void _isPackaged;
+      // t_aeb0447b round-2(P0): 打包态 appRoot = <install>/resources/app.asar —
+      // electron-builder files+asarUnpack 把 daemon 落在 app.asar.unpacked/resources/。
+      // Electron 只对 fs API 与 child_process.execFile 系做 asar 透明重定向,
+      // **不 patch spawn**(lib/node/asar-fs-wrapper.ts 实锤) — daemon 经 cp.spawn 启动,
+      // 必须显式重映射到 unpacked 物理路径, 否则打包态 existsSync(patch 后)误报 true
+      // 而 spawn execve ENOENT(装了也启动失败)。dev 态 appRoot 非 .asar 结尾, 不受影响。
+      const root = appRoot.endsWith(".asar")
+        ? appRoot.slice(0, -".asar".length) + ".asar.unpacked"
+        : appRoot;
       const exe = platform === "win32" ? "token-wallet-mcp.exe" : "token-wallet-mcp";
-      const candidate = path.join(appRoot, "resources", exe);
+      const candidate = path.join(root, "resources", exe);
       return candidate;
     },
     exists: (p) => existsSync(p),
