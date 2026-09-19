@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { defaultPathShim } from "./mcp-daemon";
 
 /**
  * lite-01(t_aeb0447b): daemon sidecar 随包分发 — electron-builder 配置门禁。
@@ -51,5 +52,23 @@ describe("lite-01: daemon sidecar 随包分发接线(electron-builder)", () => {
     expect(script).toContain("build-exe.ps1");
     expect(script).toContain("TW_SKIP_DAEMON_BUILD");
     expect(script).toContain("token-wallet-mcp.exe");
+  });
+
+  it("round-2 P0 对齐断言: 打包态探测路径(asar.unpacked 重映射) ↔ asarUnpack 落点一致", () => {
+    // Electron 不 patch child_process.spawn(源码 asar-fs-wrapper.ts 实锤) — 打包态
+    // defaultPathShim 必须显式重映射 .asar → .asar.unpacked, 且该重映射路径必须被
+    // asarUnpack glob 覆盖(物理文件真实存在), 二者缺一即打包态启动必败。
+    const shim = defaultPathShim();
+    const packagedPath = shim.resolveDaemonPath(
+      "win32",
+      true,
+      "<install>/resources/app.asar",
+    );
+    expect(packagedPath).toContain("app.asar.unpacked/resources/token-wallet-mcp.exe");
+    const unpack: string[] = pkgJson.build?.asarUnpack ?? [];
+    expect(
+      unpack.some((g) => g.startsWith("resources/token-wallet-mcp")),
+      "asarUnpack 未覆盖 resources/token-wallet-mcp* — 重映射路径将无物理文件",
+    ).toBe(true);
   });
 });

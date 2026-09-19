@@ -9,7 +9,10 @@
  *  - 排版差异必须建立在**真排版维度**(卡头与三窗的空间关系/信息层级/密度), 不是头部装饰件堆叠
  *  - 不替换主页 ProviderCard; 仅作排版变体真组件留存(BrandHandle 被 ProviderCard 复用)
  *    [t_aeb0447b 2026-09-19] 四元素排版变体方案页已拆除, 本文件保留
- *    BrandHandle/排版变体真组件本体, 不再挂方案页渲染入口
+ *    BrandHandle/排版变体真组件本体, 不再挂方案页渲染入口。
+ *    [round-2 P2] 尾部 PROVIDER_CARD_LAYOUTS 数组的 nameKey/descKey 指向已删除的
+ *    i18n quota.cardP* 键 —— 数组当前零运行时消费, 键残缺无影响; 若未来复用该数组
+ *    需同步补回 i18n 键或改注入文案
  *
  * 4 方案差异维度(每方案建立一个真维度):
  *   P1 · 基线竖排      头部 handle+name+状态 三件套一行 + 三窗 micro 各一行(4px gap)
