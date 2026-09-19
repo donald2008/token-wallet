@@ -2332,6 +2332,10 @@ body {
 .mcp-key-row {
   flex-wrap: wrap;
 }
+/* OB-03: 引导链接内联复制钮 — 复用 .btn-icon, 仅约束不随 code 长度换行漂移 */
+.mcp-guide-copy {
+  white-space: nowrap;
+}
 .mcp-confirm {
   border: 1px solid var(--warn, #f59e0b);
   border-radius: var(--radius-8, 8px);
@@ -2360,76 +2364,6 @@ body {
   color: var(--bad, #ef4444);
   font-size: var(--font-12, 12px);
   margin: 0;
-}
-
-/* ===== D-055: Agent 引导弹窗(portal to body, Q4 决议 B) ===== */
-.mcp-guide-overlay {
-  position: fixed;
-  inset: 8px;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 20;
-  border-radius: var(--radius-16, 16px);
-}
-:root[data-theme="dark-glass"] .mcp-guide-overlay,
-:root[data-theme="light-glass"] .mcp-guide-overlay {
-  -webkit-backdrop-filter: var(--card-blur, blur(32px));
-  backdrop-filter: var(--card-blur, blur(32px));
-}
-.mcp-guide-modal {
-  background: var(--bg-elev, #fff);
-  border-radius: var(--radius-12, 12px);
-  width: min(720px, 90vw);
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-:root[data-theme="dark"] .mcp-guide-modal,
-:root[data-theme="dark-glass"] .mcp-guide-modal {
-  background: var(--bg-elev, #1f2937);
-}
-.mcp-guide-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-12, 12px) var(--space-16, 16px);
-  border-bottom: 1px solid var(--border, #e5e7eb);
-}
-.mcp-guide-head h3 {
-  margin: 0;
-  font-size: var(--font-16, 16px);
-}
-.mcp-guide-body {
-  padding: var(--space-16, 16px);
-  overflow-y: auto;
-  font-size: var(--font-12, 12px);
-}
-.mcp-guide-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-16, 16px);
-}
-.mcp-guide-item {
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: var(--radius-8, 8px);
-  padding: var(--space-12, 12px);
-}
-.mcp-guide-item h4 {
-  margin: 0 0 var(--space-8, 8px) 0;
-}
-.mcp-guide-item pre {
-  background: var(--bg, #f3f4f6);
-  padding: var(--space-8, 8px);
-  border-radius: var(--radius-4, 4px);
-  overflow-x: auto;
-  font-size: var(--font-12, 12px);
-  margin: var(--space-4, 4px) 0 0 0;
 }
 
 /* ============= t_9255cb63: 主页 Agent 卡区 + 大屏方案 C =============

@@ -24,7 +24,6 @@ const ipcMocks = vi.hoisted(() => ({
   mcpGenKey: vi.fn(),
   mcpGetAutostart: vi.fn(),
   mcpSetAutostart: vi.fn(),
-  mcpGetGuide: vi.fn(),
   mcpRestart: vi.fn(),
   maskMcpKey: (key: string): string => {
     if (key.length <= 12) return "•".repeat(key.length);
@@ -70,7 +69,6 @@ beforeEach(() => {
     daemonWasRunning: true,
   });
   ipcMocks.mcpSetAutostart.mockResolvedValue({ mcpAutostart: true, osAutostart: true });
-  ipcMocks.mcpGetGuide.mockResolvedValue({ agents: [] });
   ipcMocks.mcpRestart.mockResolvedValue({ restarted: true, started: true, pid: 12345 });
   // mock clipboard(组件复制用)
   Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
@@ -90,7 +88,7 @@ async function render() {
   await act(async () => {
     root.render(
       <LangProvider>
-        <McpServicePanel onGuideOpen={vi.fn()} />
+        <McpServicePanel />
       </LangProvider>,
     );
   });
@@ -352,20 +350,50 @@ describe("McpServicePanel: autostart toggle", () => {
   });
 });
 
-describe("McpServicePanel: open guide 回调", () => {
-  it("点击 [查看安装步骤] → 触发 onGuideOpen", async () => {
-    const onGuideOpen = vi.fn();
-    await act(async () => {
-      root.render(
-        <LangProvider>
-          <McpServicePanel onGuideOpen={onGuideOpen} />
-        </LangProvider>,
-      );
-    });
-    const btn = container.querySelector('[data-testid="mcp-open-guide"]') as HTMLButtonElement;
+describe("McpServicePanel: 复制引导链接(OB-03 SC-03)", () => {
+  it("endpoint 行旁钮 → clipboard = displayEndpoint 同源 /guide URL", async () => {
+    await render();
+    const btn = container.querySelector('[data-testid="mcp-guide-copy"]') as HTMLButtonElement;
     await act(async () => {
       fireClick(btn);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
     });
-    expect(onGuideOpen).toHaveBeenCalledTimes(1);
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      "http://127.0.0.1:9131/guide",
+    );
+  });
+
+  it("操作行主钮 → clipboard 同源 /guide URL + 瞬态「已复制」反馈", async () => {
+    ipcMocks.mcpGetConfig.mockResolvedValue({
+      TOKEN_WALLET_MCP_KEY: "0123456789abcdef0123456789abcdef",
+      TOKEN_WALLET_PORT: 9131,
+      TOKEN_WALLET_HOST: "127.0.0.1",
+      TOKEN_WALLET_DB_PATH: "/tmp/tw.db",
+      USAGE_TTL_DAYS: 90,
+      // U6/H3: 通配 bind 已被主进程解析为局域网 IPv4 — 同源 host 语义必须继承
+      displayEndpoint: "http://192.168.1.20:9131/mcp",
+      mcpEnvPath: "/x",
+      installed: true,
+    });
+    await render();
+    const btn = container.querySelector('[data-testid="mcp-copy-guide"]') as HTMLButtonElement;
+    await act(async () => {
+      fireClick(btn);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    // H3: host 继承 displayEndpoint 的局域网语义, 仅 path 换 /guide
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      "http://192.168.1.20:9131/guide",
+    );
+    const btnAfter = container.querySelector('[data-testid="mcp-copy-guide"]') as HTMLButtonElement;
+    expect(btnAfter.textContent).toContain("已复制");
+  });
+
+  it("config 未加载 → 复制钮 disabled(禁复制兜底 URL)", async () => {
+    // probe 继续走真值, 仅 config 置 null(组件对 null config 有守卫)
+    ipcMocks.mcpGetConfig.mockResolvedValue(null as never);
+    await render();
+    const btn = container.querySelector('[data-testid="mcp-copy-guide"]') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
   });
 });

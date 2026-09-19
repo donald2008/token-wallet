@@ -1,6 +1,6 @@
 /**
  * 设置页 MCP 服务区 e2e(D-055 / t_4bd214de):
- * 验证三态(未运行/运行中/未安装)渲染 + 一键启停 + key 复制 + 引导页打开。
+ * 验证三态(未运行/运行中/未安装)渲染 + 一键启停 + key 复制 + 复制引导链接(OB-03)。
  *
  * 走 playwright browser 模式(D-030): mock 桌面桥 IPC, fixtures.ts 注入
  * mcp_* 系列 handler + seedMcpState 控制场景。
@@ -106,36 +106,54 @@ test.describe("设置页 MCP 服务区", () => {
     await expect(toggle).not.toBeChecked();
   });
 
-  test("引导页: 点击 [查看安装步骤] → portal 弹窗, daemon 未跑 → empty 文案", async ({
+  test("复制引导链接: daemon 在跑 → clipboard = endpoint 同源 /guide URL + 瞬态反馈(SC-03)", async ({
     page,
+    context,
   }) => {
-    await page.goto("/");
-    await seedMcpState(page, { installed: true, alive: false });
-    await page.reload();
-    await page.getByTestId("settings-btn").click();
-    const panel = page.getByTestId("mcp-panel");
-    await panel.getByTestId("mcp-open-guide").click();
-    const overlay = page.getByTestId("mcp-guide-overlay");
-    await expect(overlay).toBeVisible();
-    await expect(page.getByTestId("mcp-guide-empty")).toBeVisible();
-  });
-
-  test("引导页: daemon 在跑 → 渲染 agent 列表(含 configure/verify 步骤)", async ({
-    page,
-  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.goto("/");
     await seedMcpState(page, { installed: true, alive: true });
     await page.reload();
     await page.getByTestId("settings-btn").click();
     const panel = page.getByTestId("mcp-panel");
-    await panel.getByTestId("mcp-open-guide").click();
-    const overlay = page.getByTestId("mcp-guide-overlay");
-    await expect(overlay).toBeVisible();
-    await expect(page.getByTestId("mcp-guide-list")).toBeVisible();
-    await expect(page.getByTestId("mcp-guide-hermes")).toBeVisible();
-    await expect(page.getByTestId("mcp-guide-claude-code")).toBeVisible();
-    // 关闭弹窗
-    await page.getByTestId("mcp-guide-close").click();
-    await expect(overlay).not.toBeVisible();
+    // 先锁 endpoint 形态, 引导链接 = 同源仅 path 换 /guide
+    await expect(panel.getByTestId("mcp-endpoint")).toContainText("127.0.0.1:9131/mcp");
+    await panel.getByTestId("mcp-copy-guide").click();
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clip).toBe("http://127.0.0.1:9131/guide");
+    await expect(panel.getByTestId("mcp-copy-guide")).toContainText("已复制");
+  });
+
+  test("复制引导链接: endpoint 行旁内联钮 → 同源 /guide URL", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.goto("/");
+    await seedMcpState(page, { installed: true, alive: true });
+    await page.reload();
+    await page.getByTestId("settings-btn").click();
+    const panel = page.getByTestId("mcp-panel");
+    await panel.getByTestId("mcp-guide-copy").click();
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clip).toBe("http://127.0.0.1:9131/guide");
+  });
+
+  // GATE 2 S9 修订反向锁: daemon 离线 = 无引导语义, 不留静态兜底(旧 mcp-guide-overlay 已拆)
+  test("daemon 离线(SC-05): 无引导弹窗死入口, 仅显状态 + 复制链接语义仍在", async ({ page, context }) => {
+    await page.goto("/");
+    await seedMcpState(page, { installed: true, alive: false });
+    await page.reload();
+    await page.getByTestId("settings-btn").click();
+    const panel = page.getByTestId("mcp-panel");
+    await expect(panel).toHaveAttribute("data-status", "stopped");
+    // 反向锁: 弹窗类 testid 不出街
+    await expect(page.getByTestId("mcp-guide-overlay")).toHaveCount(0);
+    await expect(page.getByTestId("mcp-guide-empty")).toHaveCount(0);
+    // 操作行复制钮可点(URL 复制不依赖 daemon 存活) — 引导语义完全由 /guide 在线提供
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await panel.getByTestId("mcp-copy-guide").click();
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clip).toBe("http://127.0.0.1:9131/guide");
   });
 });
