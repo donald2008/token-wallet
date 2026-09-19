@@ -24,7 +24,8 @@ countdowns, and "days remaining" estimated from your consumption rate.
 |------|-------|-------|
 | ![dark](docs/screenshots/panel-dark.png) | ![light](docs/screenshots/panel-light.png) | ![glass](docs/screenshots/panel-glass.png) |
 
-**Local Agent usage dashboard** (live token spend / cost / cache hit — Dark / Light / Glass):
+**Local Agent usage dashboard** (live token spend / cost / cache hit — Dark / Light / Glass,
+data collected automatically by the MCP data plane, see [below](#local-agent-usage-collection-mcp-data-plane)):
 
 | Dashboard Dark | Dashboard Light | Dashboard Glass |
 |------|------|------|
@@ -79,6 +80,46 @@ countdowns, and consumption rates into one desktop widget — readable at a glan
 - **Drag-to-reorder**: drag a card to take over ordering; persists exactly once on drop
 - **Data stays on your machine**: zero telemetry, credentials in the OS keychain, snapshots in local SQLite, last-known data readable offline
 
+## Local Agent usage collection (MCP data plane)
+
+The "Local Agent usage dashboard" in the desktop widget is not fed by hand — it is collected
+automatically by the **MCP data plane**. When you run multiple AI agents (Hermes / Claude Code /
+opencode / Codex, etc.), their token spend and cost flow into a standard MCP interface automatically
+and surface as a dashboard in the desktop widget; the same data plane is open for programmatic
+self-querying by agents.
+
+**How it works**:
+
+- **Agent side (hook plugin)**: hooks into the agent harness's LLM call points, extracts usage on
+  every call and reports it in batches (offline queuing, idempotent retries, zero blocking), supporting
+  Hermes / Claude Code / opencode / Codex and other common harnesses
+- **Data plane (daemon)**: a 7×24 resident MCP server at `http://127.0.0.1:9131/mcp` (streamable-http,
+  Bearer auth); collection and querying keep running when the desktop app is closed
+- **Desktop app**: automatically switches to the daemon's display panel once detected, no extra setup
+
+**MCP tool surface (v1, three tools)**:
+
+| Tool | Direction | Purpose |
+|------|-----------|---------|
+| `report_usage` | write | Agents hook-report LLM usage in batches (event_id idempotency + content fingerprint, safe retries) |
+| `usage_summary` | read | Filter and aggregate by time window / agent / provider / model; costs back-filled via a built-in price table |
+| `usage_report_echo` | read | Read back raw reports for reconciliation and acceptance |
+
+**Quick deployment** (Linux/macOS, full steps in [mcp-server/README](packages/mcp-server/README.md)):
+
+```bash
+cd packages/mcp-server
+python3 -m venv .venv && .venv/bin/pip install -e .
+# generate a key and write it to ~/.config/token-wallet/mcp.env
+mkdir -p ~/.config/token-wallet
+echo "TOKEN_WALLET_MCP_KEY=$(openssl rand -hex 32)" >> ~/.config/token-wallet/mcp.env
+# resident systemd user service (unit files in deploy/, adjust paths for your machine)
+```
+
+Usage details are kept for 90 days by default (configurable), with daily aggregation into
+long-term trends. Protocol spec: [docs/mcp-protocol.md](docs/mcp-protocol.md)
+(AgentUsageReport v1 / dedup / TTL / auth).
+
 ## Supported channels
 
 | Platform | Product | Billing type | Access | What you need |
@@ -115,7 +156,7 @@ token-wallet/
 ├── packages/
 │   ├── core/             collection core (pure TS lib): adapter registry / scheduler / cache / schema
 │   ├── app/              Electron desktop widget (React 19): tray + popup + settings
-│   └── mcp-server/       MCP data-plane daemon (Python, embeds core)
+│   └── mcp-server/       MCP data-plane daemon (Python fastmcp, standalone deployment)
 ├── docs/                 USER_GUIDE / DESIGN (architecture) / DECISIONS / RELEASE (release manual)
 ├── verification/         real-machine visual acceptance snapshots (manual QA baseline)
 ├── sketches/             UI visual mockups (for review, can be discarded)

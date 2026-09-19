@@ -21,7 +21,8 @@
 |------|-------|-------|
 | ![dark](docs/screenshots/panel-dark.png) | ![light](docs/screenshots/panel-light.png) | ![glass](docs/screenshots/panel-glass.png) |
 
-**本地 Agent 用量大屏**（实时 token 消耗 / 成本 / 缓存命中 — Dark / Light / Glass）：
+**本地 Agent 用量大屏**（实时 token 消耗 / 成本 / 缓存命中 — Dark / Light / Glass，
+数据由 MCP 数据面自动采集，见[下文](#本地-agent-用量采集mcp-数据面)）：
 
 | 大屏 Dark | 大屏 Light | 大屏 Glass |
 |------|------|------|
@@ -75,6 +76,42 @@
 - **手动拖拽排序**：拖卡片浮起即接管排序，松手一次持久化
 - **数据不出本机**：零遥测零上报，凭据存 OS 钥匙串，快照落本地 SQLite，断网可看最后一次数据
 
+## 本地 Agent 用量采集（MCP 数据面）
+
+桌面的「本地 Agent 用量大屏」不是手动喂的——由 **MCP 数据面**自动采集。跑多个 AI Agent（Hermes /
+Claude Code / opencode / Codex 等）时，它们的 token 消耗与成本通过标准 MCP 接口自动入库，
+桌面部件汇总成大屏；同一数据面也开放给 Agent 程序化自查。
+
+**工作方式**：
+
+- **Agent 侧（hook 插件）**：挂在 agent harness 的 LLM 调用点，每次调用自动提取用量并批量上报
+  （断线排队、重发幂等、零阻塞主流程），支持 Hermes / Claude Code / opencode / Codex 等常见 harness
+- **数据面（daemon）**：7×24 常驻的 MCP server，端点 `http://127.0.0.1:9131/mcp`（streamable-http，
+  Bearer 鉴权）；桌面 app 关闭不影响采集与查询
+- **桌面 app**：发现 daemon 后自动切换为其展示面板，无需额外配置
+
+**MCP 工具面（v1 三个工具）**：
+
+| 工具 | 方向 | 用途 |
+|------|------|------|
+| `report_usage` | 写 | Agent hook 批量上报 LLM 消耗（event_id 幂等 + 内容指纹两级判重，重发安全） |
+| `usage_summary` | 读聚合 | 按时间窗 / agent / provider / model 过滤聚合，成本按内置价目表补算 |
+| `usage_report_echo` | 读原文 | 回读上报原文，对账与验收自证 |
+
+**快速部署**（Linux/macOS，完整步骤见 [mcp-server/README](packages/mcp-server/README.md)）：
+
+```bash
+cd packages/mcp-server
+python3 -m venv .venv && .venv/bin/pip install -e .
+# 生成 key 并写入 ~/.config/token-wallet/mcp.env
+mkdir -p ~/.config/token-wallet
+echo "TOKEN_WALLET_MCP_KEY=$(openssl rand -hex 32)" >> ~/.config/token-wallet/mcp.env
+# systemd user service 常驻（unit 文件在 deploy/，按本机路径调整）
+```
+
+数据明细默认保留 90 天（可配），每日自动聚合长期趋势数据。
+协议规范见 [docs/mcp-protocol.md](docs/mcp-protocol.md)（AgentUsageReport v1 / 判重 / TTL / 鉴权）。
+
 ## 支持的通道
 
 | 平台 | 产品 | 计费形态 | 接入方式 | 需要什么 |
@@ -107,7 +144,7 @@ token-wallet/
 ├── packages/
 │   ├── core/             采集核心（纯 TS 库）：适配器注册表 / 调度器 / 缓存 / schema
 │   ├── app/              Electron 桌面部件（React 19）：托盘 + 弹出面板 + 设置
-│   └── mcp-server/       MCP 数据面 daemon（Python，内嵌 core）
+│   └── mcp-server/       MCP 数据面 daemon（Python fastmcp，独立部署）
 ├── docs/                 USER_GUIDE / DESIGN（架构）/ DECISIONS（决策）/ RELEASE（发版手册）
 ├── verification/         真机视觉验收快照（人工验收基准）
 ├── sketches/             UI 视觉 mockup（评审用，可丢弃）
