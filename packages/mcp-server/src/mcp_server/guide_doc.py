@@ -180,8 +180,8 @@ def doc_sections() -> list[dict]:
                 ]},
                 {"type": "p", "text": (
                     "参考实现：Hermes 官方 hook 适配器 hook-usage-reporter——"
-                    "其他 agent 可参考其 hook 触发点设计（post_llm_call 提取点 / "
-                    "buffer 策略 / 批量上报）自行实现适配。"
+                    "其他 agent 可参考其 hook 触发点设计（post_api_request 提取点——"
+                    "post_llm_call 无 usage；buffer 策略 / 批量上报）自行实现适配。"
                 )},
                 {"type": "link", "text": "hook-usage-reporter（参考实现）", "href": REFERENCE_IMPL_URL},
             ],

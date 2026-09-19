@@ -1,7 +1,7 @@
 # hook-usage-reporter
 
 token-wallet MCP daemon（:9131）的 Hermes gateway 上报插件 — 实现卡 t_0ea1d8b6。
-协议权威源: [`docs/mcp-protocol.md`](../../docs/mcp-protocol.md)（D-048）。
+协议权威源: [`docs/mcp-protocol.md`](../../docs/mcp-protocol.md)（D-055）。
 
 ## hook payload 实测结论（hermes-agent 0.21.0, 2026-09-06 源码侦察）
 

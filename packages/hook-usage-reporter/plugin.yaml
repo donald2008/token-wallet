@@ -1,6 +1,6 @@
 name: hook-usage-reporter
 version: 0.1.1
-description: "token-wallet usage reporter — post_api_request 提取 LLM 消耗, buffer/flush 上报 token-wallet MCP daemon (D-048 协议)."
+description: "token-wallet usage reporter — post_api_request 提取 LLM 消耗, buffer/flush 上报 token-wallet MCP daemon (D-055 协议)."
 author: njbx02
 kind: backend
 provides_hooks:
