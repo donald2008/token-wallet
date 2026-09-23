@@ -125,10 +125,18 @@ class TestContentDiscipline:
         assert "duplicated" in api_text and "rejected" in api_text
 
     def test_reference_impl_link_present(self):
-        """S5: 参考实现链接 (hook-usage-reporter) 在概述段。"""
+        """S5+9/24 修订: 参考实现以纯文字在场, 零外链(gitee 人机验证墙)。"""
         blob = json.dumps(guide_doc.doc_sections(), ensure_ascii=False)
         assert "hook-usage-reporter" in blob
-        assert guide_doc.REFERENCE_IMPL_URL in blob
+        # agent 消费面禁外链: 任何 gitee/外部 URL 不得出现在文档分段
+        assert "gitee.com" not in blob
+        assert "http://" not in blob.replace("http://<host>", "").replace(
+            "http://127.0.0.1", ""
+        ) or not any(
+            it.get("type") == "link"
+            for s in guide_doc.doc_sections()
+            for it in s["items"]
+        )
 
     def test_verify_section_steps(self):
         """P3 checklist: 验证步骤 = report → summary 回读 → echo 对账。"""

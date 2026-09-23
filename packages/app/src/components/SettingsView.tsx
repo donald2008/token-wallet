@@ -136,7 +136,9 @@ export function SettingsView({
               </button>
             ))}
           </div>
-          <label className="check-row">
+          {/* 9/24 老大反馈: 说明贴控件 — 主题 hint 紧跟按钮组, 不再沉底 */}
+          <p className="hint">{t("set.themeHint")}</p>
+          <label className="check-row glass-toggle-row">
             <input
               type="checkbox"
               data-testid="glass-toggle"
@@ -145,11 +147,12 @@ export function SettingsView({
             />
             <span>{t("set.glass")}</span>
           </label>
-          {/* t_c20d4d11 9/7: 玻璃透明度滑槽 — 范围 15%~100%, 默认 100% 不透明。
-              拖动即变(onChange 实时写 CSS 变量, theme.css 用 color-mix 算实际背景色);
-              停手即存(onPointerUp + onBlur 落 localStorage)。玻璃开关 off 时 alpha 控件仍显示
-              (保留设置), 但视觉上不影响非玻璃主题面板 */}
-          <div className="slider-row" data-testid="glass-alpha-row">
+          {/* 9/24 老大反馈: 玻璃 α 是玻璃开关的子设置 — 视觉从属(缩进) + off 时禁用交互。
+              保留显示(设置不丢), disabled 表达「当前不生效」 */}
+          <div
+            className={`slider-row glass-alpha-sub${glass ? "" : " disabled"}`}
+            data-testid="glass-alpha-row"
+          >
             <label htmlFor="glass-alpha-input" className="slider-label">
               {t("set.glassAlpha")}
               <span className="slider-value" data-testid="glass-alpha-value">
@@ -161,6 +164,7 @@ export function SettingsView({
               type="range"
               className="slider"
               data-testid="glass-alpha-input"
+              disabled={!glass}
               min={GLASS_ALPHA_MIN}
               max={GLASS_ALPHA_MAX}
               step={0.05}
@@ -178,7 +182,6 @@ export function SettingsView({
             />
             <p className="hint">{t("set.glassAlphaHint")}</p>
           </div>
-          <p className="hint">{t("set.themeHint")}</p>
         </section>
 
         {/* Phase B(i18n, D-047): 界面语言 — 主题同款分段控件(zh/en), 切换即生效 + settings.json 持久化 */}

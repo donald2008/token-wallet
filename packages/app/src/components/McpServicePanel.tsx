@@ -41,7 +41,10 @@ export function McpServicePanel() {
   // OB-03: 引导链接复制成功的瞬态反馈(与 key 复制同款 1.5s)
   // P2-2(review #1683): 主钮/内联钮各自独立瞬态, 修文案串扰
   const [guideCopied, setGuideCopied] = useState(false);
-  const [guideIconCopied, setGuideIconCopied] = useState(false);
+  // 9/24 老大反馈: 复制语义有歧义 — 复制成功后补「发给 agent」提示(瞬态 toast 行)
+  const [toast, setToast] = useState<string | null>(null);
+  // 服务地址行内联钮复制 endpoint 本体(原误复制 guide — 与行标签语义冲突)
+  const [endpointCopied, setEndpointCopied] = useState(false);
   // 重生成 key 时的二次确认(避免误点导致已配 agent 失联)
   const [confirmGenKey, setConfirmGenKey] = useState(false);
   // 重生成 key 后短时提示
@@ -194,15 +197,30 @@ export function McpServicePanel() {
   // S9 修订: daemon 离线也不做静态兜底 — 复制 URL 即引导语义的全部, agent 拿链接自适配。
   const guideUrl = endpoint.replace(/\/mcp$/, "/guide");
 
-  const onCopyGuide = async (which: "main" | "icon") => {
+  // 统一复制 + 瞬态 toast(1.5s「已复制」钮文案 & 面板 toast 行双反馈)
+  const copyWith = async (text: string, done: () => void, toastMsg: string) => {
     try {
-      await navigator.clipboard.writeText(guideUrl);
-      const set = which === "main" ? setGuideCopied : setGuideIconCopied;
-      set(true);
-      setTimeout(() => set(false), 1500);
+      await navigator.clipboard.writeText(text);
+      done();
+      setToast(toastMsg);
+      setTimeout(() => setToast(null), 2600);
     } catch {
       setError(t("set.mcpErrorGeneric", { msg: "clipboard denied" }));
     }
+  };
+
+  const onCopyGuide = async (_which: "main" | "icon" = "main") => {
+    await copyWith(guideUrl, () => {
+      setGuideCopied(true);
+      setTimeout(() => setGuideCopied(false), 1500);
+    }, t("set.mcpGuideCopiedToast"));
+  };
+
+  const onCopyEndpoint = async () => {
+    await copyWith(endpoint, () => {
+      setEndpointCopied(true);
+      setTimeout(() => setEndpointCopied(false), 1500);
+    }, t("set.mcpEndpointCopiedToast"));
   };
 
   return (
@@ -244,6 +262,16 @@ export function McpServicePanel() {
           {guideCopied ? t("set.mcpGuideLinkCopied") : t("set.mcpCopyGuideLink")}
         </button>
       </div>
+
+      {/* 9/24 老大反馈: 常驻引导提示 — 告诉用户复制后「怎么用」(发给 agent), 消除按钮语义歧义 */}
+      <p className="hint" data-testid="mcp-guide-hint">{t("set.mcpGuideHint")}</p>
+
+      {/* 复制成功的瞬态 toast(2.6s) — 「已复制」之外把下一步动作说明白 */}
+      {toast && (
+        <p className="mcp-toast" data-testid="mcp-toast" role="status">
+          {toast}
+        </p>
+      )}
 
       {staleVersion && status === "running" && (
         <div className="mcp-confirm" data-testid="mcp-stale-warning">
@@ -287,12 +315,28 @@ export function McpServicePanel() {
             <button
               type="button"
               className="btn btn-icon"
+              data-testid="mcp-endpoint-copy"
+              aria-label={t("set.mcpEndpointCopy")}
+              disabled={!config}
+              onClick={() => void onCopyEndpoint()}
+            >
+              {endpointCopied ? t("set.mcpGuideLinkCopied") : t("set.mcpEndpointCopy")}
+            </button>
+          </dd>
+        </div>
+        <div className="mcp-info-row mcp-guide-url-row">
+          <dt>{t("set.mcpGuideRowLabel")}</dt>
+          <dd className="mcp-key-row">
+            <code data-testid="mcp-guide-url">{guideUrl}</code>
+            <button
+              type="button"
+              className="btn btn-icon"
               data-testid="mcp-guide-copy"
               aria-label={t("set.mcpCopyGuideLink")}
               disabled={!config}
               onClick={() => void onCopyGuide("icon")}
             >
-              {guideIconCopied ? t("set.mcpGuideLinkCopied") : t("set.mcpGuideCopy")}
+              {guideCopied ? t("set.mcpGuideLinkCopied") : t("set.mcpGuideCopy")}
             </button>
           </dd>
         </div>

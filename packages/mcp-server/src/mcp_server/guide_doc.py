@@ -9,7 +9,9 @@ tests/test_doc_consistency.py 与权威源逐字比对, 篡改任一字符即红
 from __future__ import annotations
 
 # 参考实现 (S5 单条目自适配标准 + REQ-05; OB-02 并 master 后该路径真实存在)
-# gitee URL 结构 (2026-09-19 实测): 目录 = /tree/<branch>/<path> (GitLab 式 /-/tree/ 404), 文件 = /blob/<branch>/<path>
+# 9/24 老大裁定: gitee 网页有人机验证墙(405 WAF), agent 消费面禁外链 —
+# guide 主路径必须自洽(五段式全文内嵌, 零出网)。本常量仅供人类开发者定位
+# 参考实现源码, 不再进 /guide 任何分段、不再进 agents[].plugin_url。
 REFERENCE_IMPL_URL = (
     "https://gitee.com/ITEater/token-wallet/tree/master/packages/hook-usage-reporter"
 )
@@ -179,11 +181,12 @@ def doc_sections() -> list[dict]:
                     "用 usage_summary / usage_report_echo 回读验证（见「验证步骤」）",
                 ]},
                 {"type": "p", "text": (
-                    "参考实现：Hermes 官方 hook 适配器 hook-usage-reporter——"
+                    "参考实现：Hermes 官方 hook 适配器 hook-usage-reporter"
+                    "（源码随 token-wallet 仓库分发，本页不外链——文档即产品，"
+                    "本页内容自洽，接入所需信息以本页为完整依据）。"
                     "其他 agent 可参考其 hook 触发点设计（post_api_request 提取点——"
                     "post_llm_call 无 usage；buffer 策略 / 批量上报）自行实现适配。"
                 )},
-                {"type": "link", "text": "hook-usage-reporter（参考实现）", "href": REFERENCE_IMPL_URL},
             ],
         },
         {

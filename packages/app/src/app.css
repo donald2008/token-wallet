@@ -1448,6 +1448,36 @@ body {
   background: var(--bg-elev);
   border: 1px solid var(--border);
 }
+/* 9/24: 玻璃 α 滑槽是玻璃开关的子设置 — 左缩进表达从属(8px 网格), off 时降透明度 */
+.glass-alpha-sub {
+  margin-left: var(--space-24);
+}
+.glass-alpha-sub.disabled {
+  opacity: 0.55;
+}
+/* MCP 引导链路: toast 行(复制成功后的「发给 agent」提示, 瞬态) */
+.mcp-toast {
+  margin: var(--space-8) 0 0;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--fg);
+  font-size: var(--font-12, 12px);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+/* 引导链接行: 与服务地址行同构, code 单行省略 */
+.mcp-guide-url-row code {
+  color: var(--accent);
+}
+/* 9/24 视觉自检: 三行右缘按钮对齐 — 内联钮统一最小宽, 右缘成线 */
+.mcp-info-row .btn-icon {
+  min-width: 64px;
+  flex: 0 0 auto;
+}
+/* 主题区: 玻璃开关行与上方说明的间距节奏(hint 与控件分组呼吸) */
+.glass-toggle-row {
+  margin-top: var(--space-8);
+}
 .slider-label {
   display: flex;
   justify-content: space-between;
@@ -2292,6 +2322,7 @@ body {
 }
 .mcp-key-row {
   flex-wrap: wrap;
+  justify-content: flex-end; /* 9/24 对齐铁律③: 值+按钮组贴右缘, 三行右端成线 */
 }
 /* OB-03: 引导链接内联复制钮 — 复用 .btn-icon, 仅约束不随 code 长度换行漂移 */
 .mcp-guide-copy {

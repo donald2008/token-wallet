@@ -184,7 +184,8 @@ class TestOnboardingGuide:
         agent = data["agents"][0]
         assert set(agent) == {"id", "name", "plugin_url", "docs_url", "configure", "verify"}
         assert agent["id"] == "self-service"
-        assert agent["plugin_url"]  # 参考实现链接在场
+        # 9/24 撤外链: gitee 人机验证墙, agent 消费面禁外链 — 字段保留但置 None
+        assert agent["plugin_url"] is None
         assert agent["docs_url"] is None
 
         # doc 分段: 五段式完整

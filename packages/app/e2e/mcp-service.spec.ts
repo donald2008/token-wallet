@@ -157,3 +157,51 @@ test.describe("设置页 MCP 服务区", () => {
     expect(clip).toBe("http://127.0.0.1:9131/guide");
   });
 });
+
+// 9/24 老大反馈: 复制语义歧义消除 — 引导提示常驻 + guide 行展示 + endpoint 钮复制地址本体 + toast
+test.describe("MCP 引导链路 UI(9/24 修订)", () => {
+  test.beforeEach(async ({ hostPage: page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("token-wallet.mock.consent.v1", "1");
+    });
+  });
+
+  test("引导 hint 常驻 + guide 行 URL 展示", async ({ hostPage: page }) => {
+    await page.goto("/");
+    await seedMcpState(page, { installed: true, alive: true });
+    await page.reload();
+    await page.getByTestId("settings-btn").click();
+    const panel = page.getByTestId("mcp-panel");
+    // 常驻提示(告诉用户复制后发给 agent)
+    await expect(panel.getByTestId("mcp-guide-hint")).toContainText("agent");
+    // guide 行独立展示, 与服务地址行分离
+    await expect(panel.getByTestId("mcp-guide-url")).toContainText("/guide");
+    // 零 gitee 外链语义: guide 行为 daemon 自产 URL
+    const guideUrlText = await panel.getByTestId("mcp-guide-url").textContent();
+    expect(guideUrlText).not.toContain("gitee");
+  });
+
+  test("服务地址行内联钮 → 复制地址本体(非 guide)", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.goto("/");
+    await seedMcpState(page, { installed: true, alive: true });
+    await page.reload();
+    await page.getByTestId("settings-btn").click();
+    const panel = page.getByTestId("mcp-panel");
+    await panel.getByTestId("mcp-endpoint-copy").click();
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clip).toBe("http://127.0.0.1:9131/mcp");
+  });
+
+  test("主钮复制 guide → toast 行出现并说明下一步", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.goto("/");
+    await seedMcpState(page, { installed: true, alive: true });
+    await page.reload();
+    await page.getByTestId("settings-btn").click();
+    const panel = page.getByTestId("mcp-panel");
+    await panel.getByTestId("mcp-copy-guide").click();
+    await expect(panel.getByTestId("mcp-toast")).toContainText("agent");
+    await expect(panel.getByTestId("mcp-toast")).toBeVisible();
+  });
+});

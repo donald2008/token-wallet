@@ -50,7 +50,8 @@ def build_id() -> str | None:
 _AGENT_SELF_SERVICE: dict = {
     "id": "self-service",
     "name": "自适配标准（任何 agent）",
-    "plugin_url": guide_doc.REFERENCE_IMPL_URL,
+    # 9/24 撤外链: gitee 网页 405 WAF, agent 消费面禁 gitee 链接(结构兼容保留字段, 值置 None)
+    "plugin_url": None,
     "docs_url": None,
     "configure": "按 /guide 文档页五段式标准自助接入（概述→认证→接口规格→真实示例→验证步骤）",
     "verify": "上报一条 report_usage 后用 usage_summary / usage_report_echo 回读验证",
