@@ -481,6 +481,15 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 - 实现：**Python fastmcp** + 官方 MCP streamable-http transport；daemon 侧 schema 用 **pydantic 照本文档 §1–§2 实现**；hook 侧 TS **zod** 由 hook 卡实现；
 - **跨实现一致性靠 fixture**：§8 的 5 组正/反例是共享测试向量，pydantic 与 zod 两套实现对每组 fixture 的 accept/reject 结论必须一致（各自测试内嵌）。
 
+### 5.1 自助接入端点 `GET /guide`（onboarding，与 v1 同版交付）
+
+- **语义**：文档即产品——任何 agent 凭 `http://<host>:9131/guide` + key **自助**接入（D-058），无 per-agent 适配器；app 面板「复制引导链接」（主钮+endpoint 行内联钮）与该端点同源；
+- **双视图**：`Accept: text/html` → 五段式文档页（概述→认证→接口规格→真实示例→验证步骤；中文正文英文代码，无外部资源依赖）；`Accept: application/json` → `doc.sections[].items[]` 结构化视图（程序化消费方直接取分段）；MCP 工具 `get_onboarding_guide` 返回同一数据源；
+- **单一事实源**：五段内嵌 SCHEMA/ENVELOPE/EXAMPLE 常量由本文档 §1.1/§2.1/§8 程序化提取生成（`packages/mcp-server/src/mcp_server/guide_doc.py`，**禁手编**；`tests/test_doc_consistency.py` 与权威源逐字比对，篡改任一字符即红）；协议变更流程 = 先改本文档，再重新提取更新常量；
+- **鉴权同面**：/guide 与 /mcp 同一把 Bearer（§5），无 key 一律 401；文档任何视图零 key 值出现；
+- **endpoint 展示口径**：doc 内展示的 endpoint 在 bind `0.0.0.0`/`::` 时解析为局域网 IPv4（非回环字面量），与 app 面板复制按钮同源语义（t_da2fd1f1 U6）；
+- **真实示例**：五段第 4 段内嵌 §8 F1 payload 原文，可整段提取直接 `report_usage`（期望 accepted=1）。
+
 ---
 
 ## 6. 本地模式例外（边界）
