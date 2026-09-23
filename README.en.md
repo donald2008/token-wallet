@@ -116,8 +116,11 @@ After installing the app:
 3. **API key fully managed for you**: the app generates a random key into `mcp.env`
    (Linux/macOS `~/.config/token-wallet/mcp.env`, Windows `%APPDATA%\token-wallet\mcp.env`);
    copy it from the panel; after "regenerate", restart the daemon when prompted
-4. **Agent onboarding**: "View setup steps" in the panel gives harness-specific instructions
-   (Hermes / Claude Code / opencode / Codex, etc.) and the service address
+4. **Agent onboarding**: click "**Copy guide link**" in the panel and send the link to your
+   agent — it opens the `/guide` self-service standard (five sections: overview → auth →
+   API spec → real example → verification) and completes the MCP client integration and
+   usage reporting on its own, no per-harness manual setup required;
+   the Hermes official implementation lives at [hook-usage-reporter](packages/hook-usage-reporter/) (reference)
 5. After upgrading the app, a leftover old daemon process is detected and the panel offers
    a one-click restart
 

@@ -106,8 +106,10 @@ Claude Code / opencode / Codex 等）时，它们的 token 消耗与成本通过
 2. 「**开机自启**」开关：登录系统自动拉起 daemon，不依赖桌面 app 是否打开
 3. **API Key 全自动管理**：app 生成随机 key 写入 `mcp.env`（Linux/macOS `~/.config/token-wallet/mcp.env`，
    Windows `%APPDATA%\token-wallet\mcp.env`），面板内一键复制；「随机生成」换 key 后按提示重启 daemon 生效
-4. **Agent 接入**：面板「查看安装步骤」按你用的 harness（Hermes / Claude Code / opencode / Codex 等）
-   给出对应接入步骤与服务地址，照做即可
+4. **Agent 接入**：面板点「**复制引导链接**」，把链接发给你用的 agent——agent 打开
+   `/guide` 自适配标准文档（五段式：概述→认证→接口规格→真实示例→验证步骤），
+   自行完成 MCP 客户端接入与用量上报，无需人工按 harness 逐一配置；
+   Hermes 官方实现见 [hook-usage-reporter](packages/hook-usage-reporter/)（参考实现）
 5. 升级 app 后检测到旧版本 daemon 残留进程时，面板提示「一键重启」完成换代
 
 配置项（`mcp.env`，一般无需手改）：
