@@ -2262,15 +2262,29 @@ body {
 .mcp-info-row dd {
   margin: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-8, 8px);
   min-width: 0;
+}
+.mcp-info-row dd > code {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mcp-info-row dd > .btn-icon {
+  flex: 0 0 auto;
 }
 .mcp-info-row code {
   font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
   font-size: var(--font-12, 12px);
   color: var(--fg, #222);
-  word-break: break-all;
+  /* 老大 9/23 真机反馈: LAN URL(http://10.200.1.110:9131/mcp)在 break-all 下中间断行,
+     「/mcp」单独一行 — URL 是不可分割语义单元, 禁字符级断行; 放不下时整体由 dd 的
+     flex-wrap 换到按钮下一行(code 自身永不中间断) */
+  white-space: nowrap;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 :root[data-theme="dark"] .mcp-info-row code,
 :root[data-theme="dark-glass"] .mcp-info-row code {
