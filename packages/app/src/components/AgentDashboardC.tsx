@@ -30,10 +30,19 @@ import { t, tKey } from "../i18n";
 
 type ThemeMode = "dark" | "light";
 
-// t_4b7984d9 B 继承(H): 全数字 token 展示(与 AgentCard.tsx formatTokens 口径对齐), 禁 K/M 简写
+// t_4b7984d9 B 继承(H): 全数字 token 展示(与 AgentCard.tsx formatTokens 口径对齐)
 const fmtWhole = new Intl.NumberFormat("en-US");
 function fmtTokens(n: number): string {
   return fmtWhole.format(n);
+}
+/** DW-01(2026-09-19 卡体裁定): 大数字 M 单位缩写回归设计稿语义(ops-wall 184.6M 形态);
+ *  明细表/趋势轴等仍走 fmtTokens 千分位全精度 — 两口径并存, K/M 禁用约束局部修订
+ *  (D-05x 由收口卡登记)。 */
+export function fmtTokensM(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(Math.round(n));
 }
 function fmtCost(n: number | null, currency: string | null): string {
   if (n == null || currency == null) return "";
@@ -336,6 +345,9 @@ export function AgentDashboardC({
   const trendCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const modelCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstancesRef = useRef<{ trend: unknown; model: unknown }>({ trend: null, model: null });
+  // DW-01 hover 详情: 图例 ↔ 扇区双向联动(关 canvas 内置 tooltip, 详情走 DOM hoverdetail 行)
+  const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
+  const hoverSlice = hoveredSlice != null ? slices[hoveredSlice] : undefined;
 
   // 趋势空态语义: 拉取失败 → failed; day 桶不足 2 天(兼容退路的「今日」单桶也算 1 天) → 数据积累中
   const trendState: "ok" | "failed" | "accumulating" = !trendSummary.ok
@@ -450,23 +462,21 @@ export function AgentDashboardC({
           responsive: true,
           maintainAspectRatio: false,
           cutout: "55%",
+          // DW-01(卡体裁定): 内置 tooltip 压图形(真机实锤④) → 关闭; 具体数值走 DOM
+          // hover 详情行, hover 联动 = chartjs-compact-cards skill 坑①解法。
+          events: ["mousemove", "mouseout"],
+          onHover: (_evt: unknown, elements: { index: number }[]) => {
+            const idx = elements.length > 0 ? (elements[0]!.index ?? null) : null;
+            setHoveredSlice(idx != null && slices[idx] ? idx : null);
+          },
           plugins: {
             legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx: { parsed: number; dataIndex: number }) => {
-                  const s = slices[ctx.dataIndex];
-                  if (!s) return "";
-                  const sum = slices.reduce((a, x) => a + x.tokens, 0) || 1;
-                  return `${s.model} · ${fmtWhole.format(s.tokens)} tokens · ${((s.tokens / sum) * 100).toFixed(1)}%`;
-                },
-              },
-            },
+            tooltip: { enabled: false },
           },
         },
       });
     }
-  }, [trend, slices, trendState, modelState]);
+  }, [trend, slices, trendState, modelState, hoveredSlice]);
 
   useEffect(() => {
     void renderCharts();
@@ -612,14 +622,17 @@ export function AgentDashboardC({
         <section className={panelCls("dash-panel dash-kpi t1", panelStale.summary)} data-stale={staleAttr(panelStale.summary)}>
           <div className="dash-kpi-body">
             <div className="dash-label">{t("dash.kpiTokens", { window: windowLabel })}</div>
+            {/* DW-01: 大数字 M 缩写(设计稿 184.6M 形态) + 精确数副行(千分位全精度保留) */}
             <div className="dash-kpi-v" data-testid="agent-dashboard-c-kpi-tokens">
-              <span data-testid="agent-dashboard-c-hero-tokens">{fmtTokens(totalTokens)}</span>
+              <span data-testid="agent-dashboard-c-hero-tokens">{fmtTokensM(totalTokens)}</span>
               <small>tokens</small>
             </div>
             <div className="dash-kpi-sub">
               {t("dash.callsPre")}
               <b className="dash-num">{fmtWhole.format(summary.total.calls)}</b>
               {t("dash.callsPost")}
+              {" · "}
+              <b className="dash-num">{fmtWhole.format(totalTokens)}</b>
             </div>
           </div>
         </section>
@@ -724,54 +737,62 @@ export function AgentDashboardC({
           <div className="dash-pbody dash-pbody-model">
             {modelState === "ok" ? (
               <>
+                {/* DW-01 形态回归(设计稿 ops-wall .p-model): 环左 128px 定容 + 图例右。
+                 * SL-08 纵向化+5列表形态按本卡裁定退役(两轮「当时合理」修复叠加漂移)。 */}
                 <div className="chart-wrap chart-wrap-model" data-testid="agent-dashboard-c-chart-model">
                   <canvas ref={modelCanvasRef} />
-                  {/* appendix 数据接线: 环形+中心总量(当前 agent 全模型 tokens 合计) */}
+                  {/* appendix 数据接线: 环形+中心总量(当前 agent 全模型 tokens 合计);
+                   * DW-01: M 单位缩写回归设计稿 184.6M 形态(t_4b7984d9 K/M 禁用约束局部修订) */}
                   <div className="dash-donut-center" data-testid="agent-dashboard-c-model-total">
-                    <b className="dash-num">{fmtTokens(slices.reduce((a, x) => a + x.tokens, 0))}</b>
+                    <b className="dash-num">{fmtTokensM(slices.reduce((a, x) => a + x.tokens, 0))}</b>
                     <span>{t("dash.donutTotal")}</span>
                   </div>
                 </div>
-                <table className="dash-model-table" data-testid="agent-dashboard-c-model-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">{t("dash.thModel")}</th>
-                      <th scope="col" className="num">{t("dash.thCalls")}</th>
-                      <th scope="col" className="num">tokens</th>
-                      <th scope="col" className="num">{t("dash.thShare")}</th>
-                      <th scope="col" className="num">{t("dash.thHitRate")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {slices.map((s, i) => {
-                      const modelTotal = slices.reduce((a, x) => a + x.tokens, 0) || 1;
-                      const share = ((s.tokens / modelTotal) * 100).toFixed(1);
-                      // H2 守卫真实分母(hit+miss)而非 tokens — 纯 output 行不渲染 NaN%
-                      const sHitRate =
-                        s.hit + s.miss > 0
-                          ? `${((s.hit / (s.hit + s.miss)) * 100).toFixed(1)}%`
-                          : "—";
-                      return (
-                        <tr key={s.model} data-testid={`agent-dashboard-c-model-row-${s.model}`}>
-                          <td className="name">
-                            {/* chips 图例色点(S5): 与环形扇区同源同序(--chart-N) */}
-                            <i
-                              className="dash-chip"
-                              style={{ background: `var(${seriesVar(i)})` }}
-                              aria-hidden="true"
-                            />
-                            {/* SL-08 修复①(配套): 文本进 <b> 承载 fixed 布局下的单元格内截断 */}
-                            <b>{s.model}</b>
-                          </td>
-                          <td className="num">{fmtWhole.format(s.calls)}</td>
-                          <td className="num">{fmtTokens(s.tokens)}</td>
-                          <td className="num">{share}%</td>
-                          <td className="num">{sHitRate}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                {/* 图例(设计稿 .legend): chip + 模型名 + 占比两列; 具体数值走 hover(DW-01 裁定) */}
+                <ul className="dash-model-legend" data-testid="agent-dashboard-c-model-table">
+                  {slices.map((s, i) => {
+                    const modelTotal = slices.reduce((a, x) => a + x.tokens, 0) || 1;
+                    const share = Math.round((s.tokens / modelTotal) * 100);
+                    return (
+                      <li
+                        key={s.model}
+                        className={`dash-model-legend-li${hoveredSlice === i ? " is-hover" : ""}`}
+                        data-testid={`agent-dashboard-c-model-row-${s.model}`}
+                        onMouseEnter={() => setHoveredSlice(i)}
+                        onMouseLeave={() => setHoveredSlice(null)}
+                      >
+                        <i
+                          className="dash-chip"
+                          style={{ background: `var(${seriesVar(i)})` }}
+                          aria-hidden="true"
+                        />
+                        <span className="nm">{s.model}</span>
+                        <b className="pc num">{share}%</b>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {/* hover 详情行(DW-01 裁定: 具体数值悬浮呈现, 不占常驻布局预算) */}
+                <div className="dash-model-hoverdetail" data-testid="agent-dashboard-c-model-hoverdetail" aria-live="polite">
+                  {hoverSlice ? (
+                    <>
+                      <b>{hoverSlice.model}</b>
+                      <span>{fmtWhole.format(hoverSlice.tokens)} tokens</span>
+                      <span>
+                        {t("dash.callsPre")}
+                        {fmtWhole.format(hoverSlice.calls)}
+                        {t("dash.callsPost")}
+                      </span>
+                      <span>
+                        hit {(hoverSlice.hit + hoverSlice.miss > 0
+                          ? `${((hoverSlice.hit / (hoverSlice.hit + hoverSlice.miss)) * 100).toFixed(1)}%`
+                          : "—")}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="hint">{t("dash.hoverHint")}</span>
+                  )}
+                </div>
               </>
             ) : modelState === "empty" ? (
               <ModuleEmpty testid="dash-model-empty" text={t("dash.noModelData")} />

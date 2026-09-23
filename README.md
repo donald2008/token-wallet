@@ -231,6 +231,14 @@ corepack pnpm build:win    # = corepack pnpm -r build + corepack pnpm -C package
 （electron-builder），不需要 Rust / Visual Studio / WebView2 工具链；详细发版手册见
 [RELEASE.md](RELEASE.md)（含 WSL2 出包时的 wine64 / npmmirror 镜像前置）。
 
+> **MCP daemon sidecar 随包分发**（lite-01）：`dist:win` 打包前自动构建 MCP daemon
+> （`packages/mcp-server/deploy/build-exe.ps1`，PyInstaller onefile，前置 Windows 宿主 +
+> Python ≥ 3.11 + pip 依赖自动补装）并收进安装包——设置页「MCP 服务」开箱即用。
+> WSL2 侧出包时需先在 Windows 宿主跑一次该脚本产出
+> `packages/app/resources/token-wallet-mcp.exe`（产物已 gitignore），或设
+> `TW_SKIP_DAEMON_BUILD=1` 显式跳过（跳过后装出的 app 设置页 MCP 面板将提示
+> 未找到 daemon 可执行文件，不建议）。
+
 ## FAQ
 
 **Q：SmartScreen 拦截安装？**

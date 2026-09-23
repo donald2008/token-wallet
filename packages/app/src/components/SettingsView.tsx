@@ -17,7 +17,6 @@ import { t, tKey, type Lang } from "../i18n";
 import { useLang } from "../i18nReact";
 import { BrandLogo } from "./brand-logos";
 import { McpServicePanel } from "./McpServicePanel";
-import { AgentGuideModal } from "./AgentGuideModal";
 import { GLASS_ALPHA_MIN, GLASS_ALPHA_MAX, persistGlassAlpha } from "../theme";
 
 const THEME_OPTIONS: { id: ThemeMode; labelKey: string }[] = [
@@ -43,8 +42,6 @@ interface Props {
   /** 拖动即变(实时写 CSS, 不持久化); 停手落 localStorage 由 SettingsView onPointerUp 触发 */
   onGlassAlpha: (a: number) => void;
   onBack: () => void;
-  /** theme-glass 实验入口: 打开进度条形态方案页(可选, 缺省不渲染入口) */
-  onOpenQuota?: () => void;
   /** page = 页内导航(保留形态); modal = 设置弹窗(P0-6), 头部渲染 × 关闭 */
   variant?: "page" | "modal";
 }
@@ -69,14 +66,12 @@ export function SettingsView({
   onGlassAlpha,
   onBack,
   variant = "page",
-  onOpenQuota,
 }: Props) {
   const { lang, setLang } = useLang();
   const [storagePaths, setStoragePaths] = useState<StoragePaths | null>(null);
   const [autoStart, setAutoStart] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [updater, setUpdater] = useState<UpdaterState | null>(null);
-  const [guideOpen, setGuideOpen] = useState(false);
 
   // 存储路径(D-019) + 开机自启(D-024), 默认关
   useEffect(() => {
@@ -267,20 +262,9 @@ export function SettingsView({
 
         <section className="settings-section" data-testid="mcp-sec">
           <h4>{t("set.mcpTitle")}</h4>
-          <McpServicePanel onGuideOpen={() => setGuideOpen(true)} />
+          <McpServicePanel />
         </section>
-
-        {/* theme-glass 实验(t_37416b22): 进度条形态方案页入口 */}
-        {onOpenQuota && (
-          <section className="settings-section" data-testid="quota-entry">
-            <h4>{t("set.quotaGallery")}</h4>
-            <button type="button" className="btn" data-testid="quota-open" onClick={onOpenQuota}>
-              {t("quota.open")}
-            </button>
-          </section>
-        )}
       </div>
-      <AgentGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );
 }

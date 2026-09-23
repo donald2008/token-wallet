@@ -107,6 +107,74 @@ function deriveMultiFromSingle(base: typeof fakeSummary) {
   };
 }
 
+/**
+ * DW-01 round-2(老大终审 BLOCKING-1): 零滚动断言判别力强化 fixture。
+ * 旧 mock(4 agent)在固定行高预算下一屏装得下, 旧布局(grid-auto-rows:min-content +
+ * overflow-y:auto)也零滚动 → 变异验证实锤断言假绿(锁不住目标回归)。
+ * 本 fixture 把 agent 行数 ×10(40 agent) + heavy agent tokens 抬到 ~134M(9 位数千分位):
+ * 明细表 40 行的 min-content 高度远超主区行预算 → 旧代码必然真实溢出(scrollHeight > clientHeight),
+ * 新代码(固定预算 + 面板自身内滚)仍零滚动 = 旧红新绿, 断言恢复判别力。
+ * total 严格 = rows 合计(t_4b7984d9 round-3 契约: hero 数字与明细对得上)。 */
+function deriveStressMulti(base: typeof fakeSummary) {
+  const agents = Array.from({ length: 40 }, (_, i) => ({
+    group: `agent-${String(i).padStart(2, "0")}`,
+    calls: 10 + i,
+    input_cache_hit_tokens: 100_000 + i * 50_000,
+    input_cache_miss_tokens: 20_000 + i * 10_000,
+    output_tokens: 5_000 + i * 2_500,
+    cost_total: i % 2 === 0 ? i * 0.5 : null,
+    currency: i % 2 === 0 ? "USD" : null,
+    by_status: { completed: 10 + i, partial: 2, unknown: 0 },
+  }));
+  // heavy 行保 9 位数量级(老大真机 4,474,000 形态放大)
+  agents[0]!.calls = 80_000;
+  agents[0]!.input_cache_hit_tokens = 100_000_000;
+  agents[0]!.input_cache_miss_tokens = 25_000_000;
+  agents[0]!.output_tokens = 9_000_000;
+  agents[0]!.cost_total = 370.2;
+  agents[0]!.currency = "USD";
+  const sum = agents.reduce(
+    (acc, r) => {
+      acc.calls += r.calls;
+      acc.input_cache_hit_tokens += r.input_cache_hit_tokens;
+      acc.input_cache_miss_tokens += r.input_cache_miss_tokens;
+      acc.output_tokens += r.output_tokens;
+      acc.cost_total += r.cost_total ?? 0;
+      acc.by_status.completed += r.by_status.completed;
+      acc.by_status.partial += r.by_status.partial;
+      acc.by_status.unknown += r.by_status.unknown;
+      return acc;
+    },
+    {
+      calls: 0,
+      input_cache_hit_tokens: 0,
+      input_cache_miss_tokens: 0,
+      output_tokens: 0,
+      cost_total: 0,
+      by_status: { completed: 0, partial: 0, unknown: 0 },
+    },
+  );
+  const stressSummary = {
+    ...base,
+    rows: agents,
+    total: { ...base.total, ...sum, currency: "USD" },
+  };
+  // 复用既有三维派生形态(agent | agent,model | day); model/day 维沿用 stress 行
+  const modelRows = agents.flatMap((r) => {
+    const mk = (model: string) => ({ ...r, group: `${r.group}|${model}` });
+    return [mk("glm-5.3-flash"), mk("kimi-k2")];
+  });
+  const dayRows = agents.map((r, i) => ({
+    ...r,
+    group: i % 2 === 0 ? "2026-09-08" : "2026-09-09",
+  }));
+  return {
+    agent: { ok: true, data: stressSummary },
+    "agent,model": { ok: true, data: { ...stressSummary, rows: modelRows } },
+    day: { ok: true, data: { ...stressSummary, rows: dayRows } },
+  };
+}
+
 async function agreeAndSeedMultiFromSingle(page: import("@playwright/test").Page) {
   await page.getByTestId("consent-agree").click();
   await seedAgentUsageMulti(page, deriveMultiFromSingle(fakeSummary));
@@ -239,25 +307,29 @@ test("详情按钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明细�
 
   // KPI 带: 全 4 卡合计 tokens + 13.57 USD(1.23 + 12.34, home/desktop cost 留空不计)
   // njbx02(64k) + njbx02-heavy(4,474k) + home(17k) + desktop(0) = 4,555,000
-  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("4,555,000");
+  // DW-01: KPI 大数字 M 缩写(设计稿 184.6M 形态) → 4.6M; 精确数千分位保留在副行
+  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("4.6M");
   await pwExpect(page.getByTestId("agent-dashboard-c-hero-cost")).toContainText("13.57 USD");
   await pwExpect(page.getByTestId("agent-dashboard-c-active")).toHaveText("2"); // njbx02 + njbx02-heavy 都是 active
   // KPI 带 4 面板包裹锚(SL-05 契约表 agent-dashboard-c-kpi-{tokens,cost,hit,active})
-  await pwExpect(page.getByTestId("agent-dashboard-c-kpi-tokens")).toContainText("4,555,000");
+  await pwExpect(page.getByTestId("agent-dashboard-c-kpi-tokens")).toContainText("4.6M");
+  // 精确数(DW-01)在 KPI 副行
+  await pwExpect(page.locator(".dash-kpi.t1 .dash-kpi-sub")).toContainText("4,555,000");
   await pwExpect(page.getByTestId("agent-dashboard-c-kpi-cost")).toContainText("13.57 USD");
   await pwExpect(page.getByTestId("agent-dashboard-c-kpi-hit")).toContainText("80.0%");
   await pwExpect(page.getByTestId("agent-dashboard-c-kpi-active")).toContainText("2/4"); // 2 active / 4 agent
-  // KPI tokens 副行: 调用 = total.calls(100 + 8000 + 50 + 0)
+  // KPI tokens 副行: 调用 = total.calls(100 + 8000 + 50 + 0) + 精确数(DW-01)
   await pwExpect(page.locator(".dash-kpi.t1 .dash-kpi-sub")).toContainText("8,150");
   // 命中率 = hit/(hit+miss) = 3,370,760 / 4,213,450 ≈ 80.0%
   await pwExpect(page.getByTestId("agent-dashboard-c-hit-rate")).toHaveText(/80\.0%/);
   await pwExpect(page.getByTestId("agent-dashboard-c-window")).toHaveText("09-09 ~ 09-09");
   await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("2"); // 多维: njbx02 glm+kimi
-  // Model 迷你数据表在场, njbx02 2 模型 → 2 行
+  // Model 图例(DW-01 设计稿形态: 环左 + 图例右), njbx02 2 模型 → 2 行
   await pwExpect(page.getByTestId("agent-dashboard-c-model-table")).toBeVisible();
-  await pwExpect(page.locator('[data-testid="agent-dashboard-c-model-table"] tbody tr')).toHaveCount(2);
-  // glm 行命中率 = hit/(hit+miss) = 3,310,760 / 4,138,450 ≈ 80.0%(e2e mock 用单维原值)
-  await pwExpect(page.getByTestId("agent-dashboard-c-model-row-glm-5.3-flash")).toContainText("80.0%");
+  await pwExpect(page.locator('[data-testid="agent-dashboard-c-model-table"] li')).toHaveCount(2);
+  // glm 图例行占比 = deriveMultiFromSingle 对半拆分(glm=kimi=4,555,000/2) → 50%
+  // (DW-01: 图例只留整数占比, 具体数值走 hover 详情行)
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-row-glm-5.3-flash")).toContainText("50%");
 
   // 三分项 split-bar 宽度按比例(total 汇总成 4,555,000 后 hit/miss/out 各占
   // 74.005% / 18.500% / 7.495%, 浏览器浮点 .toFixed(1) 输出可能为 "74%" / "18.5%" / "7.5%",
@@ -374,7 +446,7 @@ test("daemon 不可达: 大屏方案 C 空态 + 返回按钮", async ({ hostPage
   await page.getByTestId("main-tab-local-agent").click();
 
   // 大屏方案 C 入口: 通过直接 state 触发不现实(主页 Agent 卡空态无详情按钮),
-  // 改用 settings/QuotaGallery 同样 view 切路径的等价验证: 大屏空态组件本身
+  // 改用 settings 同样 view 切路径的等价验证: 大屏空态组件本身
   // 由 App.tsx view="agent-dashboard" 分支 + mcpSummary.ok=false 触发。
   // 此处验空态组件契约: AgentCardEmpty 已在主页可见, 大屏空态用同一组件复用。
   // (大屏空态分支的端到端切换依赖主页 detail 按钮, daemon 断连时无 detail 按钮,
@@ -571,6 +643,9 @@ test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×
 }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
+  // DW-01 round-2(BLOCKING-1): 本测试维持常规数据(压力数据 80 模型切片会把 900×600
+  // 四象限几何推爆, 属非真实形态) — 判别力改由下方机制断言承担(锁 overflow/grid 行
+  // 预算机制本身, 与数据量无关); 真实溢出判别(压力数据)由 DW-01 1920×1080 用例承担。
   await seedAgentUsageMulti(page, deriveMultiFromSingle(fakeSummary));
 
   const quads = [
@@ -624,6 +699,103 @@ test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×
   const box = await page.evaluate(() => {
     const dash = document.querySelector(".agent-dashboard-c") as HTMLElement;
     const footer = document.querySelector(".agent-dashboard-c-footer") as HTMLElement;
+    const grid = document.querySelector(".dash-grid") as HTMLElement;
+    return {
+      ch: dash.clientHeight,
+      sh: dash.scrollHeight,
+      // DW-01 round-2 机制断言(b): overflow/行预算机制本身, 数据量无关判别
+      dashOverflowY: getComputedStyle(dash).overflowY,
+      gridAutoRows: getComputedStyle(grid).gridAutoRows,
+      footerBottom: footer.getBoundingClientRect().bottom,
+      vh: window.innerHeight,
+    };
+  });
+  // 机制断言: 布局机制回退(min-content 自由生长 / overflow-y:auto 逃生门)一律红
+  expect(
+    box.dashOverflowY,
+    `根容器 overflow-y 必须为 hidden(整页滚动逃生门退役), 实测 ${box.dashOverflowY}`,
+  ).toBe("hidden");
+  expect(
+    box.gridAutoRows,
+    "dash-grid 不得回退到 grid-auto-rows:min-content 自由生长行高",
+  ).not.toBe("min-content");
+  expect(box.sh, `大屏容器不得纵向滚动(scrollHeight ${box.sh} > clientHeight ${box.ch})`).toBeLessThanOrEqual(
+    box.ch + 1,
+  );
+  expect(box.footerBottom, `页脚 bottom=${box.footerBottom} 必须 ≤ 视口高 ${box.vh}`).toBeLessThanOrEqual(
+    box.vh + 0.5,
+  );
+});
+
+/** DW-01 布局物理约束(2026-09-19 卡体硬性要求): 老大真机分辨率 1920×1080 零滚动。
+ *  900×560 门禁锁产品窗口壳内收口; 1920×1080 锁大屏在宽松分辨率下同样不漂移 —
+ *  grid-template-rows 固定行高预算 + overflow:hidden 后, 容器在任何视口高度都不得出现
+ *  纵向滚动(布局物理约束纪律), footer 仍钉在视口底缘。 */
+test("DW-01: 1920×1080 真机分辨率零滚动 + footer 钉底 + 布局机制锁", async ({ hostPage, page }) => {
+  void hostPage;
+  await page.getByTestId("consent-agree").click();
+  // DW-01 round-2(BLOCKING-1 判别力): 压力数据(40 agent 行)。
+  // 判别力三层: ①900×560 段 — 旧布局 min-content 行高在压力数据下总高 ~700px > 可用 ~450px,
+  // 零滚动断言真实「旧红新绿」(变异验证见交付评论); ②1920×1080 段 — 压力量级下零滚动仍成立;
+  // ③机制断言 — overflow/行预算回退一律红, 与数据量/分辨率无关。
+  await seedAgentUsageMulti(page, deriveStressMulti(fakeSummary));
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("?view=agent-dashboard&standalone=1");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  await page.waitForTimeout(800); // chart.js 异步渲染落定
+  const box = await page.evaluate(() => {
+    const dash = document.querySelector(".agent-dashboard-c") as HTMLElement;
+    const footer = document.querySelector(".agent-dashboard-c-footer") as HTMLElement;
+    const grid = document.querySelector(".dash-grid") as HTMLElement;
+    return {
+      ch: dash.clientHeight,
+      sh: dash.scrollHeight,
+      // DW-01 round-2 机制断言(b): 锁布局机制本身, 不只锁当前数据量的表现 —
+      // 根容器 overflow 必须是 hidden(整页滚动逃生门已退役, 旧代码为 overflow-y:auto);
+      // 行预算必须是 grid-template-rows 固定分配(旧代码为 grid-auto-rows:min-content)。
+      dashOverflowY: getComputedStyle(dash).overflowY,
+      gridTemplateRows: getComputedStyle(grid).gridTemplateRows,
+      gridAutoRows: getComputedStyle(grid).gridAutoRows,
+      gridBottom: grid.getBoundingClientRect().bottom,
+      footerBottom: footer.getBoundingClientRect().bottom,
+      vh: window.innerHeight,
+    };
+  });
+  // 机制断言: 布局机制回退(min-content 行预算 / overflow-y:auto 滚动逃生门)一律红,
+  // 与数据量无关 — 这是本卡修复的目标形态本身。
+  expect(
+    box.dashOverflowY,
+    `根容器 overflow-y 必须为 hidden(整页滚动逃生门退役), 实测 ${box.dashOverflowY}`,
+  ).toBe("hidden");
+  expect(
+    box.gridAutoRows,
+    "dash-grid 不得回退到 grid-auto-rows:min-content 自由生长行高",
+  ).not.toBe("min-content");
+  expect(
+    box.gridTemplateRows.split(" ").length,
+    `grid-template-rows 必须是固定三行预算(auto/1.2fr/1fr), 实测 "${box.gridTemplateRows}"`,
+  ).toBe(3);
+  // 零滚动断言(a 判别力强化后): 40 行压力数据下, 旧布局在此必然 scrollHeight > clientHeight。
+  expect(box.sh, `1920×1080 大屏容器不得纵向滚动(scrollHeight ${box.sh} > clientHeight ${box.ch})`).toBeLessThanOrEqual(
+    box.ch + 1,
+  );
+  expect(box.gridBottom, `面板墙 bottom=${box.gridBottom} 必须 ≤ 视口高 ${box.vh}`).toBeLessThanOrEqual(
+    box.vh + 0.5,
+  );
+  expect(box.footerBottom, `1920×1080 页脚 bottom=${box.footerBottom} 必须 ≤ 视口高 ${box.vh}`).toBeLessThanOrEqual(
+    box.vh + 0.5,
+  );
+
+  // ② 900×560(产品窗口内容尺寸) + 压力数据: 零滚动断言的「旧红新绿」判别力段 —
+  // 旧布局(min-content 行高自由生长)在 40 行明细下总高远超 ~450px 可用预算,
+  // scrollHeight > clientHeight 必然成立; 新布局(固定预算 + 面板内滚)仍零滚动。
+  await page.setViewportSize({ width: 900, height: 560 });
+  await page.goto("?view=agent-dashboard&standalone=1");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  await page.waitForTimeout(600);
+  const box560 = await page.evaluate(() => {
+    const dash = document.querySelector(".agent-dashboard-c") as HTMLElement;
+    const footer = document.querySelector(".agent-dashboard-c-footer") as HTMLElement;
     return {
       ch: dash.clientHeight,
       sh: dash.scrollHeight,
@@ -631,11 +803,11 @@ test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×
       vh: window.innerHeight,
     };
   });
-  expect(box.sh, `大屏容器不得纵向滚动(scrollHeight ${box.sh} > clientHeight ${box.ch})`).toBeLessThanOrEqual(
-    box.ch + 1,
+  expect(box560.sh, `900×560 压力数据下大屏容器不得纵向滚动(scrollHeight ${box560.sh} > clientHeight ${box560.ch})`).toBeLessThanOrEqual(
+    box560.ch + 1,
   );
-  expect(box.footerBottom, `页脚 bottom=${box.footerBottom} 必须 ≤ 视口高 ${box.vh}`).toBeLessThanOrEqual(
-    box.vh + 0.5,
+  expect(box560.footerBottom, `900×560 页脚 bottom=${box560.footerBottom} 必须 ≤ 视口高 ${box560.vh}`).toBeLessThanOrEqual(
+    box560.vh + 0.5,
   );
 });
 
@@ -875,8 +1047,8 @@ test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + �
   await pwExpect(page.getByTestId("dash-agent-tab-njbx02")).toHaveAttribute("aria-selected", "true");
   await pwExpect(page.getByTestId("dash-agent-tab-home-computer")).toHaveAttribute("aria-selected", "false");
 
-  // hero = 全局 total(148,400), tab 只联动 Model 分布/明细
-  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148,400");
+  // hero = 全局 total(148,400 → DW-01 M 缩写 148.4K), tab 只联动 Model 分布/明细
+  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148.4K");
   await pwExpect(page.getByTestId("agent-dashboard-c-hero-cost")).toContainText("3.06 USD");
 
   // Model 分布: njbx02 有 glm + kimi 两个模型 → 模型计数 2(真实多模型, 非单 slice 占位)
@@ -884,7 +1056,7 @@ test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + �
   await pwExpect(page.getByTestId("agent-dashboard-c-chart-model")).toHaveCount(1);
   // 环形中心总量(S7 契约表 agent-dashboard-c-model-total) = 当前 agent 模型 tokens 合计
   // njbx02: glm(105k) + kimi(23k) = 128,000; 切 home 后 = (7000+3400+1600)+(5000+2600+800) = 20,400
-  await pwExpect(page.getByTestId("agent-dashboard-c-model-total")).toContainText("128,000");
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-total")).toContainText("128.0K");
   // 无占位 slice: 旧退路的 model:"tokens" 不得出现(canvas labels 无法直读,
   // 用「模块空态不出现 + 模型计数真实」双重锚定)
   await pwExpect(page.getByTestId("dash-model-empty")).toHaveCount(0);
@@ -910,11 +1082,11 @@ test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + �
   await page.getByTestId("dash-agent-tab-home-computer").click();
   await pwExpect(page.getByTestId("dash-agent-tab-home-computer")).toHaveAttribute("aria-selected", "true");
   await pwExpect(page.getByTestId("dash-agent-tab-njbx02")).toHaveAttribute("aria-selected", "false");
-  // KPI 保持全局口径(148,400), Model 分布联动
-  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148,400");
+  // KPI 保持全局口径(148,400 → 148.4K DW-01), Model 分布联动
+  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148.4K");
   await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("2"); // glm + deepseek
-  // 环形中心总量联动切换: home-computer = glm(12,000) + deepseek(8,400) = 20,400
-  await pwExpect(page.getByTestId("agent-dashboard-c-model-total")).toContainText("20,400");
+  // 环形中心总量联动切换: home-computer = glm(12,000) + deepseek(8,400) = 20,400 → DW-01 M 缩写 20.4K
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-total")).toContainText("20.4K");
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-home-computer")).toHaveClass(/is-selected/);
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02")).not.toHaveClass(/is-selected/);
 });
@@ -938,8 +1110,8 @@ test("t_12c28686 多维失败域隔离: model/day 维度 unreachable → 各模�
   await page.getByTestId("agent-detail-njbx02").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
 
-  // 单维数据仍活着: KPI/三分项/明细正常(失败域隔离, KPI=全局 148,400); 明细全量 2 行
-  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148,400");
+  // 单维数据仍活着: KPI/三分项/明细正常(失败域隔离, KPI=全局 148,400 → 148.4K DW-01); 明细全量 2 行
+  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148.4K");
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-list").locator("tbody tr")).toHaveCount(2);
 
   // Model 分布: 显式「数据拉取失败」+ 重试按钮, 不静默空白, 不画假环
@@ -1044,7 +1216,7 @@ test("SL-03 SC-02 整屏降级: 三维全失败 → 横幅(状态+快照时效+�
   expect(detailFilter, "数据区降饱和未生效(SC-02 快照语义)").toContain("saturate(0.25)");
 
   // ③ 旧快照保留(H7 同源): KPI/明细 仍是掉线前那一拍的真数据, 不清零
-  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148,400");
+  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148.4K");
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-list").locator("tbody tr")).toHaveCount(2);
 
   // ④ footer 时效标注 + 降级态状态点
@@ -1190,7 +1362,7 @@ test("SL-03 SC-03 面板级降级: model 掉线但有旧快照 → 面板标降�
   await pwExpect(page.locator(".dash-p-detail")).not.toHaveClass(/is-stale/);
   await pwExpect(page.getByTestId("dash-trend-empty")).toContainText("数据拉取失败");
   // KPI 数据不受面板级降级影响
-  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148,400");
+  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148.4K");
 
   // footer: 面板级降级摘要(时效标注 H7) + 重试动作(SC-03 恢复入口)
   await pwExpect(page.getByTestId("agent-dashboard-c-foot-degraded")).toContainText("部分面板拉取失败");

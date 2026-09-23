@@ -1,6 +1,6 @@
 /**
  * 设置页 MCP 服务区块(D-055 / t_4bd214de):
- * 状态探测 + 一键启停 + 开机自启(Q1 联动) + API Key 复制/重生成 + 引导入口。
+ * 状态探测 + 一键启停 + 开机自启(Q1 联动) + API Key 复制/重生成 + 复制引导链接(OB-03)。
  *
  * 设计: 独立组件, 由 SettingsView.tsx 嵌入 <section className="settings-section">,
  * 自身不持有 settings section chrome。单一职责 = MCP 区块状态机。
@@ -31,18 +31,17 @@ import {
 
 type Status = "loading" | "running" | "stopped" | "not_installed";
 
-interface Props {
-  /** 进入设置页时探一次 + app 启动探一次; onChange 留给父级做刷新钩 */
-  onGuideOpen: () => void;
-}
-
-export function McpServicePanel({ onGuideOpen }: Props) {
+export function McpServicePanel() {
   const [status, setStatus] = useState<Status>("loading");
   const [config, setConfig] = useState<McpConfigView | null>(null);
   const [autostart, setAutostart] = useState(false);
   const [busy, setBusy] = useState<"start" | "stop" | "genKey" | "autostart" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // OB-03: 引导链接复制成功的瞬态反馈(与 key 复制同款 1.5s)
+  // P2-2(review #1683): 主钮/内联钮各自独立瞬态, 修文案串扰
+  const [guideCopied, setGuideCopied] = useState(false);
+  const [guideIconCopied, setGuideIconCopied] = useState(false);
   // 重生成 key 时的二次确认(避免误点导致已配 agent 失联)
   const [confirmGenKey, setConfirmGenKey] = useState(false);
   // 重生成 key 后短时提示
@@ -54,11 +53,12 @@ export function McpServicePanel({ onGuideOpen }: Props) {
     // ⚠️ 不要无条件 setError(null): 操作流的错误(start/stop/genKey 失败)会被下次 probe 抹掉
     // 只在用户主动重试时(probe 不在错误恢复路径)清空; 此处保留 error, 由操作路径自己清
     const [r, c, a] = await Promise.all([mcpProbe(), mcpGetConfig(), mcpGetAutostart()]);
-    setConfig(c);
+    // OB-03: 桥/降级路径可能返 null(config 缺失) — probe 不得因此崩, 复制钮已按 !config 守卫
+    setConfig(c ?? null);
     setAutostart(a.mcpAutostart);
     // t_1b396e2f: get_config 已并入 build_id 比对 — daemon 陈旧(含 daemon 侧无字段而本机 exe 有)
     // 或因 restart 收敛后单点复查结果不一致时更新
-    if (c.daemonVersion?.stale) {
+    if (c?.daemonVersion?.stale) {
       const recheck = await mcpCheckVersion();
       setStaleVersion(recheck.stale ? recheck : null);
     } else {
@@ -189,6 +189,22 @@ export function McpServicePanel({ onGuideOpen }: Props) {
       `http://${config.TOKEN_WALLET_HOST}:${config.TOKEN_WALLET_PORT}/mcp`)
     : "http://127.0.0.1:9131/mcp";
 
+  // OB-03(SC-03): 引导链接与 endpoint 同源解析 — host 继承 displayEndpoint 的
+  // 局域网语义(H3/U6: 通配 bind 已被主进程解析为局域网 IPv4), 仅 path 换 /guide。
+  // S9 修订: daemon 离线也不做静态兜底 — 复制 URL 即引导语义的全部, agent 拿链接自适配。
+  const guideUrl = endpoint.replace(/\/mcp$/, "/guide");
+
+  const onCopyGuide = async (which: "main" | "icon") => {
+    try {
+      await navigator.clipboard.writeText(guideUrl);
+      const set = which === "main" ? setGuideCopied : setGuideIconCopied;
+      set(true);
+      setTimeout(() => set(false), 1500);
+    } catch {
+      setError(t("set.mcpErrorGeneric", { msg: "clipboard denied" }));
+    }
+  };
+
   return (
     <div className="mcp-panel" data-testid="mcp-panel" data-status={status}>
       <div className="mcp-row">
@@ -221,10 +237,11 @@ export function McpServicePanel({ onGuideOpen }: Props) {
         <button
           type="button"
           className="btn btn-primary"
-          data-testid="mcp-open-guide"
-          onClick={onGuideOpen}
+          data-testid="mcp-copy-guide"
+          disabled={!config}
+          onClick={() => void onCopyGuide("main")}
         >
-          {t("set.mcpAgentOpenGuide")}
+          {guideCopied ? t("set.mcpGuideLinkCopied") : t("set.mcpCopyGuideLink")}
         </button>
       </div>
 
@@ -265,8 +282,18 @@ export function McpServicePanel({ onGuideOpen }: Props) {
       <dl className="mcp-info">
         <div className="mcp-info-row">
           <dt>{t("set.mcpEndpointLabel")}</dt>
-          <dd>
+          <dd className="mcp-key-row">
             <code data-testid="mcp-endpoint">{endpoint}</code>
+            <button
+              type="button"
+              className="btn btn-icon"
+              data-testid="mcp-guide-copy"
+              aria-label={t("set.mcpCopyGuideLink")}
+              disabled={!config}
+              onClick={() => void onCopyGuide("icon")}
+            >
+              {guideIconCopied ? t("set.mcpGuideLinkCopied") : t("set.mcpGuideCopy")}
+            </button>
           </dd>
         </div>
         <div className="mcp-info-row">

@@ -231,35 +231,6 @@ export const ipcMocks: Record<string, IpcHandler> = {
     }
     return { mcpAutostart: enabled, osAutostart: enabled };
   },
-  mcp_get_guide: () => {
-    let s: { alive?: boolean } = {};
-    try {
-      const raw = localStorage.getItem("token-wallet.mock.mcp");
-      if (raw) s = JSON.parse(raw);
-    } catch {
-      /* ignore */
-    }
-    if (s.alive) {
-      return {
-        agents: [
-          {
-            id: "hermes",
-            name: "Hermes",
-            plugin_url: "https://example.com/hermes",
-            configure: "Configure Hermes agent with endpoint http://127.0.0.1:9131/mcp",
-            verify: "curl http://127.0.0.1:9131/mcp -X POST",
-          },
-          {
-            id: "claude-code",
-            name: "Claude Code",
-            plugin_url: "https://example.com/claude-code",
-            configure: "Configure Claude Code MCP integration",
-          },
-        ],
-      };
-    }
-    return { agents: [], reason: "daemon_not_running" };
-  },
   // ---- t_9255cb63: MCP daemon 读数据桥 2 通道 mock ----
   // 读 localStorage token-wallet.mock.mcp.usage(由 seedAgentUsage 注入),
   // 缺省 {ok:false, reason:"unreachable"} — 浏览器 dev 模式无 daemon 时降级显式空态。

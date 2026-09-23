@@ -44,6 +44,61 @@ function probeTcp(host, port = 443, timeoutMs = 3000) {
 }
 
 async function main() {
+  // ---- lite-01(t_aeb0447b): daemon sidecar 随包分发 ----
+  // 独立产品铁律: daemon = app 托管 sidecar, 必须随 NSIS 安装包分发(设置页 MCP 服务
+  // 面板探测 <appRoot>/resources/token-wallet-mcp.exe, mcp-daemon.ts defaultPathShim)。
+  // 打包前先构建 daemon(Windows 宿主自动跑 PyInstaller onefile), 缺产物 → fail-closed。
+  const daemonExe = path.resolve(__dirname, "..", "..", "resources", "token-wallet-mcp.exe");
+  const daemonBuildPs1 = path.resolve(
+    __dirname, "..", "..", "..", "mcp-server", "deploy", "build-exe.ps1",
+  );
+
+  async function buildDaemon() {
+    if (process.env.TW_SKIP_DAEMON_BUILD === "1") {
+      console.log("[dist:win] TW_SKIP_DAEMON_BUILD=1 → 跳过 daemon 构建(显式豁免)");
+      return true;
+    }
+    if (process.platform !== "win32") {
+      // PyInstaller .exe 构建只能在 Windows 宿主跑; 非 win32 仅校验产物已在位
+      // (跨机分工: WSL 侧开发/门禁, Windows 侧出包 — 见 README 构建链节)
+      if (existsSync(daemonExe)) return true;
+      console.error(
+        `[dist:win] 非 Windows 宿主且缺 ${daemonExe} — 请先在 Windows 侧运行\n` +
+        `  powershell -ExecutionPolicy Bypass -File packages\\mcp-server\\deploy\\build-exe.ps1\n` +
+        `或设 TW_SKIP_DAEMON_BUILD=1 显式跳过(产物将 not_installed, 不建议)`,
+      );
+      return false;
+    }
+    if (!existsSync(daemonBuildPs1)) {
+      console.error(`[dist:win] daemon 构建脚本缺失: ${daemonBuildPs1}`);
+      return false;
+    }
+    console.log("[dist:win] 构建 MCP daemon sidecar (PyInstaller onefile)…");
+    return new Promise((resolve) => {
+      const ps = spawn(
+        "powershell.exe",
+        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", daemonBuildPs1],
+        { stdio: "inherit" },
+      );
+      ps.on("exit", (code) => {
+        if (code === 0 && existsSync(daemonExe)) return resolve(true);
+        console.error(`[dist:win] daemon 构建失败 code=${code} 或产物缺失`);
+        resolve(false);
+      });
+      ps.on("error", (err) => {
+        console.error("[dist:win] 无法启动 powershell 构建 daemon:", err.message);
+        resolve(false);
+      });
+    });
+  }
+
+  if (!(await buildDaemon())) {
+    console.error(
+      "[dist:win] 中止: daemon sidecar 未就绪 — NSIS 安装包缺它时设置页 MCP 服务必然 not_installed。",
+    );
+    process.exit(1);
+  }
+
   const githubReachable = await probeTcp("github.com", 443);
 
   // 子进程 env（含注入的镜像变量）

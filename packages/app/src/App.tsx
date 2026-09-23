@@ -37,7 +37,6 @@ import {
 import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { AddProviderWizard } from "./components/AddProviderWizard";
-import { QuotaGallery } from "./components/QuotaGallery";
 import { FilterIcons, DEFAULT_FILTER, matchesFilter, type FilterSel } from "./components/FilterChips";
 import { AgentCard, AgentCardEmpty } from "./components/AgentCard";
 import { AgentDashboardC } from "./components/AgentDashboardC";
@@ -123,9 +122,9 @@ function AppShell() {
   const [sortConfig, setSortConfig] = useState<SortConfig>(DEFAULT_SORT_CONFIG);
   // P1(t_6484ecc6): 主页过滤 chips 选中态(单选, 默认「全部」= 现状零变化; 重启回「全部」)
   const [filter, setFilter] = useState<FilterSel>(DEFAULT_FILTER);
-  // 页内导航仅留给首开向导 + 方案页(D-021 一次性引导 view="add"; theme-glass 实验 view="quota";
+  // 页内导航仅留给首开向导 + 大屏(D-021 一次性引导 view="add";
   // t_9255cb63: view="agent-dashboard" = 主页 Agent 卡详情(大屏方案 C))
-  const [view, setView] = useState<"panel" | "add" | "quota" | "agent-dashboard">("panel");
+  const [view, setView] = useState<"panel" | "add" | "agent-dashboard">("panel");
   // t_4b7984d9 round-2 P0 fix: 独立窗口 query param 自动跳转。 main.ts createAgentDashboardWindow
   // 在 loadURL/loadFile 写入 ?view=agent-dashboard, 渲染层启动读 window.location.search 据此 setView。
   // 浏览器路径(主窗 / e2e)无此 param, view 保持初始 panel 不受影响。
@@ -137,7 +136,7 @@ function AppShell() {
     try {
       const sp = new URLSearchParams(window.location.search);
       const v = sp.get("view");
-      if (v === "agent-dashboard" || v === "add" || v === "quota" || v === "panel") {
+      if (v === "agent-dashboard" || v === "add" || v === "panel") {
         setView(v);
       }
       if (sp.get("standalone") === "1") setStandalone(true);
@@ -477,15 +476,6 @@ function AppShell() {
     );
   }
 
-  if (view === "quota") {
-    // theme-glass 实验: 进度条形态方案页(设置页入口打开, 页内导航回面板)
-    return (
-      <div className="panel">
-        <QuotaGallery onBack={() => setView("panel")} />
-      </div>
-    );
-  }
-
   // t_9255cb63: 大屏方案 C — 主页 Agent 卡点 [详情→] 触发。需要 usage_summary 真数据,
   // daemon 未连时降级提示(不静默吞成 0, 任务卡边界)。
   // t_185002af: standalone=true 时本视图跑在主进程开的无边框独立窗里(900×640),
@@ -727,10 +717,6 @@ function AppShell() {
                 glassAlpha={glassAlpha}
                 onGlassAlpha={setGlassAlpha}
                 onBack={closeSettings}
-                onOpenQuota={() => {
-                  closeSettings();
-                  setView("quota");
-                }}
               />
             </div>
           </div>,

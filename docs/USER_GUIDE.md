@@ -149,7 +149,7 @@ CLI 通道**不需要填 Key**，但需要装官方 CLI + 在 app 内完成一�
 
 ### 3.3 过滤与手动排序
 
-**过滤**（卡片列表右上角 icon 钮组，D-048）：
+**过滤**（卡片列表右上角 icon 钮组）：
 - ◇ 全部（默认）
 - ✓ 可用（health=ok 的实例）
 - ⚠ 异常（health=bad / auth_expired / error）

@@ -2,7 +2,7 @@
  * 设置页 MCP 服务区三主题截图脚本(t_4bd214de evidence):
  * - 6 张 PNG(避免 mcp-panel 截 stopped/running 视觉趋同 + glass 主题仅父级 panel 有 backdrop-filter):
  *   - dark × {not-installed, stopped, running}  → 截 mcp-panel(状态点 + 文案明显差异)
- *   - {dark, light, glass} × stopped              → 截 settings-modal(backdrop-filter 差异)
+ *   - {dark, light, glass} × stopped              → 截 mcp-panel(含复制引导链接钮, OB-03)
  * - 锚 localStorage token-wallet.theme.v1 + token-wallet.glass.v1 + reload
  * - 落 packages/app/verification/mcp-section/(仓根 tracked)
  * - 验证 md5sum 全部互异(防假三主题循环, skill #73)
@@ -37,16 +37,13 @@ const PLAN = [
   { themeId: "dark", scenario: "not-installed", what: "panel" },
   { themeId: "dark", scenario: "stopped", what: "panel" },
   { themeId: "dark", scenario: "running", what: "panel" },
-  // 三主题 × stopped: 截 AgentGuideModal(引导弹窗, 需先点 mcp-open-guide)—
-  // t_4bd214de round-2 P1-2 修复: 原 selector=.settings-modal 错(截了设置面板), 改
-  // .mcp-guide-modal(modal overlay 内的真弹层); 触发流程 = 点 mcp-open-guide
-  // 等 mcp-guide-overlay 出现后再 locator modal 内层
-  { themeId: "dark", scenario: "stopped", what: "guide", alive: false },
-  { themeId: "light", scenario: "stopped", what: "guide", alive: false },
-  { themeId: "glass", scenario: "stopped", what: "guide", alive: false },
-  // 三主题 × running: 引导弹窗内真有 agents 列表(daemon 跑)→ 截 mcp-guide-modal
-  // 含 hermes+claude-code 两个 agent 渲染
-  { themeId: "dark", scenario: "running", what: "guide", alive: true },
+  // OB-03: 旧引导弹窗证据面已整链拆除 → 截 mcp-panel
+  // 唯一新证据面 = settings-modal 全宽(390 视口下 mcp-panel 铺满 section,
+  // 「复制引导链接」钮在列); mcp-panel 局部截在 dark/light/glass 三主题下
+  // 背景全被面板体覆盖、仅边框 1px 之差 → md5 互异门禁在此构图下无判别力。
+  { themeId: "dark", scenario: "stopped", what: "modal" },
+  { themeId: "light", scenario: "stopped", what: "modal" },
+  { themeId: "glass", scenario: "stopped", what: "modal" },
   // dark × stopped: key 二次确认弹窗(t_4bd214de round-2 P1-2: 验收要求有 key 态截图)
   // 触发 = 点 mcp-key-regen → 等 mcp-regen-confirm-panel → 截 .mcp-confirm
   { themeId: "dark", scenario: "stopped", what: "key-regen-confirm" },
@@ -105,17 +102,7 @@ async function capture(ctx, item) {
     const filename = `mcp-${item.themeId}-${item.scenario}-${item.what}.png`;
     const fullPath = path.join(OUT_DIR, filename);
     let target;
-    if (item.what === "guide") {
-      // t_4bd214de round-2 P1-2: 引导弹窗需先点 mcp-open-guide, 截 .mcp-guide-modal
-      // (overlay 是 fixed inset 8px 背板, modal 是其内层真弹层)
-      await page.click('[data-testid="mcp-open-guide"]');
-      await page.waitForSelector('[data-testid="mcp-guide-overlay"]', {
-        timeout: 5_000,
-      });
-      await page.waitForSelector(".mcp-guide-modal", { timeout: 5_000 });
-      await page.waitForTimeout(300);
-      target = await page.$(".mcp-guide-modal");
-    } else if (item.what === "key-regen-confirm") {
+    if (item.what === "key-regen-confirm") {
       // t_4bd214de round-2 P1-2: key 二次确认弹窗 = 点 mcp-key-regen 后
       // mcp-regen-confirm-panel 出现, 截 .mcp-confirm(panel 内层)
       await page.click('[data-testid="mcp-key-regen"]');
@@ -124,6 +111,9 @@ async function capture(ctx, item) {
       });
       await page.waitForTimeout(300);
       target = await page.$('[data-testid="mcp-regen-confirm-panel"]');
+    } else if (item.what === "modal") {
+      // OB-03: settings-modal 全宽构图 — 三主题 backdrop/背景差 + 复制引导链接钮在列
+      target = await page.$(".settings-modal");
     } else {
       target = await page.$('[data-testid="mcp-panel"]');
     }
@@ -237,30 +227,6 @@ async function main() {
           JSON.stringify({ mcpAutostart: enabled, osAutostart: enabled }),
         );
         return { mcpAutostart: enabled, osAutostart: enabled };
-      },
-      mcp_get_guide: () => {
-        const raw = localStorage.getItem("token-wallet.mock.mcp");
-        const s = raw ? JSON.parse(raw) : { alive: false };
-        if (s.alive) {
-          return {
-            agents: [
-              {
-                id: "hermes",
-                name: "Hermes",
-                plugin_url: "https://example.com/hermes",
-                configure: "Configure Hermes with endpoint http://127.0.0.1:9131/mcp",
-                verify: "curl http://127.0.0.1:9131/mcp -X POST",
-              },
-              {
-                id: "claude-code",
-                name: "Claude Code",
-                plugin_url: "https://example.com/claude-code",
-                configure: "Configure Claude Code MCP integration",
-              },
-            ],
-          };
-        }
-        return { agents: [], reason: "daemon_not_running" };
       },
     };
     w.tokenWallet = {

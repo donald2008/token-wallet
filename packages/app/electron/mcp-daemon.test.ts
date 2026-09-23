@@ -4,6 +4,7 @@ import {
   DEFAULT_PROBE_TIMEOUT_MS,
   _resetLastStartedPid,
   checkDaemonVersion,
+  defaultPathShim,
   discoverPidByPort,
   getLastStartedPid,
   type HttpShim,
@@ -635,5 +636,27 @@ describe("t_1b396e2f: isSameProcessTree (launcher 链幂等)", () => {
     expect(second.started).toBe(true);
     expect(second.pid).toBe(99999);
     expect(spawn.spawned).toHaveLength(1);
+  });
+});
+
+describe("mcp-daemon: defaultPathShim(t_aeb0447b round-2 P0)", () => {
+  it("打包态: appRoot 以 .asar 结尾 → 重映射 app.asar.unpacked(避免 spawn ENOENT)", () => {
+    const shim = defaultPathShim();
+    const p = shim.resolveDaemonPath("win32", true, "/opt/token-wallet/resources/app.asar");
+    expect(p).toBe(
+      path.join("/opt/token-wallet/resources/app.asar.unpacked", "resources", "token-wallet-mcp.exe"),
+    );
+  });
+
+  it("打包态(linux): 同样重映射 + 无 .exe 后缀", () => {
+    const shim = defaultPathShim();
+    const p = shim.resolveDaemonPath("linux", true, "/opt/x/resources/app.asar");
+    expect(p).toBe(path.join("/opt/x/resources/app.asar.unpacked", "resources", "token-wallet-mcp"));
+  });
+
+  it("dev 态: appRoot 不以 .asar 结尾 → 原样(resources/ 约定不变)", () => {
+    const shim = defaultPathShim();
+    const p = shim.resolveDaemonPath("win32", false, "/repo/packages/app");
+    expect(p).toBe(path.join("/repo/packages/app", "resources", "token-wallet-mcp.exe"));
   });
 });

@@ -1700,31 +1700,6 @@ body {
   }
 }
 
-/* ================= QuotaGallery 方案页(feat/theme-glass 实验, t_37416b22 + t_af01e265) =================
- * 复用 .settings-view(头固定+体滚动); 竖排完整四元素实例(标题+重置+条+用量), 非表格矩阵。全部 4/8 token。 */
-.quota-gallery .settings-body {
-  padding: var(--space-8) var(--space-12) var(--space-12);
-  gap: var(--space-24); /* 说明段↔实例列表↔图例三处垂直间距统一同 token(#3) */
-}
-.quota-gallery .hint {
-  margin: 0; /* 抵消 <p> 浏览器默认底边距, 只由 settings-body gap 控制节奏 */
-}
-/* 返回按钮: dark 下 .btn 默认描边(--border)偏弱, 方案页内提亮为 --fg-dim(#9) */
-.quota-gallery .settings-head .btn {
-  border-color: var(--fg-dim);
-}
-
-/* 实例列表: 竖排逐个展示完整四元素实例(非表格, 无窗口×形态矩阵) */
-.quota-instances {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
-  margin-top: 0;
-}
-.quota-instance {
-  min-width: 0;
-}
-
 /* 四元素实例排版: 标题 → 重置时间 → 进度条 → 用量(全部扩展 slot 存在时启用) */
 .quota-meter--instance {
   display: flex;
@@ -1761,35 +1736,6 @@ body {
   text-align: right;
 }
 
-.quota-legend {
-  display: flex;
-  gap: var(--space-16);
-  margin-top: 0; /* 与 .quota-table 同由 settings-body gap 控制, 去分隔线统一节奏(#3) */
-  padding-top: 0;
-  border-top: 0;
-  align-items: center;
-}
-.quota-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-4);
-  font-size: var(--font-10);
-  color: var(--fg-dim);
-}
-.quota-swatch {
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-4);
-}
-.quota-swatch--ok {
-  background: var(--ok);
-}
-.quota-swatch--warn {
-  background: var(--warn);
-}
-.quota-swatch--bad {
-  background: var(--bad);
-}
 
 /* ================= 四元素排版变体(容器层重排, t_35ff3c1f) =================
  * 同一份数据(标题/重置/条/用量)不改 DOM 顺序, 仅容器层 CSS grid-area 重摆:
@@ -1798,7 +1744,7 @@ body {
  * .progress / .progress-fill[data-health] / role=progressbar 契约一例不破;
  * 新增容器 class 一律 quota-meter--layout-* 前缀; 数值全 4/8 token 无稀值。
  */
-/* flat 布局(行/两行/紧凑/滚动)不带卡 chrome, 由 QuotaGallery 画布承载; hero 自带卡 */
+/* flat 布局(行/两行/紧凑/滚动)不带卡 chrome, 由排版对比画布承载; hero 自带卡 */
 .quota-meter--layout-row,
 .quota-meter--layout-duo,
 .quota-meter--layout-micro,
@@ -1996,7 +1942,8 @@ body {
   height: var(--space-4);
 }
 
-/* ============ QuotaGallery 排版对比页(t_35ff3c1f 征集, 重做) ============
+/* ============ 排版对比画布(.qvar 段, t_35ff3c1f 征集, 重做) ============
+ * 原方案页专用画布(方案页入口已拆除 t_aeb0447b, 类暂留归属 ProviderCardLayouts 组件)。
  * 同一 3 行数据集(ok/warn/bad)喂 5 种排版(容器层), 肉眼直接对比「同数据不同摆法」。
  * 布局容器: .qvar-* 段(场景标 + 名称/说明 + 画布); 条统一 slim, 排除形态/颜色干扰。 */
 .qvar {
@@ -2332,6 +2279,10 @@ body {
 .mcp-key-row {
   flex-wrap: wrap;
 }
+/* OB-03: 引导链接内联复制钮 — 复用 .btn-icon, 仅约束不随 code 长度换行漂移 */
+.mcp-guide-copy {
+  white-space: nowrap;
+}
 .mcp-confirm {
   border: 1px solid var(--warn, #f59e0b);
   border-radius: var(--radius-8, 8px);
@@ -2360,76 +2311,6 @@ body {
   color: var(--bad, #ef4444);
   font-size: var(--font-12, 12px);
   margin: 0;
-}
-
-/* ===== D-055: Agent 引导弹窗(portal to body, Q4 决议 B) ===== */
-.mcp-guide-overlay {
-  position: fixed;
-  inset: 8px;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 20;
-  border-radius: var(--radius-16, 16px);
-}
-:root[data-theme="dark-glass"] .mcp-guide-overlay,
-:root[data-theme="light-glass"] .mcp-guide-overlay {
-  -webkit-backdrop-filter: var(--card-blur, blur(32px));
-  backdrop-filter: var(--card-blur, blur(32px));
-}
-.mcp-guide-modal {
-  background: var(--bg-elev, #fff);
-  border-radius: var(--radius-12, 12px);
-  width: min(720px, 90vw);
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-:root[data-theme="dark"] .mcp-guide-modal,
-:root[data-theme="dark-glass"] .mcp-guide-modal {
-  background: var(--bg-elev, #1f2937);
-}
-.mcp-guide-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-12, 12px) var(--space-16, 16px);
-  border-bottom: 1px solid var(--border, #e5e7eb);
-}
-.mcp-guide-head h3 {
-  margin: 0;
-  font-size: var(--font-16, 16px);
-}
-.mcp-guide-body {
-  padding: var(--space-16, 16px);
-  overflow-y: auto;
-  font-size: var(--font-12, 12px);
-}
-.mcp-guide-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-16, 16px);
-}
-.mcp-guide-item {
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: var(--radius-8, 8px);
-  padding: var(--space-12, 12px);
-}
-.mcp-guide-item h4 {
-  margin: 0 0 var(--space-8, 8px) 0;
-}
-.mcp-guide-item pre {
-  background: var(--bg, #f3f4f6);
-  padding: var(--space-8, 8px);
-  border-radius: var(--radius-4, 4px);
-  overflow-x: auto;
-  font-size: var(--font-12, 12px);
-  margin: var(--space-4, 4px) 0 0 0;
 }
 
 /* ============= t_9255cb63: 主页 Agent 卡区 + 大屏方案 C =============
