@@ -107,6 +107,74 @@ function deriveMultiFromSingle(base: typeof fakeSummary) {
   };
 }
 
+/**
+ * DW-01 round-2(老大终审 BLOCKING-1): 零滚动断言判别力强化 fixture。
+ * 旧 mock(4 agent)在固定行高预算下一屏装得下, 旧布局(grid-auto-rows:min-content +
+ * overflow-y:auto)也零滚动 → 变异验证实锤断言假绿(锁不住目标回归)。
+ * 本 fixture 把 agent 行数 ×10(40 agent) + heavy agent tokens 抬到 ~134M(9 位数千分位):
+ * 明细表 40 行的 min-content 高度远超主区行预算 → 旧代码必然真实溢出(scrollHeight > clientHeight),
+ * 新代码(固定预算 + 面板自身内滚)仍零滚动 = 旧红新绿, 断言恢复判别力。
+ * total 严格 = rows 合计(t_4b7984d9 round-3 契约: hero 数字与明细对得上)。 */
+function deriveStressMulti(base: typeof fakeSummary) {
+  const agents = Array.from({ length: 40 }, (_, i) => ({
+    group: `agent-${String(i).padStart(2, "0")}`,
+    calls: 10 + i,
+    input_cache_hit_tokens: 100_000 + i * 50_000,
+    input_cache_miss_tokens: 20_000 + i * 10_000,
+    output_tokens: 5_000 + i * 2_500,
+    cost_total: i % 2 === 0 ? i * 0.5 : null,
+    currency: i % 2 === 0 ? "USD" : null,
+    by_status: { completed: 10 + i, partial: 2, unknown: 0 },
+  }));
+  // heavy 行保 9 位数量级(老大真机 4,474,000 形态放大)
+  agents[0]!.calls = 80_000;
+  agents[0]!.input_cache_hit_tokens = 100_000_000;
+  agents[0]!.input_cache_miss_tokens = 25_000_000;
+  agents[0]!.output_tokens = 9_000_000;
+  agents[0]!.cost_total = 370.2;
+  agents[0]!.currency = "USD";
+  const sum = agents.reduce(
+    (acc, r) => {
+      acc.calls += r.calls;
+      acc.input_cache_hit_tokens += r.input_cache_hit_tokens;
+      acc.input_cache_miss_tokens += r.input_cache_miss_tokens;
+      acc.output_tokens += r.output_tokens;
+      acc.cost_total += r.cost_total ?? 0;
+      acc.by_status.completed += r.by_status.completed;
+      acc.by_status.partial += r.by_status.partial;
+      acc.by_status.unknown += r.by_status.unknown;
+      return acc;
+    },
+    {
+      calls: 0,
+      input_cache_hit_tokens: 0,
+      input_cache_miss_tokens: 0,
+      output_tokens: 0,
+      cost_total: 0,
+      by_status: { completed: 0, partial: 0, unknown: 0 },
+    },
+  );
+  const stressSummary = {
+    ...base,
+    rows: agents,
+    total: { ...base.total, ...sum, currency: "USD" },
+  };
+  // 复用既有三维派生形态(agent | agent,model | day); model/day 维沿用 stress 行
+  const modelRows = agents.flatMap((r) => {
+    const mk = (model: string) => ({ ...r, group: `${r.group}|${model}` });
+    return [mk("glm-5.3-flash"), mk("kimi-k2")];
+  });
+  const dayRows = agents.map((r, i) => ({
+    ...r,
+    group: i % 2 === 0 ? "2026-09-08" : "2026-09-09",
+  }));
+  return {
+    agent: { ok: true, data: stressSummary },
+    "agent,model": { ok: true, data: { ...stressSummary, rows: modelRows } },
+    day: { ok: true, data: { ...stressSummary, rows: dayRows } },
+  };
+}
+
 async function agreeAndSeedMultiFromSingle(page: import("@playwright/test").Page) {
   await page.getByTestId("consent-agree").click();
   await seedAgentUsageMulti(page, deriveMultiFromSingle(fakeSummary));
@@ -575,6 +643,9 @@ test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×
 }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
+  // DW-01 round-2(BLOCKING-1): 本测试维持常规数据(压力数据 80 模型切片会把 900×600
+  // 四象限几何推爆, 属非真实形态) — 判别力改由下方机制断言承担(锁 overflow/grid 行
+  // 预算机制本身, 与数据量无关); 真实溢出判别(压力数据)由 DW-01 1920×1080 用例承担。
   await seedAgentUsageMulti(page, deriveMultiFromSingle(fakeSummary));
 
   const quads = [
@@ -628,13 +699,26 @@ test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×
   const box = await page.evaluate(() => {
     const dash = document.querySelector(".agent-dashboard-c") as HTMLElement;
     const footer = document.querySelector(".agent-dashboard-c-footer") as HTMLElement;
+    const grid = document.querySelector(".dash-grid") as HTMLElement;
     return {
       ch: dash.clientHeight,
       sh: dash.scrollHeight,
+      // DW-01 round-2 机制断言(b): overflow/行预算机制本身, 数据量无关判别
+      dashOverflowY: getComputedStyle(dash).overflowY,
+      gridAutoRows: getComputedStyle(grid).gridAutoRows,
       footerBottom: footer.getBoundingClientRect().bottom,
       vh: window.innerHeight,
     };
   });
+  // 机制断言: 布局机制回退(min-content 自由生长 / overflow-y:auto 逃生门)一律红
+  expect(
+    box.dashOverflowY,
+    `根容器 overflow-y 必须为 hidden(整页滚动逃生门退役), 实测 ${box.dashOverflowY}`,
+  ).toBe("hidden");
+  expect(
+    box.gridAutoRows,
+    "dash-grid 不得回退到 grid-auto-rows:min-content 自由生长行高",
+  ).not.toBe("min-content");
   expect(box.sh, `大屏容器不得纵向滚动(scrollHeight ${box.sh} > clientHeight ${box.ch})`).toBeLessThanOrEqual(
     box.ch + 1,
   );
@@ -647,10 +731,14 @@ test("t_04f75eae 集成: standalone 900×600 四象限全部在视口内 + 900×
  *  900×560 门禁锁产品窗口壳内收口; 1920×1080 锁大屏在宽松分辨率下同样不漂移 —
  *  grid-template-rows 固定行高预算 + overflow:hidden 后, 容器在任何视口高度都不得出现
  *  纵向滚动(布局物理约束纪律), footer 仍钉在视口底缘。 */
-test("DW-01: 1920×1080 真机分辨率零滚动 + footer 钉底", async ({ hostPage, page }) => {
+test("DW-01: 1920×1080 真机分辨率零滚动 + footer 钉底 + 布局机制锁", async ({ hostPage, page }) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
-  await seedAgentUsageMulti(page, deriveMultiFromSingle(fakeSummary));
+  // DW-01 round-2(BLOCKING-1 判别力): 压力数据(40 agent 行)。
+  // 判别力三层: ①900×560 段 — 旧布局 min-content 行高在压力数据下总高 ~700px > 可用 ~450px,
+  // 零滚动断言真实「旧红新绿」(变异验证见交付评论); ②1920×1080 段 — 压力量级下零滚动仍成立;
+  // ③机制断言 — overflow/行预算回退一律红, 与数据量/分辨率无关。
+  await seedAgentUsageMulti(page, deriveStressMulti(fakeSummary));
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto("?view=agent-dashboard&standalone=1");
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
@@ -662,11 +750,32 @@ test("DW-01: 1920×1080 真机分辨率零滚动 + footer 钉底", async ({ host
     return {
       ch: dash.clientHeight,
       sh: dash.scrollHeight,
+      // DW-01 round-2 机制断言(b): 锁布局机制本身, 不只锁当前数据量的表现 —
+      // 根容器 overflow 必须是 hidden(整页滚动逃生门已退役, 旧代码为 overflow-y:auto);
+      // 行预算必须是 grid-template-rows 固定分配(旧代码为 grid-auto-rows:min-content)。
+      dashOverflowY: getComputedStyle(dash).overflowY,
+      gridTemplateRows: getComputedStyle(grid).gridTemplateRows,
+      gridAutoRows: getComputedStyle(grid).gridAutoRows,
       gridBottom: grid.getBoundingClientRect().bottom,
       footerBottom: footer.getBoundingClientRect().bottom,
       vh: window.innerHeight,
     };
   });
+  // 机制断言: 布局机制回退(min-content 行预算 / overflow-y:auto 滚动逃生门)一律红,
+  // 与数据量无关 — 这是本卡修复的目标形态本身。
+  expect(
+    box.dashOverflowY,
+    `根容器 overflow-y 必须为 hidden(整页滚动逃生门退役), 实测 ${box.dashOverflowY}`,
+  ).toBe("hidden");
+  expect(
+    box.gridAutoRows,
+    "dash-grid 不得回退到 grid-auto-rows:min-content 自由生长行高",
+  ).not.toBe("min-content");
+  expect(
+    box.gridTemplateRows.split(" ").length,
+    `grid-template-rows 必须是固定三行预算(auto/1.2fr/1fr), 实测 "${box.gridTemplateRows}"`,
+  ).toBe(3);
+  // 零滚动断言(a 判别力强化后): 40 行压力数据下, 旧布局在此必然 scrollHeight > clientHeight。
   expect(box.sh, `1920×1080 大屏容器不得纵向滚动(scrollHeight ${box.sh} > clientHeight ${box.ch})`).toBeLessThanOrEqual(
     box.ch + 1,
   );
@@ -675,6 +784,30 @@ test("DW-01: 1920×1080 真机分辨率零滚动 + footer 钉底", async ({ host
   );
   expect(box.footerBottom, `1920×1080 页脚 bottom=${box.footerBottom} 必须 ≤ 视口高 ${box.vh}`).toBeLessThanOrEqual(
     box.vh + 0.5,
+  );
+
+  // ② 900×560(产品窗口内容尺寸) + 压力数据: 零滚动断言的「旧红新绿」判别力段 —
+  // 旧布局(min-content 行高自由生长)在 40 行明细下总高远超 ~450px 可用预算,
+  // scrollHeight > clientHeight 必然成立; 新布局(固定预算 + 面板内滚)仍零滚动。
+  await page.setViewportSize({ width: 900, height: 560 });
+  await page.goto("?view=agent-dashboard&standalone=1");
+  await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible({ timeout: 5000 });
+  await page.waitForTimeout(600);
+  const box560 = await page.evaluate(() => {
+    const dash = document.querySelector(".agent-dashboard-c") as HTMLElement;
+    const footer = document.querySelector(".agent-dashboard-c-footer") as HTMLElement;
+    return {
+      ch: dash.clientHeight,
+      sh: dash.scrollHeight,
+      footerBottom: footer.getBoundingClientRect().bottom,
+      vh: window.innerHeight,
+    };
+  });
+  expect(box560.sh, `900×560 压力数据下大屏容器不得纵向滚动(scrollHeight ${box560.sh} > clientHeight ${box560.ch})`).toBeLessThanOrEqual(
+    box560.ch + 1,
+  );
+  expect(box560.footerBottom, `900×560 页脚 bottom=${box560.footerBottom} 必须 ≤ 视口高 ${box560.vh}`).toBeLessThanOrEqual(
+    box560.vh + 0.5,
   );
 });
 
