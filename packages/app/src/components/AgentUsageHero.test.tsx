@@ -1,6 +1,7 @@
 /**
- * AgentUsageHero 单测(t_56c66972 ②, 方案 A-rev3 置顶组件):
+ * AgentUsageHero 单测(t_56c66972 ②, 方案 A-rev3 置顶组件; t_235f60c0 大数字口径改 5h 窗 hour 桶求和):
  * 正常态 / 边界② 全局零数据 / 边界④ 不足窗口(断线绘制 + 首点标记) / hour 降级(数据积累中)
+ * / hour 不可用(大数字「—」暗色) / 5h 窗零数据(真实 0 正常色)
  * + buildHeroSeries 纯函数边界。
  */
 // @vitest-environment jsdom
@@ -20,6 +21,8 @@ const fullBuckets: HourBucket[] = [
   { hour: "2026-09-24T10:00", tokens: 1_800_000 },
   { hour: "2026-09-24T11:00", tokens: 2_000_000 },
 ];
+// 大数字与折线同源同窗口(t_235f60c0): = fullBuckets 求和(脚本现算, 禁心算) = 8,600,000
+const FULL_WINDOW_SUM = fullBuckets.reduce((a, b) => a + b.tokens, 0);
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
@@ -50,7 +53,7 @@ afterEach(() => {
 function hero(over: Partial<Parameters<typeof AgentUsageHero>[0]> = {}) {
   return (
     <AgentUsageHero
-      globalTotalTokens={258_613_940}
+      windowTokens={FULL_WINDOW_SUM}
       hourBuckets={fullBuckets}
       hourAvailable={true}
       windowSince={SINCE}
@@ -71,9 +74,10 @@ describe("AgentUsageHero 正常态(plan-a-v3 对稿)", () => {
     expect(btn.getAttribute("aria-label")).toBe("打开用量大屏");
   });
 
-  it("行1: 全局总 tokens 大数字(千分位全数字) + unit", () => {
+  it("行1: 5h 窗 hour 桶求和大数字(千分位全数字, 与折线同源同窗口) + unit", () => {
     const c = mount(hero());
-    expect(c.querySelector('[data-testid="hero-total-tokens"]')?.textContent).toBe("258,613,940");
+    // t_235f60c0: 大数字 = fullBuckets(6 桶)求和 = 8,600,000(FULL_WINDOW_SUM 现算), 非旧全局行口径
+    expect(c.querySelector('[data-testid="hero-total-tokens"]')?.textContent).toBe("8,600,000");
     expect(c.textContent).toContain("tokens");
   });
 
@@ -113,7 +117,7 @@ describe("AgentUsageHero 正常态(plan-a-v3 对稿)", () => {
 
 describe("AgentUsageHero 边界态", () => {
   it("边界② 全局零数据: 0(暗色) + 虚线基线 + 引导句, 不画折线", () => {
-    const c = mount(hero({ globalTotalTokens: 0, emptyPage: true, hourBuckets: [] }));
+    const c = mount(hero({ windowTokens: 0, emptyPage: true, hourBuckets: [] }));
     const num = c.querySelector('[data-testid="hero-total-tokens"]');
     expect(num?.textContent).toBe("0");
     expect(num?.classList.contains("is-empty")).toBe(true);
@@ -145,11 +149,32 @@ describe("AgentUsageHero 边界态", () => {
     );
   });
 
-  it("折线降级: hour 查询不可用 → 「数据积累中」, 大数字不受牵动(卡体的失败域边界)", () => {
-    const c = mount(hero({ hourAvailable: false, hourBuckets: [] }));
+  it("hour 不可用: 大数字显式「—」暗色(禁假 0) + 折线区「数据积累中」", () => {
+    // t_235f60c0 降级形态①: hour 从未成功 → windowTokens=null → 大数字「—」+ is-empty 暗色
+    const c = mount(hero({ windowTokens: null, hourAvailable: false, hourBuckets: [] }));
+    const num = c.querySelector('[data-testid="hero-total-tokens"]');
+    expect(num?.textContent).toBe("—");
+    expect(num?.classList.contains("is-empty")).toBe(true);
     expect(c.querySelector('[data-testid="hero-chart-degrade"]')?.textContent).toBe("数据积累中");
     expect(c.querySelector('[data-testid="hero-chart"]')).toBeNull();
-    expect(c.querySelector('[data-testid="hero-total-tokens"]')?.textContent).toBe("258,613,940");
+    expect((num as HTMLElement).title).toBe("5 小时窗数据不可用");
+  });
+
+  it("5h 窗真实零数据: hour ok 但桶空(非边界②) → 大数字真实 0(正常色, 非暗色) + 虚线基线", () => {
+    // t_235f60c0 降级形态③: hour 成功但窗内零桶 → 真实 0 正常色(与「—」/边界②暗色区分;
+    // emptyPage=false = 上游 Agent 区仍有数据形态, 仅 5h 窗内无上报)
+    const c = mount(hero({ windowTokens: 0, hourBuckets: [] }));
+    const num = c.querySelector('[data-testid="hero-total-tokens"]');
+    expect(num?.textContent).toBe("0");
+    expect(num?.classList.contains("is-empty")).toBe(false);
+    expect(c.querySelector('[data-testid="hero-baseline"]')).toBeTruthy();
+    expect(c.querySelector('[data-testid="hero-line"]')).toBeNull();
+  });
+
+  it("hour 不可用但 props 仍传数值(非法组合防御): 大数字仍显「—」(null 门控优先)", () => {
+    // 防御性: hourAvailable=false 时 App 层恒传 null; 组件不信任第二来源
+    const c = mount(hero({ windowTokens: null, hourAvailable: false, hourBuckets: fullBuckets }));
+    expect(c.querySelector('[data-testid="hero-total-tokens"]')?.textContent).toBe("—");
   });
 });
 

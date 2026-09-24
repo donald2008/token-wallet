@@ -48,7 +48,7 @@ for (const t of THEMES) {
     await pwExpect(page.getByTestId("card-list")).toBeVisible();
     await page.getByTestId("main-tab-local-agent").click();
     await pwExpect(page.getByTestId("agent-usage-hero")).toBeVisible();
-    await pwExpect(page.getByTestId("hero-total-tokens")).toHaveText("4,555,000");
+    await pwExpect(page.getByTestId("hero-total-tokens")).toHaveText("6,800,000");
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${SHOT}/${t.key}-full.png`, fullPage: false });
     await page.getByTestId("agent-usage-hero").screenshot({ path: `${SHOT}/${t.key}-hero.png` });
@@ -63,6 +63,27 @@ for (const t of THEMES) {
     console.log(`[shots] ${t.key} 一屏完整可见卡数 = ${visible}`);
   });
 }
+
+test("对稿截图 hour 降级(dark)", async ({ hostPage, page }) => {
+  void hostPage;
+  // t_235f60c0 验收截图②: hour 不可用 → 大数字「—」暗色 + 折线区「数据积累中」
+  await page.setViewportSize({ width: 360, height: 720 });
+  await page.getByTestId("consent-agree").click();
+  await seedAgentUsageMulti(page, {
+    agent: { ok: true, data: fakeSummary },
+    "agent,model": deriveMultiFromSingle(fakeSummary)["agent,model"],
+    day: deriveMultiFromSingle(fakeSummary)["day"],
+    hour: { ok: false, reason: "unreachable" },
+  });
+  await page.reload();
+  await pwExpect(page.getByTestId("card-list")).toBeVisible();
+  await page.getByTestId("main-tab-local-agent").click();
+  await pwExpect(page.getByTestId("hero-total-tokens")).toHaveText("—");
+  await pwExpect(page.getByTestId("hero-chart-degrade")).toBeVisible();
+  await page.waitForTimeout(400);
+  await page.getByTestId("agent-usage-hero").screenshot({ path: `${SHOT}/degrade-hour-hero.png` });
+  await page.screenshot({ path: `${SHOT}/degrade-hour-full.png`, fullPage: false });
+});
 
 test("对稿截图 边界态(dark)", async ({ hostPage, page }) => {
   void hostPage;
@@ -81,12 +102,16 @@ test("对稿截图 边界态(dark)", async ({ hostPage, page }) => {
     .screenshot({ path: `${SHOT}/boundary-stale-card.png` });
   await page.screenshot({ path: `${SHOT}/boundary-full-short-stale.png`, fullPage: false });
 
-  // ② 全局零数据
+  // ② 全局零数据(hour 维带 5h 真实窗 — daemon hour 查询回显形态, 见 spec ④ 注释)
+  const emptyHourShots = {
+    ...emptySummary,
+    window: { since: "2026-09-09T07:34:56+08:00", until: "2026-09-09T12:34:56+08:00" },
+  };
   await seedAgentUsageMulti(page, {
     agent: { ok: true, data: emptySummary },
     "agent,model": { ok: true, data: emptySummary },
     day: { ok: true, data: emptySummary },
-    hour: { ok: true, data: emptySummary },
+    hour: { ok: true, data: emptyHourShots },
   });
   await page.reload();
   await pwExpect(page.getByTestId("card-list")).toBeVisible();

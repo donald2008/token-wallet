@@ -459,9 +459,10 @@ function AppShell() {
     if (mcpSummary.ok && mcpSummary.data.rows.length > 0) setDeleteReceipt(false);
   }, [mcpSummary]);
 
-  // t_56c66972 ② 置顶组件 props:
-  //  大数字 = 主 summary 全局行(total, 全部 agent 聚合 —— 与卡片列表同源同窗);
-  //  折线 = hour 维桶; 两个失败域独立(hour 挂了只降级折线区)。
+  // t_56c66972 ② 置顶组件 props(t_235f60c0 A 方案收口):
+  //  大数字 = 5h 窗 hour 桶求和(heroBuckets.reduce) —— 与「近 5 小时」标签、折线同源同窗口;
+  //         旧「主 summary 全局行(7d 窗)」口径已废(7d 全局 total ≈ 401M 与 5h 标签错配实锤)。
+  //  折线   = hour 维桶; hour 查挂了只降级折线区, 但大数字跟随 hour 域(不可用 → null → 显式「—」)。
   const heroBuckets: HourBucket[] = useMemo(
     () =>
       mcpHourSummary.ok
@@ -469,9 +470,16 @@ function AppShell() {
         : [],
     [mcpHourSummary],
   );
-  const heroGlobalTokens = mcpSummary.ok ? totalTokens(mcpSummary.data.total) : 0;
-  // 边界② 全局零数据: 零行 + 全局行 tokens = 0(全新装 / 全部删光)
-  const heroEmptyPage = mcpSummary.ok && mcpSummary.data.rows.length === 0 && heroGlobalTokens === 0;
+  // t_235f60c0: hour 不可用(从未成功) → null(大数字显式「—」暗色, 禁假 0);
+  // hour ok 但 5h 窗内零桶 → 真实 0(正常色)。hour 失败但有旧 ok 快照时 H7 合并语义
+  // (setMcpHourSummary 保留旧 ok)自动让本值沿用旧快照求和, 无需额外代码。
+  const heroWindowTokens = mcpHourSummary.ok
+    ? heroBuckets.reduce((a, b) => a + b.tokens, 0)
+    : null;
+  // 边界② 全局零数据(仍 summary 域为门禁基): 零行 + 5h 窗求和 = 0(全新装 / 全部删光);
+  // hour 域不可用时退化为纯行数判据(?? 0), 不因 hour 挂而误判非空页。
+  const heroEmptyPage =
+    mcpSummary.ok && mcpSummary.data.rows.length === 0 && (heroWindowTokens ?? 0) === 0;
   const heroWindow = mcpHourSummary.ok
     ? mcpHourSummary.data.window
     : {
@@ -725,7 +733,7 @@ function AppShell() {
                   AgentCardEmpty 显式失败态, 不渲染「假 0」置顶(不静默吞成 0 的既有纪律)。 */}
               {mcpSummary.ok && (
                 <AgentUsageHero
-                  globalTotalTokens={heroGlobalTokens}
+                  windowTokens={heroWindowTokens}
                   hourBuckets={heroBuckets}
                   hourAvailable={mcpHourSummary.ok}
                   windowSince={heroWindow.since}

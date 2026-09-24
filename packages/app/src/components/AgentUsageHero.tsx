@@ -4,14 +4,15 @@
  * 形态唯一依据 = docs/requests/2026-09-24-local-agent-redesign/plan-a-v3.html
  * 「正常态 + 四边界态」逐字对稿:
  *   行0: 「近 5 小时」标签(左) + 「用量大屏 →」钮(右) —— 大屏入口全局唯一(卡内已移除)
- *   行1: 全局总 tokens 大数字 (28px) + 单位
+ *   行1: 5h 窗 hour 桶求和大数字 (28px) + 单位
  *   52px 折线(手绘 SVG, 离线无 CDN 依赖, 色走 --chart-1) + 时间轴 -5h…now
  *
- * 数据面(两个独立失败域, 卡体明示):
- *  - 大数字 = 主 summary(单维 agent)的**全局行** total —— 「全部 agent 聚合」, 与卡片列表同源。
- *  - 折线   = usage_summary({group_by:["hour"], since: now-5h}) 的桶序列(row.group = 本地时区
- *             "YYYY-MM-DDTHH:00", 协议 §2.2 hour 维语义, v1.1 增补)。
- *    hour 查询失败 → **只**降级折线区(「数据积累中」), 大数字不受牵动(卡体明示的降级边界)。
+ * 数据面(t_235f60c0 A 方案收口): 大数字 = **5h 窗 hour 桶求和**, 与「近 5 小时」标签、
+ * 折线同源同窗口(旧「主 summary 全局行(7 天窗)」口径已废 —— 7d 全局 401M 与 5h 标签错配实锤)。
+ *  - 大数字 = usage_summary({group_by:["hour"], since: now-5h}) 桶 tokens 累加;
+ *    hour 查询不可用(从未成功) → 大数字显式「—」暗色(**禁假 0**); hour ok 但窗内零桶 → 真实 0。
+ *  - 折线   = 同一 hour 桶序列(row.group = 本地时区 "YYYY-MM-DDTHH:00", 协议 §2.2 hour 维
+ *             语义, v1.1 增补)。hour 查询失败 → 折线区「数据积累中」降级, 大数字跟随 hour 域显「—」。
  *
  * 四边界态(mock 边界区):
  *  ② 全局零数据   → 大数字 0(暗色) + 虚线基线 + 引导句
@@ -157,8 +158,10 @@ export function buildHeroSeries(
 }
 
 export interface AgentUsageHeroProps {
-  /** 全局行(全部 agent 聚合) tokens —— 主 summary total 的三分项之和 */
-  globalTotalTokens: number;
+  /** 5h 窗 hour 桶求和(t_235f60c0 A 方案) —— 与「近 5 小时」标签、折线同源同窗口;
+   *  null = hour 查询不可用(从未成功) → 大数字显式「—」暗色(禁假 0);
+   *  0 = hour ok 但 5h 窗内零桶 → 真实 0(正常色)。 */
+  windowTokens: number | null;
   /** hour 维桶序列(折线数据面) */
   hourBuckets: HourBucket[];
   /** hour 查询是否可用(false → 折线区「数据积累中」降级, 大数字不受影响) */
@@ -174,7 +177,7 @@ export interface AgentUsageHeroProps {
 }
 
 export function AgentUsageHero({
-  globalTotalTokens,
+  windowTokens,
   hourBuckets,
   hourAvailable,
   windowSince,
@@ -239,14 +242,19 @@ export function AgentUsageHero({
         </button>
       </div>
 
-      {/* 行1: 全局总 tokens 大数字 + 单位(边界② → 0 且暗色) */}
+      {/* 行1: 5h 窗 hour 桶求和大数字 + 单位(t_235f60c0: hour 不可用 → 显式「—」暗色, 禁假 0;
+          hour ok 但窗内零桶且非边界② → 真实 0 正常色; 边界②(全局零数据) → 0 暗色(plan-a-v3 对稿)) */}
       <div className="hero-num-row">
         <span
-          className={`hero-num${emptyPage ? " is-empty" : ""}`}
+          className={`hero-num${windowTokens === null || emptyPage ? " is-empty" : ""}`}
           data-testid="hero-total-tokens"
-          title={`${globalTotalTokens.toLocaleString("en-US")} tokens`}
+          title={
+            windowTokens === null
+              ? "5 小时窗数据不可用"
+              : `${windowTokens.toLocaleString("en-US")} tokens`
+          }
         >
-          {formatTokens(globalTotalTokens)}
+          {windowTokens === null ? "—" : formatTokens(windowTokens)}
         </span>
         <span className="hero-unit">tokens</span>
       </div>

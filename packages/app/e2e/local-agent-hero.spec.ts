@@ -3,13 +3,14 @@
  * (方案 A-rev3, GATE 2 approved, 形态唯一依据 = plan-a-v3.html 正常态 + 四边界态)
  *
  * 覆盖:
- *  ① 正常态对稿: 近 5 小时标签 / 全局大数字 / 52px 折线 / 时间轴 -5h…now / 大屏入口全局唯一
+ *  ① 正常态对稿: 近 5 小时标签 / 5h 窗大数字(同窗口) / 52px 折线 / 时间轴 -5h…now / 大屏入口全局唯一
  *  ② AgentCard 重构: 卡内大屏钮零残留 + meta 去词化(左=calls 数字 右=HH:MM)
  *  ③ 边界① 数据滞后(>30min): 黄点 + 「数据滞后」 + 快照提示带
  *  ④ 边界② 全局零数据: hero 0 + 虚线基线 + 引导句
  *  ⑤ 边界③ 列表空 + 删除生效回执(虚线扁平卡)
  *  ⑥ 边界④ 不足窗口: 首点标记 + 轴星标 + 「首次上报 N 分钟前」; 有数据的窗口断线自首桶起(非零值平线)
- *  ⑦ hour 查询失败 → 折线区「数据积累中」, 大数字不受牵动(失败域隔离)
+ *  ⑦ hour 查询失败 → 大数字「—」暗色 + 折线区「数据积累中」(t_235f60c0 A 方案降级形态①)
+ *  ⑧ 5h 窗真实零数据 → 大数字真实 0 正常色 + 虚线基线(t_235f60c0 降级形态③)
  */
 import { expect, expect as pwExpect } from "@playwright/test";
 import { test, seedAgentUsageMulti, seedDeleteUsage } from "./fixtures";
@@ -64,8 +65,9 @@ test("① 置顶组件正常态对稿: 标签/大数字 28px/折线/时间轴 + 
   const btn = page.getByTestId("hero-dashboard-btn");
   await pwExpect(btn).toHaveText("用量大屏 →");
   await pwExpect(btn).toHaveAttribute("aria-label", "打开用量大屏");
-  // 行1: 全局总 tokens(主 summary 全局行 = 4,555,000, 千分位全数字)
-  await pwExpect(page.getByTestId("hero-total-tokens")).toHaveText("4,555,000");
+  // 行1: 5h 窗 hour 桶求和(t_235f60c0 A 方案) = fakeHourSummary 5 桶(1M+1.2M+1.1M+1.5M+2M)
+  // = 6,800,000, 千分位全数字 —— 与「近 5 小时」标签、折线同源同窗口
+  await pwExpect(page.getByTestId("hero-total-tokens")).toHaveText("6,800,000");
   const numStyle = await page.getByTestId("hero-total-tokens").evaluate((el) => {
     const cs = getComputedStyle(el);
     return { fontSize: cs.fontSize, num: cs.fontVariantNumeric };
@@ -191,11 +193,18 @@ test("④ 边界② 全局零数据: hero 0 + 虚线基线 + 引导句(非删除
   page,
 }) => {
   void hostPage;
+  // t_235f60c0: hour 维 empty 回显必须带 hour 查询真实窗(5h) —— daemon hour 查询 window
+  // 恒为 since=now-5h/until=now, 全天窗(emptySummary 原样)是 agent 维形态, 直充 hour 维
+  // 会让 30min 步进刻度在全窗下密排溢出(截图再生时 vision 实锤)。
+  const emptyHour = {
+    ...emptySummary,
+    window: { since: "2026-09-09T07:34:56+08:00", until: "2026-09-09T12:34:56+08:00" },
+  };
   await agreeAndOpenLocalAgent(page, {
     agent: { ok: true, data: emptySummary },
     "agent,model": { ok: true, data: emptySummary },
     day: { ok: true, data: emptySummary },
-    hour: { ok: true, data: emptySummary },
+    hour: { ok: true, data: emptyHour },
   });
 
   const num = page.getByTestId("hero-total-tokens");
@@ -282,8 +291,8 @@ test("⑥ 边界④ 不足窗口(<1h): 首点标记 + 轴星标 + 「首次上�
   // 单桶 → 只落点不连线(禁零值平线: 不画基线)
   await pwExpect(page.getByTestId("hero-line")).toHaveCount(0);
   await pwExpect(page.getByTestId("hero-baseline")).toHaveCount(0);
-  // 大数字不受折线窗口影响(全局行)
-  await pwExpect(page.getByTestId("hero-total-tokens")).toHaveText("4,555,000");
+  // 大数字 = 5h 窗桶求和(t_235f60c0): fakeHourSummaryShort 单桶 = 18,425,400
+  await pwExpect(page.getByTestId("hero-total-tokens")).toHaveText("18,425,400");
 
   // 断线起始: 换 11:00/12:00 两桶(首桶距终点 94 分钟 > 60min) → 折线自刻度 3 起, 头部不留零值平线
   await seedAgentUsageMulti(page, seedAll(fakeHourSummaryLate));
@@ -298,9 +307,12 @@ test("⑥ 边界④ 不足窗口(<1h): 首点标记 + 轴星标 + 「首次上�
   await pwExpect(page.getByTestId("hero-axis-first")).toHaveCount(0);
 });
 
-// ─────────────────────────── ⑦ hour 失败域隔离 ───────────────────────────
+// ─────────────────────────── ⑦ hour 失败域(t_235f60c0 A 方案降级形态) ───────────────────────────
 
-test("⑦ hour 查询失败: 折线区「数据积累中」, 大数字/卡片列表不受牵动", async ({ hostPage, page }) => {
+test("⑦ hour 查询失败: 大数字显式「—」暗色(禁假 0) + 折线区「数据积累中」+ 卡片列表不受牵动", async ({
+  hostPage,
+  page,
+}) => {
   void hostPage;
   // hour 键缺失 → mock 面该维 unreachable(其它维正常)
   await agreeAndOpenLocalAgent(page, {
@@ -310,9 +322,48 @@ test("⑦ hour 查询失败: 折线区「数据积累中」, 大数字/卡片列
     hour: { ok: false, reason: "unreachable" },
   });
 
+  // t_235f60c0 降级形态①: hour 从未成功 → 大数字「—」+ is-empty 暗色(禁显假 0, 不静默吞)
+  const num = page.getByTestId("hero-total-tokens");
+  await pwExpect(num).toHaveText("—");
+  await pwExpect(num).toHaveClass(/is-empty/);
+  const numColor = await num.evaluate((el) => getComputedStyle(el).color);
+  expect(numColor, "「—」暗色 = --fg-dim(非正常前景色)").not.toBe("rgb(28, 35, 48)");
   await pwExpect(page.getByTestId("hero-chart-degrade")).toHaveText("数据积累中");
   await pwExpect(page.getByTestId("hero-chart")).toHaveCount(0);
-  await pwExpect(page.getByTestId("hero-total-tokens")).toHaveText("4,555,000");
   await pwExpect(page.getByTestId("agent-card")).toHaveCount(4);
   await pwExpect(page.getByTestId("hero-dashboard-btn")).toBeVisible();
+});
+
+// ─────────────────────────── ⑧ 5h 窗真实零数据(t_235f60c0 降级形态③) ───────────────────────────
+
+test("⑧ 5h 窗零数据: hour ok 但桶空 → 大数字真实 0(正常色非暗) + 虚线基线", async ({
+  hostPage,
+  page,
+}) => {
+  void hostPage;
+  // agent 维有历史数据(非边界②), hour 维 ok 但 5h 窗内零桶 → 真实 0 正常色
+  // hour 面 rows=[] → daemon 回显 total 同步零值(与 rows 一致的真实形态)
+  const emptyHour = {
+    ...fakeSummary,
+    rows: [] as typeof fakeSummary.rows,
+    total: {
+      calls: 0,
+      input_cache_hit_tokens: 0,
+      input_cache_miss_tokens: 0,
+      output_tokens: 0,
+      cost_total: null,
+      currency: null,
+      by_status: { completed: 0, partial: 0, unknown: 0 },
+    },
+  };
+  await agreeAndOpenLocalAgent(page, seedAll(emptyHour));
+
+  const num = page.getByTestId("hero-total-tokens");
+  await pwExpect(num).toHaveText("0");
+  await pwExpect(num).not.toHaveClass(/is-empty/);
+  await pwExpect(page.getByTestId("hero-baseline")).toHaveCount(1);
+  await pwExpect(page.getByTestId("hero-line")).toHaveCount(0);
+  await pwExpect(page.getByTestId("hero-chart-degrade")).toHaveCount(0);
+  // 与边界② 的引导句区分: 非全局零数据页, 无「暂无上报数据」引导
+  await pwExpect(page.getByTestId("hero-hint")).toHaveCount(0);
 });
