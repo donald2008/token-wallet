@@ -23,26 +23,28 @@
 | 项 | 值 |
 |---|---|
 | **surface** | `packages/app/src/components/AgentDashboardC.tsx` · `packages/app/src/app-dash.css` |
-| **基线版本** | v2（2026-09-18，D-056 Ops Wall 定案） |
-| **形态裁定源** | `docs/DECISIONS.md` → **D-056**（IA/布局/命名/降级形态/testid 契约全套） |
+| **基线版本** | **v2.1**（2026-09-25，Model 面板三修并入；v2.0 = 2026-09-18 D-056 Ops Wall 定案） |
+| **形态裁定源** | `docs/DECISIONS.md` → **D-056**（IA/布局/命名/降级形态/testid 契约全套）+ 本节 **Model 面板三修**（用户 9/24 23:09 拍板 B 方案，t_c1e454aa） |
 | **基线 mock** | `docs/requests/2026-09-18-dashboard-redesign/50-design/_shots/`（ops-wall 系列 + 降级态 + hover 证明） |
 | **翻牌记录** | `docs/requests/2026-09-18-dashboard-redesign/40-handoff/design-gate.json` |
 | **规格/继承清单** | `docs/requests/2026-09-18-dashboard-redesign/30-spec.md` + `40-handoff/blast-radius.md`（H1-H10 不可回退 / B1-B4 禁恢复） |
 | **验收锚点** | 3 秒三问（是什么/量级/健康吗）· 窗口 900×560 · 1920×1080 零滚动 |
 | **布局物理约束** | 12 列网格 gutter 12px · footer 钉底 · 面板自身内滚（非整页滚） |
+| **Model 面板三修（v2.1 增补）** | ① **agent 过滤 tabs 退役**——大屏是整体，禁 per-agent 切换，Model 分布为**全局聚合**（`dash-agent-tab` 残留=0 为回归锁）；② **hover 闪烁根因**——`renderCharts` 依赖数组禁含 `hoveredSlice`（否则每次 hover 重建图表）；③ **悬浮信息=外置浮层**（`.dash-model-float`，absolute + z-index 5 + `is-visible` opacity 切换），禁覆盖图形本体 |
 
 ### 2. 本地 Agent 页（含置顶用量组件 + Agent 卡）
 
 | 项 | 值 |
 |---|---|
 | **surface** | `App.tsx`（local-agent tab）· `components/AgentUsageHero.tsx` · `components/AgentCard.tsx` |
-| **基线版本** | **A-rev3**（2026-09-24，含文字减法 + 四边界态） |
-| **形态裁定源** | `docs/requests/2026-09-24-local-agent-redesign/00-lite-brief-v2.md` |
+| **基线版本** | **A-rev3.2**（2026-09-25：A-rev3 = 09-24 文字减法 + 四边界态；.1 = 列表区内滚；.2 = 大数字 5h 口径，用户 9/24 23:36 拍板 A 方案） |
+| **形态裁定源** | `docs/requests/2026-09-24-local-agent-redesign/00-lite-brief-v2.md` + 本节「大数字口径」行（t_235f60c0） |
 | **基线 mock** | 同目录 `plan-a-v3.png`（正常态 + 四边界态）· `plan-a-v3.html`（可交互原稿）· `plan-a-v3-viewport.png`（720 首屏） |
 | **翻牌记录** | 同目录 `design-gate.json`（approved=true，老大 9/24） |
 | **关键形态裁定** | 置顶组件三行结构（标签+大屏钮 / 大数字 / 52px 折线+时间轴）· 大屏入口**全局唯一在置顶**（卡内禁出现）· 卡 meta 无词化（左 calls 右 HH:MM）· 文字减法（禁「全部 agent」「AGENT 卡片 (N)」冗余）· 时间轴**真实时钟**（整点 HH:00 major + 半点 :30 短标，禁 -5h 相对标注） |
+| **大数字口径（A-rev3.2 增补）** | 大数字 = **5h 窗 hour 桶求和**（`heroBuckets.reduce`），与标签、折线**同源同窗口**——三者任一处换窗口都是 bug（历史事故：标签硬编码「近 5 小时」而数字取 7d 全局 total = 401M vs 真实 7.47M，差两个数量级）。**派生纪律：窗口标签不得硬编码，须与数据源同源**。降级：hour 从未成功 → 「—」暗色（禁假 0）；有旧快照 → 续显旧值；5h 内真实零上报 → 如实显 0 + 虚线基线 |
 | **边界态定义** | ①数据滞后(>30min 黄点+快照带) ②全局零数据(0+虚线基线+引导句) ③列表空(虚线卡+删除回执) ④不足窗口(断线自绘+首点标记) |
-| **布局物理约束** | 主窗 360×720 · 列表区 max-height 424 + 内滚 · 8px 网格 |
+| **布局物理约束** | 主窗 360×720 · 列表区 `max-height: 400px` + `overflow-y:auto` + `overscroll-behavior:contain`（少卡时无空滚区）· 8px 网格 |
 | **落选方案（归档）** | `plan-b.*`（双区条）/ `plan-c.*`（迷你工具条） |
 
 ### 3. 设置页 · MCP 服务面板
@@ -134,3 +136,4 @@
 - **谁能改本表**：主 agent（运维/文档域）可维护索引；**基线版本变更须老大翻牌**（design-gate 纪律）
 - **更新时机**：每次 design-gate 翻牌后、每次基线修订后
 - **禁止**：静默改基线（代码漂了基线跟着改 = 漂移合法化，正是 9 轮循环的病根）
+- **收敛纪律**：卡 done 后若产出改了基线收录面的形态（含口径/交互/降级语义），**当轮补录本表**——凭「代码已改、测试已过」跳过补录，等于把基线变成过期文档，下一轮改动就失去参照物（t_c1e454aa / t_235f60c0 两卡均按此补录）
