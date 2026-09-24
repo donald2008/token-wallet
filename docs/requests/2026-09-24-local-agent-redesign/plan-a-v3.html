@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+/* ═══ 方案 A-rev3「文字减法」— 置顶说明精简 + 边界情况设计 ═══
+   文字裁决(vision 两轮 + 老大裁定):
+   - 「全部 agent」删(页面上下文自明, tab 名即「本地 Agent」)
+   - 「AGENT 卡片 (2) · 1,805 calls 全局」→「AGENTS (2)」(全局 calls 与置顶重复, 删)
+   - 卡 meta 行: 「calls」「更新」词删(位置约定自明: 左=调用 右=时间)
+   边界情况: 空数据 / 首小时(<1h 数据) / 断连陈旧 / 单 agent / 折线零点 */
+:root { --bg:#16181c; --card:#22262c; --border:#31363e; --fg:#e8eaed; --dim:#8b929c;
+        --accent:#5794f2; --ok:#73bf69; --warn:#f2cc0c; --danger:#e02f44; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); font-family:system-ui; color:var(--fg); width:360px; }
+.titlebar { height:32px; display:flex; align-items:center; padding:0 12px; font-size:12px;
+            color:var(--dim); border-bottom:1px solid var(--border); }
+.tabs { display:flex; gap:4px; padding:0 12px; border-bottom:1px solid var(--border); }
+.tab { padding:8px 10px; font-size:13px; color:var(--dim); border-bottom:2px solid transparent; }
+.tab.active { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
+.content { padding:12px; }
+.label { font-size:13px; font-weight:600; color:var(--dim); margin:14px 0 8px; }
+
+/* ── 置顶(正常态): 文字减法后 ── */
+.hero { background:linear-gradient(160deg,#232a34 0%,#1d2126 70%); border:1px solid var(--border);
+        border-radius:12px; padding:12px 14px; }
+.hero-row0 { display:flex; justify-content:space-between; align-items:center; }
+.hero-label { font-size:11px; color:var(--dim); }   /* 仅「近 5 小时」 */
+.hero-dash { font-size:11px; color:var(--accent); background:rgba(87,148,242,.12);
+             border:1px solid rgba(87,148,242,.35); border-radius:6px; padding:4px 9px; cursor:pointer; }
+.hero-num-row { display:flex; align-items:baseline; gap:6px; margin-top:6px; }
+.hero-num { font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.1; }
+.hero-unit { font-size:12px; color:var(--dim); }
+.hero-chart { margin-top:8px; height:52px; }
+.hero-axis { display:flex; justify-content:space-between; font-size:10px; color:var(--dim); margin-top:4px; }
+
+/* ── 卡片(正常态): meta 无词化 ── */
+.acard { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+         position:relative; margin-bottom:10px; }
+.acard:hover { border-color:#4a525c; }
+.ahead { display:flex; align-items:center; gap:8px; }
+.alogo { width:22px; height:22px; background:#3a4048; border-radius:6px; display:flex; align-items:center;
+         justify-content:center; font-size:11px; font-weight:700; }
+.aname { font-size:13px; font-weight:600; }
+.astatus { margin-left:auto; display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ok); }
+.astatus.idle { color:var(--dim); }
+.adot { width:6px; height:6px; border-radius:50%; background:var(--ok); }
+.acard:hover .astatus { opacity:0; }
+.adel { position:absolute; top:10px; right:10px; width:24px; height:24px; border-radius:6px;
+        background:transparent; border:1px solid transparent; color:var(--dim); cursor:pointer;
+        opacity:0; display:flex; align-items:center; justify-content:center; }
+.acard:hover .adel { opacity:1; }
+.adel:hover { color:var(--danger); border-color:var(--danger); }
+.abody { display:flex; align-items:baseline; gap:5px; margin-top:10px; }
+.anum { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; }
+.aunit { font-size:11px; color:var(--dim); }
+.ameta { margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); font-size:11px;
+         color:var(--dim); display:flex; justify-content:space-between; font-variant-numeric:tabular-nums; }
+
+/* ── 边界态样式 ── */
+.stale-band { display:flex; align-items:center; gap:6px; margin-top:10px; font-size:11px;
+              color:var(--warn); }
+.hero-empty-num { color:var(--dim); }
+.hero-empty-hint { margin-top:6px; font-size:11px; color:var(--dim); line-height:1.6; }
+.empty-flat { border:1px dashed var(--border); border-radius:10px; padding:20px 14px;
+              text-align:center; font-size:12px; color:var(--dim); line-height:1.7; }
+h4 { font-size:12px; color:var(--accent); margin:18px 0 8px; font-weight:600; }
+.sep { border-top:1px solid var(--border); margin:18px 0 0; padding-top:10px; font-size:10px; color:var(--dim);}
+</style></head><body>
+<div class="titlebar">token-wallet</div>
+<div class="tabs"><span class="tab">用量</span><span class="tab active">本地 Agent</span></div>
+<div class="content">
+
+  <!-- ═══ 正常态(主形态) ═══ -->
+  <div class="hero">
+    <div class="hero-row0">
+      <span class="hero-label">近 5 小时</span>
+      <button class="hero-dash">用量大屏 →</button>
+    </div>
+    <div class="hero-num-row"><span class="hero-num">258,613,940</span><span class="hero-unit">tokens</span></div>
+    <div class="hero-chart">
+      <svg viewBox="0 0 320 52" preserveAspectRatio="none">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#5794f2" stop-opacity=".35"/><stop offset="1" stop-color="#5794f2" stop-opacity="0"/>
+        </linearGradient></defs>
+        <path d="M0,43 L53,39 L106,41 L159,34 L212,28 L265,15 L320,6 L320,52 L0,52 Z" fill="url(#g)"/>
+        <path d="M0,43 L53,39 L106,41 L159,34 L212,28 L265,15 L320,6" fill="none" stroke="#5794f2" stroke-width="1.5"/>
+        <circle cx="320" cy="6" r="2.5" fill="#5794f2"/>
+      </svg>
+    </div>
+    <div class="hero-axis"><span>-5h</span><span>-4h</span><span>-3h</span><span>-2h</span><span>-1h</span><span>now</span></div>
+  </div>
+
+  <div class="label">AGENTS (2)</div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">N</span><span class="aname">njbx02</span><span class="astatus"><span class="adot"></span>有活动</span></div>
+    <div class="abody"><span class="anum">240,188,540</span><span class="aunit">tokens</span></div>
+    <div class="ameta"><span>1,763</span><span>10:26</span></div>
+  </div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">O</span><span class="aname">opencode-home</span><span class="astatus idle"><span class="adot" style="background:#8b929c"></span>空闲</span></div>
+    <div class="abody"><span class="anum">18,425,400</span><span class="aunit">tokens</span></div>
+    <div class="ameta"><span>42</span><span>09:12</span></div>
+  </div>
+
+  <!-- ═══ 边界态 B1: hero 正常但某 agent 数据陈旧(>30min 无上报) ═══ -->
+  <h4>边界 ① 数据陈旧（agent 超 30 分钟无上报）</h4>
+  <div class="acard">
+    <div class="ahead"><span class="alogo">K</span><span class="aname">k3-worker</span><span class="astatus idle"><span class="adot" style="background:var(--warn)"></span>数据滞后</span></div>
+    <div class="abody"><span class="anum" style="color:var(--dim)">4,474,000</span><span class="aunit">tokens</span></div>
+    <div class="ameta"><span>2</span><span>昨天 22:14</span></div>
+    <div class="stale-band">◇ 数据为 2026-09-23 22:14 前的快照 — agent 可能已下线</div>
+  </div>
+
+  <!-- ═══ 边界态 B2: 置顶 hero 零数据(全新装/全部删光) ═══ -->
+  <h4>边界 ② 全局零数据（hero 空态）</h4>
+  <div class="hero">
+    <div class="hero-row0">
+      <span class="hero-label">近 5 小时</span>
+      <button class="hero-dash">用量大屏 →</button>
+    </div>
+    <div class="hero-num-row"><span class="hero-num hero-empty-num">0</span><span class="hero-unit">tokens</span></div>
+    <div class="hero-chart">
+      <svg viewBox="0 0 320 52" preserveAspectRatio="none">
+        <line x1="0" y1="50" x2="320" y2="50" stroke="#31363e" stroke-width="1" stroke-dasharray="3 3"/>
+      </svg>
+    </div>
+    <div class="hero-axis"><span>-5h</span><span>-4h</span><span>-3h</span><span>-2h</span><span>-1h</span><span>now</span></div>
+    <div class="hero-empty-hint">暂无上报数据 — agent 完成首次调用并接入上报后，这里会出现用量曲线。</div>
+  </div>
+
+  <!-- ═══ 边界态 B3: agent 列表空(hero 有数据不可能, 但 daemon 刚清库) ═══ -->
+  <h4>边界 ③ 列表空（删除全部 agent 数据后）</h4>
+  <div class="empty-flat">没有 agent 用量数据<br>删除操作已生效 — 新上报到达后 agent 卡会重新出现</div>
+
+  <!-- ═══ 边界态 B4: 折线数据不足 1 小时(首小时斜率误导) ═══ -->
+  <h4>边界 ④ 数据不足窗口（<1h，前段平线非零流量）</h4>
+  <div class="hero">
+    <div class="hero-row0">
+      <span class="hero-label">近 5 小时</span>
+      <button class="hero-dash">用量大屏 →</button>
+    </div>
+    <div class="hero-num-row"><span class="hero-num">18,425,400</span><span class="hero-unit">tokens</span></div>
+    <div class="hero-chart">
+      <svg viewBox="0 0 320 52" preserveAspectRatio="none">
+        <defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#5794f2" stop-opacity=".35"/><stop offset="1" stop-color="#5794f2" stop-opacity="0"/>
+        </linearGradient></defs>
+        <!-- 前段无数据的桶 = 断线(非零值), 首数据点起画 -->
+        <path d="M212,40 L265,22 L320,6" fill="none" stroke="#5794f2" stroke-width="1.5"/>
+        <circle cx="212" cy="40" r="2.5" fill="#5794f2"/>
+      </svg>
+    </div>
+    <div class="hero-axis"><span>-5h</span><span>-4h</span><span>-3h</span><span>-2h</span><span style="color:var(--fg)">-1h*</span><span>now</span></div>
+    <div class="hero-empty-hint">首次上报 41 分钟前 — 曲线自首条数据起绘制</div>
+  </div>
+
+  <div class="sep">边界态汇总: ①陈旧卡=黄点「数据滞后」+快照带 ②零数据=0+虚线基线+引导句 ③列表空=虚线扁平卡+删除生效回执 ④不足窗口=断线绘制+首点标记+星标注</div>
+
+</div>
+</body></html>
