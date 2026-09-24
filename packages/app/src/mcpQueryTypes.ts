@@ -8,6 +8,22 @@
  * 零运行时, 改一边需手动同步另一边(本卡内已对齐, 后续若改请 patch 两份)。
  */
 
+/**
+ * delete_usage 输入/输出契约(t_6eb3e728, docs/mcp-protocol.md v1.1 §2.4 增补形态):
+ * - 输入: { agent_id }(必填, 1+ 字符) — 清除该 agent 的全部上报数据, 不可逆
+ * - 输出: { deleted: number } — 实际删除的 usage 事件行数(管理面语义, Bearer key 即授权边界)
+ *
+ * ⚠️ 此文件与 electron/mcp-query-types.ts 是同一份契约的 renderer 端副本。
+ * 改一边需手动同步另一边。
+ */
+export interface DeleteUsageInput {
+  agent_id: string;
+}
+
+export interface DeleteUsageOutput {
+  deleted: number;
+}
+
 export interface UsageSummaryInput {
   since?: string;
   until?: string;

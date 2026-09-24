@@ -13,6 +13,7 @@
  *   操作中(start/stop/genKey) → "busy", 期间禁用所有控件
  */
 import { useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { t } from "../i18n";
 import {
   maskMcpKey,
@@ -31,7 +32,18 @@ import {
 
 type Status = "loading" | "running" | "stopped" | "not_installed";
 
-export function McpServicePanel() {
+/**
+ * MCP daemon 启动成功事件(t_6eb3e728 ①):
+ * start/restart 成功后 dispatch window 事件 — App.tsx 监听后置 pending + 立即重拉
+ * usage_summary(不等 30s tick), 主页 Agent 区「正在连接 MCP daemon…」→ 数据平滑过渡。
+ * window 级 CustomEvent 是 McpServicePanel(设置页) 与 App(主页) 之间既有解耦通道形态,
+ * 无新增 IPC(两组件同在 renderer, 无需跨进程)。
+ */
+function dispatchMcpStarted(): void {
+  window.dispatchEvent(new CustomEvent("tw-mcp-started"));
+}
+
+export function McpServicePanel(): ReactNode {
   const [status, setStatus] = useState<Status>("loading");
   const [config, setConfig] = useState<McpConfigView | null>(null);
   const [autostart, setAutostart] = useState(false);
@@ -84,6 +96,9 @@ export function McpServicePanel() {
       const r = await mcpStart();
       if (!r.started) {
         setError(t("set.mcpErrorGeneric", { msg: r.reason ?? "unknown" }));
+      } else {
+        // t_6eb3e728 ①: 启动成功 → App 置 pending + 立即重拉 usage_summary(不等 30s tick)
+        dispatchMcpStarted();
       }
       await probe();
     } finally {
@@ -118,6 +133,9 @@ export function McpServicePanel() {
       const r = await mcpRestart();
       if (!r.started) {
         setError(t("set.mcpErrorGeneric", { msg: r.reason ?? "restart_failed" }));
+      } else {
+        // t_6eb3e728 ①: restart 收敛成功同样触发立即重拉(旧 daemon 数据可能已变)
+        dispatchMcpStarted();
       }
       await probe();
     } finally {

@@ -2396,11 +2396,58 @@ body {
   gap: var(--space-12, 12px);
 }
 .agent-card {
+  /* position:relative — 悬浮删除钮 .agent-del-btn 绝对定位锚卡右上(t_6eb3e728 ③) */
+  position: relative;
   padding: var(--space-12, 12px) var(--space-16, 16px);
   display: flex;
   flex-direction: column;
   gap: var(--space-12, 12px);
 }
+/* t_6eb3e728 ③: Agent 卡悬浮删除钮 — ProviderCard .card-del-btn 同款纪律:
+ * 按钮自为热区(opacity:0 不影响 hit-test + pointer-events:auto),
+ * 单条 .agent-card:hover 触发显出(禁叠多层热区), focus 键盘可达;
+ * 确认气泡浮出时按钮互斥卸载(React 条件渲染, 与 ProviderCard.confirming 同模式)。 */
+.agent-del-btn {
+  position: absolute;
+  top: var(--space-4, 4px);
+  right: var(--space-4, 4px);
+  padding: var(--space-8, 8px); /* 28px 热区(padding 8 + icon 13 + padding 8) */
+  border-color: transparent;
+  background: transparent;
+  opacity: 0;
+  z-index: 1;
+  pointer-events: auto; /* 关键: opacity:0 不影响 hit-test, 按钮始终接收 pointer events */
+  transition: opacity 0.15s ease;
+  cursor: pointer;
+}
+.agent-del-btn > svg {
+  pointer-events: none; /* 命中按钮本体不命中 svg */
+}
+.agent-del-btn:hover,
+.agent-card:hover .agent-del-btn,
+.agent-card:focus-within .agent-del-btn,
+.agent-del-btn:focus-visible {
+  opacity: 1;
+  border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+/* 确认气泡: 复用 ProviderCard .card-confirm 浮层形态(绝对定位浮卡右上, 红调边框),
+ * 仅追加白Space兜底 — 360px 卡宽下气泡宽于卡时允许内部换行不被 .card overflow:hidden 截死 */
+.agent-confirm {
+  max-width: calc(100% - var(--space-8, 8px));
+  flex-wrap: wrap;
+}
+.agent-confirm .confirm-text {
+  white-space: normal; /* 覆盖 .card-confirm .confirm-text 的 nowrap — 长文案(agent_id+行数)允许换行 */
+}
+/* t_6eb3e728 ③: 删除失败错误行 — 跨整行(meta 前), text-error 红字语义 */
+.agent-del-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--font-12, 12px);
+  line-height: 1.5;
+}
+
 .agent-card .card-head {
   gap: var(--space-8, 8px);
 }

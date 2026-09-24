@@ -13,6 +13,8 @@
  */
 
 import type {
+  DeleteUsageInput,
+  DeleteUsageOutput,
   UsageReportEchoInput,
   UsageReportEchoOutput,
   UsageSummaryInput,
@@ -61,6 +63,21 @@ export async function mcpUsageReportEcho(
 ): Promise<McpQueryResult<UsageReportEchoOutput>> {
   const r = await hostInvoke<{ ok: true; data: UsageReportEchoOutput } | { ok: false; reason: string }>(
     "mcp_usage_report_echo",
+    input as unknown as Record<string, unknown>,
+  );
+  if (!r) return { ok: false, reason: "unavailable" };
+  if (r.ok) return { ok: true, data: r.data, generatedAt: "" };
+  return { ok: false, reason: r.reason as "unreachable" | "unauthorized" | "protocol_error" };
+}
+
+/**
+ * 删除指定 agent 的全部上报数据(t_6eb3e728, 管理面)。
+ * 走主进程 mcp_delete_usage 通道 → daemon `delete_usage` 工具(协议 v1.1 §2.4)。
+ * 浏览器无桥 → ok:false reason:unavailable(与读链路同语义, UI 显式报错不静默)。
+ */
+export async function mcpDeleteUsage(input: DeleteUsageInput): Promise<McpQueryResult<DeleteUsageOutput>> {
+  const r = await hostInvoke<{ ok: true; data: DeleteUsageOutput } | { ok: false; reason: string }>(
+    "mcp_delete_usage",
     input as unknown as Record<string, unknown>,
   );
   if (!r) return { ok: false, reason: "unavailable" };

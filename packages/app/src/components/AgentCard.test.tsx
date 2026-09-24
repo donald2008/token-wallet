@@ -2,7 +2,7 @@
  * AgentCard 组件单测(t_9255cb63, 与项目惯例一致 — 用裸 createRoot + act, 不引 testing-library):
  * - 渲染三种活动态(active / idle / no_report_today)
  * - 金额可空留白契约(cost_total=null OR currency=null → is-empty 类, 内容空白)
- * - 详情按钮触发 onOpenDetail 回调
+ * - 详情按钮触发 onOpenDashboard 回调
  * - AgentCardEmpty 渲染 reason 文案
  */
 // @vitest-environment jsdom
@@ -58,7 +58,7 @@ describe("AgentCard", () => {
         row={baseRow()}
         activity="active"
         generatedAt="2026-09-09T12:00:00+08:00"
-        onOpenDetail={() => {}}
+        onOpenDashboard={() => {}}
       />,
     );
     expect(c.querySelector('[data-testid="agent-card"][data-agent="njbx02"]')).toBeTruthy();
@@ -76,7 +76,7 @@ describe("AgentCard", () => {
         row={baseRow({ cost_total: null })}
         activity="active"
         generatedAt=""
-        onOpenDetail={() => {}}
+        onOpenDashboard={() => {}}
       />,
     );
     const cost = c.querySelector('[data-testid="agent-cost"]');
@@ -92,7 +92,7 @@ describe("AgentCard", () => {
         row={baseRow({ currency: null })}
         activity="active"
         generatedAt=""
-        onOpenDetail={() => {}}
+        onOpenDashboard={() => {}}
       />,
     );
     const cost = c.querySelector('[data-testid="agent-cost"]');
@@ -101,7 +101,7 @@ describe("AgentCard", () => {
 
   it("active 状态 → status-dot ok + 文案「有活动」", () => {
     const { container: c } = mount(
-      <AgentCard agentId="a" row={baseRow()} activity="active" generatedAt="" onOpenDetail={() => {}} />,
+      <AgentCard agentId="a" row={baseRow()} activity="active" generatedAt="" onOpenDashboard={() => {}} />,
     );
     const dot = c.querySelector('[data-testid="agent-status-dot"]');
     expect(dot?.getAttribute("data-health")).toBe("ok");
@@ -115,7 +115,7 @@ describe("AgentCard", () => {
         row={baseRow({ by_status: { completed: 0, partial: 5, unknown: 0 }, calls: 5 })}
         activity="idle"
         generatedAt=""
-        onOpenDetail={() => {}}
+        onOpenDashboard={() => {}}
       />,
     );
     const dot = c.querySelector('[data-testid="agent-status-dot"]');
@@ -130,7 +130,7 @@ describe("AgentCard", () => {
         row={baseRow({ calls: 0, by_status: { completed: 0, partial: 0, unknown: 0 } })}
         activity="no_report_today"
         generatedAt=""
-        onOpenDetail={() => {}}
+        onOpenDashboard={() => {}}
       />,
     );
     const dot = c.querySelector('[data-testid="agent-status-dot"]');
@@ -138,10 +138,10 @@ describe("AgentCard", () => {
     expect(c.querySelector('[data-testid="agent-activity-badge"]')?.textContent).toBe("今天无上报");
   });
 
-  it("点击详情按钮触发 onOpenDetail(传 agentId)", () => {
+  it("点击详情按钮触发 onOpenDashboard(传 agentId)", () => {
     const onOpen = vi.fn();
     const { container: c } = mount(
-      <AgentCard agentId="njbx02" row={baseRow()} activity="active" generatedAt="" onOpenDetail={onOpen} />,
+      <AgentCard agentId="njbx02" row={baseRow()} activity="active" generatedAt="" onOpenDashboard={onOpen} />,
     );
     const btn = c.querySelector('[data-testid="agent-detail-njbx02"]') as HTMLButtonElement;
     act(() => btn.click());
@@ -155,12 +155,81 @@ describe("AgentCard", () => {
         row={baseRow()}
         activity="active"
         generatedAt="2026-09-09T12:00:00+08:00"
-        onOpenDetail={() => {}}
+        onOpenDashboard={() => {}}
       />,
     );
     const meta = c.querySelector('[data-testid="agent-meta"]');
     expect(meta?.textContent).toMatch(/calls\s*100/);
     expect(meta?.textContent).toMatch(/2026-09-09T12:00:00\+08:00/);
+  });
+
+  // t_6eb3e728 ②: 详情钮语义归位 — 大屏是整体大屏, 按钮文案「大屏 →」+ aria-label 同步。
+  // testid agent-detail-<id> 保留(卡面二选一: 保留 testid 仅改文案, e2e 零波及)。
+  it("②大屏按钮文案=「大屏 →」+ aria-label 打开用量大屏(不再是单卡详情语义)", () => {
+    const { container: c } = mount(
+      <AgentCard agentId="njbx02" row={baseRow()} activity="active" generatedAt="" onOpenDashboard={() => {}} />,
+    );
+    const btn = c.querySelector('[data-testid="agent-detail-njbx02"]') as HTMLButtonElement;
+    expect(btn.textContent).toBe("大屏 →");
+    expect(btn.getAttribute("aria-label")).toBe("打开 njbx02 用量大屏");
+    expect(btn.getAttribute("title")).toBe("打开用量大屏");
+    expect(btn.textContent).not.toContain("详情");
+  });
+
+  // t_6eb3e728 ③: 悬浮删除钮 + 二次确认。onDeleteUsage 缺省 = 不渲染删除钮(e2e mock 场景可控)。
+  it("③未传 onDeleteUsage → 不渲染删除钮与确认气泡", () => {
+    const { container: c } = mount(
+      <AgentCard agentId="a" row={baseRow()} activity="active" generatedAt="" onOpenDashboard={() => {}} />,
+    );
+    expect(c.querySelector('[data-testid="agent-delete-a"]')).toBeNull();
+    expect(c.querySelector('[data-testid="agent-confirm-row-a"]')).toBeNull();
+  });
+
+  it("③点删除钮 → 确认气泡浮出(含 agent_id + calls 数 + 不可逆), 删除钮互斥隐藏", () => {
+    const { container: c } = mount(
+      <AgentCard
+        agentId="njbx02"
+        row={baseRow()}
+        activity="active"
+        generatedAt=""
+        onOpenDashboard={() => {}}
+        onDeleteUsage={async () => true}
+      />,
+    );
+    expect(c.querySelector('[data-testid="agent-delete-njbx02"]')).toBeTruthy();
+    act(() => (c.querySelector('[data-testid="agent-delete-njbx02"]') as HTMLButtonElement).click());
+    const confirmRow = c.querySelector('[data-testid="agent-confirm-row-njbx02"]');
+    expect(confirmRow).toBeTruthy();
+    const text = confirmRow?.textContent ?? "";
+    expect(text).toContain("njbx02");
+    expect(text).toContain("100"); // row.calls = 100
+    expect(text).toContain("不可逆");
+    // 互斥: 确认气泡浮出期间删除钮卸载(单条 hover 纪律, 不叠热区)
+    expect(c.querySelector('[data-testid="agent-delete-njbx02"]')).toBeNull();
+  });
+
+  it("③确认删除 → onDeleteUsage(agentId) 调用; 取消 → 不调用且气泡收起", () => {
+    const onDelete = vi.fn(async () => true);
+    const { container: c } = mount(
+      <AgentCard
+        agentId="njbx02"
+        row={baseRow()}
+        activity="active"
+        generatedAt=""
+        onOpenDashboard={() => {}}
+        onDeleteUsage={onDelete}
+      />,
+    );
+    act(() => (c.querySelector('[data-testid="agent-delete-njbx02"]') as HTMLButtonElement).click());
+    // 取消路径
+    act(() => (c.querySelector('[data-testid="agent-confirm-cancel-njbx02"]') as HTMLButtonElement).click());
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(c.querySelector('[data-testid="agent-confirm-row-njbx02"]')).toBeNull();
+    // 再次进入确认 → 确认路径
+    act(() => (c.querySelector('[data-testid="agent-delete-njbx02"]') as HTMLButtonElement).click());
+    act(() => (c.querySelector('[data-testid="agent-confirm-del-njbx02"]') as HTMLButtonElement).click());
+    expect(onDelete).toHaveBeenCalledWith("njbx02");
+    expect(c.querySelector('[data-testid="agent-confirm-row-njbx02"]')).toBeNull();
   });
 });
 
@@ -184,7 +253,7 @@ describe("formatTokens 边界(t_f26c5fb8: K/M 简写分支已删, 一律 Intl.Nu
 
   it("agent-tokens 行 title 保留完整数字(悬停兜底,勿删)", () => {
     const { container: c } = mount(
-      <AgentCard agentId="x" row={baseRow()} activity="active" generatedAt="" onOpenDetail={() => {}} />,
+      <AgentCard agentId="x" row={baseRow()} activity="active" generatedAt="" onOpenDashboard={() => {}} />,
     );
     const tokens = c.querySelector('[data-testid="agent-tokens"]');
     expect(tokens?.getAttribute("title")).toBe("64,000 tokens");
