@@ -284,7 +284,6 @@ test("置顶大屏钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明�
   await pwExpect(
     page.getByTestId("agent-dashboard-c-detail-home-computer").locator("td:last-child"),
   ).toHaveText("");
-  // H4 agent tab 落 Model 面板头: 切 home-computer → 明细高亮切行(选中态 = is-selected 类)
   // t_c1e454aa①: tab 已退役 → 反向断言: 全仓零 dash-agent-tab 引用 + 明细行不可选
   await pwExpect(page.getByTestId("dash-agent-tabs")).toHaveCount(0);
 
