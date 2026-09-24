@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+/* ═══ 方案 A-rev「双行 hero」— 修复 v1 四处布局问题 ═══
+   修复: ①大数字独占一行(30px 保持, 不再与按钮/说明挤行) ②hero 降高(折线 72→52, 间距收紧)
+   ③副标行与折线轴合并语义 ④第二卡回首屏(720 高内可见: titlebar32+tabs37+hero~150+卡1~90+卡2头) */
+:root { --bg:#16181c; --card:#22262c; --border:#31363e; --fg:#e8eaed; --dim:#8b929c;
+        --accent:#5794f2; --ok:#73bf69; --danger:#e02f44; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); font-family:system-ui; color:var(--fg); width:360px; }
+.titlebar { height:32px; display:flex; align-items:center; padding:0 12px; font-size:12px;
+            color:var(--dim); border-bottom:1px solid var(--border); }
+.tabs { display:flex; gap:4px; padding:0 12px; border-bottom:1px solid var(--border); }
+.tab { padding:8px 10px; font-size:13px; color:var(--dim); border-bottom:2px solid transparent; }
+.tab.active { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
+.content { padding:12px; }
+
+.hero { background:linear-gradient(160deg,#232a34 0%,#1d2126 70%); border:1px solid var(--border);
+        border-radius:12px; padding:12px 14px; }
+/* 行1: 标签 + 大屏钮(两端对齐, 小元素行, 给大数字让出整行) */
+.hero-row0 { display:flex; justify-content:space-between; align-items:center; }
+.hero-label { font-size:11px; color:var(--dim); }
+.hero-dash { font-size:11px; color:var(--accent); background:rgba(87,148,242,.12);
+             border:1px solid rgba(87,148,242,.35); border-radius:6px; padding:4px 9px; cursor:pointer;
+             white-space:nowrap; }
+.hero-dash:hover { background:rgba(87,148,242,.22); }
+/* 行2: 大数字独占整行, 28px(微降防 9 位数溢出), 基线对齐单位 */
+.hero-num-row { display:flex; align-items:baseline; gap:6px; margin-top:6px; }
+.hero-num { font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.5px;
+            line-height:1.1; }
+.hero-unit { font-size:12px; color:var(--dim); }
+/* 行3: 副标即折线轴说明(合并语义, 省一行) */
+.hero-chart { margin-top:8px; height:52px; }
+.hero-chart svg { width:100%; height:100%; display:block; }
+.hero-axis { display:flex; justify-content:space-between; font-size:10px; color:var(--dim); margin-top:4px; }
+
+.section-title { font-size:13px; font-weight:600; color:var(--dim); margin:14px 0 8px; }
+.acard { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+         position:relative; margin-bottom:10px; }
+.acard:hover { border-color:#4a525c; }
+.ahead { display:flex; align-items:center; gap:8px; }
+.alogo { width:22px; height:22px; background:#3a4048; border-radius:6px; display:flex; align-items:center;
+         justify-content:center; font-size:11px; font-weight:700; }
+.aname { font-size:13px; font-weight:600; }
+.astatus { margin-left:auto; display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ok); }
+.astatus.idle { color:var(--dim); }  /* 修复: 空闲态文字灰化(与点色一致) */
+.adot { width:6px; height:6px; border-radius:50%; background:var(--ok); }
+.acard:hover .astatus { opacity:0; }
+.adel { position:absolute; top:10px; right:10px; width:24px; height:24px; border-radius:6px;
+        background:transparent; border:1px solid transparent; color:var(--dim); cursor:pointer;
+        opacity:0; display:flex; align-items:center; justify-content:center; }
+.acard:hover .adel { opacity:1; }
+.adel:hover { color:var(--danger); border-color:var(--danger); }
+.abody { display:flex; align-items:baseline; gap:5px; margin-top:10px; }
+.anum { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; }
+.aunit { font-size:11px; color:var(--dim); }
+.ameta { margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); font-size:11px;
+         color:var(--dim); display:flex; justify-content:space-between; }
+.ameta b { color:var(--fg); }
+</style></head><body>
+<div class="titlebar">token-wallet</div>
+<div class="tabs"><span class="tab">用量</span><span class="tab active">本地 Agent</span></div>
+<div class="content">
+
+  <div class="hero">
+    <div class="hero-row0">
+      <span class="hero-label">全部 agent · 近 5 小时</span>
+      <button class="hero-dash">用量大屏 →</button>
+    </div>
+    <div class="hero-num-row">
+      <span class="hero-num">258,613,940</span>
+      <span class="hero-unit">tokens</span>
+    </div>
+    <div class="hero-chart">
+      <svg viewBox="0 0 320 52" preserveAspectRatio="none">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#5794f2" stop-opacity=".35"/><stop offset="1" stop-color="#5794f2" stop-opacity="0"/>
+        </linearGradient></defs>
+        <path d="M0,43 L53,39 L106,41 L159,34 L212,28 L265,15 L320,6 L320,52 L0,52 Z" fill="url(#g)"/>
+        <path d="M0,43 L53,39 L106,41 L159,34 L212,28 L265,15 L320,6" fill="none" stroke="#5794f2" stroke-width="1.5"/>
+        <circle cx="320" cy="6" r="2.5" fill="#5794f2"/>
+      </svg>
+    </div>
+    <div class="hero-axis"><span>-5h</span><span>-4h</span><span>-3h</span><span>-2h</span><span>-1h</span><span>now</span></div>
+  </div>
+
+  <div class="section-title">AGENT 卡片（2）· 1,805 calls 全局</div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">N</span><span class="aname">njbx02</span><span class="astatus"><span class="adot"></span>有活动</span></div>
+    <div class="abody"><span class="anum">240,188,540</span><span class="aunit">tokens</span></div>
+    <div class="ameta"><span>calls <b>1,763</b></span><span>更新 10:26</span></div>
+  </div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">O</span><span class="aname">opencode-home</span><span class="astatus idle"><span class="adot" style="background:#8b929c"></span>空闲</span></div>
+    <div class="abody"><span class="anum">18,425,400</span><span class="aunit">tokens</span></div>
+    <div class="ameta"><span>calls <b>42</b></span><span>更新 09:12</span></div>
+  </div>
+
+</div>
+</body></html>
