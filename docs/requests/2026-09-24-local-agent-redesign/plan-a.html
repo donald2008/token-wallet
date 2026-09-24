@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+/* ═══ 方案 A「置顶 hero 横幅」— 360x720 主窗, 本地 Agent tab 全景 ═══
+   置顶组件: 全局用量 hero + 5h 折线 + 大屏入口, 卡片列表居下 */
+:root { --bg:#16181c; --card:#22262c; --card2:#1d2126; --border:#31363e; --fg:#e8eaed;
+        --dim:#8b929c; --accent:#5794f2; --ok:#73bf69; --danger:#e02f44; }
+* { box-sizing:border-box; }
+body { margin:0; padding:0; background:var(--bg); font-family:system-ui; color:var(--fg); width:360px; }
+.titlebar { height:32px; display:flex; align-items:center; padding:0 12px; font-size:12px;
+            color:var(--dim); border-bottom:1px solid var(--border); }
+.tabs { display:flex; gap:4px; padding:0 12px; border-bottom:1px solid var(--border); background:var(--bg); }
+.tab { padding:8px 10px; font-size:13px; color:var(--dim); border-bottom:2px solid transparent; }
+.tab.active { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
+.content { padding:12px; }
+
+/* ── 置顶 hero 组件 ── */
+.hero { background:linear-gradient(160deg,#232a34 0%,#1d2126 70%); border:1px solid var(--border);
+        border-radius:12px; padding:14px; }
+.hero-row1 { display:flex; align-items:baseline; }
+.hero-num { font-size:30px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.5px; }
+.hero-unit { font-size:12px; color:var(--dim); margin-left:6px; }
+.hero-dash { margin-left:auto; font-size:12px; color:var(--accent); background:rgba(87,148,242,.12);
+             border:1px solid rgba(87,148,242,.35); border-radius:6px; padding:5px 10px; cursor:pointer; }
+.hero-dash:hover { background:rgba(87,148,242,.22); }
+.hero-sub { margin-top:4px; font-size:11px; color:var(--dim); }
+.hero-chart { margin-top:12px; height:72px; position:relative; }
+.hero-chart svg { width:100%; height:100%; }
+.hero-axis { display:flex; justify-content:space-between; font-size:10px; color:var(--dim); margin-top:4px; }
+
+/* ── agent 卡片列表(方案A卡样: 数字主体) ── */
+.section-title { font-size:13px; font-weight:600; color:var(--dim); margin:16px 0 8px; }
+.acard { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+         position:relative; margin-bottom:10px; }
+.acard:hover { border-color:#4a525c; }
+.ahead { display:flex; align-items:center; gap:8px; }
+.alogo { width:22px; height:22px; background:#3a4048; border-radius:6px; display:flex; align-items:center;
+         justify-content:center; font-size:11px; font-weight:700; }
+.aname { font-size:13px; font-weight:600; }
+.astatus { margin-left:auto; display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ok); }
+.adot { width:6px; height:6px; border-radius:50%; background:var(--ok); }
+.acard:hover .astatus { opacity:0; }
+.adel { position:absolute; top:10px; right:10px; width:24px; height:24px; border-radius:6px;
+        background:transparent; border:1px solid transparent; color:var(--dim); cursor:pointer;
+        opacity:0; display:flex; align-items:center; justify-content:center; }
+.acard:hover .adel { opacity:1; }
+.adel:hover { color:var(--danger); border-color:var(--danger); }
+.abody { display:flex; align-items:baseline; margin-top:10px; }
+.anum { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; }
+.aunit { font-size:11px; color:var(--dim); margin-left:5px; }
+.ameta { margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); font-size:11px; color:var(--dim); }
+.ameta b { color:var(--fg); }
+</style></head><body>
+<div class="titlebar">token-wallet</div>
+<div class="tabs"><span class="tab">用量</span><span class="tab active">本地 Agent</span></div>
+<div class="content">
+
+  <div class="hero">
+    <div class="hero-row1">
+      <span class="hero-num">258,613,940</span><span class="hero-unit">tokens · 全部 agent</span>
+      <button class="hero-dash">用量大屏 →</button>
+    </div>
+    <div class="hero-sub">近 5 小时 · 6 个 agent · 1,805 calls</div>
+    <div class="hero-chart">
+      <svg viewBox="0 0 320 72" preserveAspectRatio="none">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#5794f2" stop-opacity=".35"/><stop offset="1" stop-color="#5794f2" stop-opacity="0"/>
+        </linearGradient></defs>
+        <path d="M0,60 L40,55 L80,58 L120,48 L160,50 L200,40 L240,42 L280,22 L320,10 L320,72 L0,72 Z" fill="url(#g)"/>
+        <path d="M0,60 L40,55 L80,58 L120,48 L160,50 L200,40 L240,42 L280,22 L320,10" fill="none" stroke="#5794f2" stroke-width="1.5"/>
+        <circle cx="320" cy="10" r="2.5" fill="#5794f2"/>
+      </svg>
+    </div>
+    <div class="hero-axis"><span>-5h</span><span>-4h</span><span>-3h</span><span>-2h</span><span>-1h</span><span>now</span></div>
+  </div>
+
+  <div class="section-title">AGENT 卡片（2）</div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">N</span><span class="aname">njbx02</span><span class="astatus"><span class="adot"></span>有活动</span></div>
+    <div class="abody"><span class="anum">240,188,540</span><span class="aunit">tokens</span></div>
+    <div class="ameta">calls <b>1,763</b> · 更新 10:26</div>
+  </div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">O</span><span class="aname">opencode-home</span><span class="astatus"><span class="adot" style="background:#8b929c"></span>空闲</span></div>
+    <div class="abody"><span class="anum">18,425,400</span><span class="aunit">tokens</span></div>
+    <div class="ameta">calls <b>42</b> · 更新 09:12</div>
+  </div>
+
+</div>
+</body></html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+/* ═══ 方案 B「置顶双区条」— hero 左数字右折线(横排), 卡片紧凑双列 ═══
+   360 宽内: 折线区与数字区左右分栏, 垂直更省, 列表可见卡数更多 */
+:root { --bg:#16181c; --card:#22262c; --border:#31363e; --fg:#e8eaed; --dim:#8b929c;
+        --accent:#5794f2; --ok:#73bf69; --danger:#e02f44; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); font-family:system-ui; color:var(--fg); width:360px; }
+.titlebar { height:32px; display:flex; align-items:center; padding:0 12px; font-size:12px;
+            color:var(--dim); border-bottom:1px solid var(--border); }
+.tabs { display:flex; gap:4px; padding:0 12px; border-bottom:1px solid var(--border); }
+.tab { padding:8px 10px; font-size:13px; color:var(--dim); border-bottom:2px solid transparent; }
+.tab.active { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
+.content { padding:12px; }
+
+.hero { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; }
+.hero-top { display:flex; justify-content:space-between; align-items:center; }
+.hero-label { font-size:11px; color:var(--dim); }
+.hero-dash { font-size:11px; color:var(--accent); background:rgba(87,148,242,.12);
+             border:1px solid rgba(87,148,242,.35); border-radius:6px; padding:4px 8px; cursor:pointer; }
+.hero-main { display:flex; gap:14px; margin-top:8px; align-items:stretch; }
+.hero-left { flex:0 0 120px; display:flex; flex-direction:column; justify-content:center; }
+.hero-num { font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-.5px; }
+.hero-sub { font-size:11px; color:var(--dim); margin-top:4px; line-height:1.5; }
+.hero-right { flex:1; min-width:0; border-left:1px solid var(--border); padding-left:12px;
+              display:flex; flex-direction:column; justify-content:center; }
+.hero-chart { height:56px; }
+.hero-axis { display:flex; justify-content:space-between; font-size:9px; color:var(--dim); margin-top:3px; }
+
+.section-title { font-size:13px; font-weight:600; color:var(--dim); margin:14px 0 8px; }
+.acard { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:11px 13px;
+         position:relative; margin-bottom:8px; }
+.acard:hover { border-color:#4a525c; }
+.ahead { display:flex; align-items:center; gap:8px; }
+.alogo { width:22px; height:22px; background:#3a4048; border-radius:6px; display:flex; align-items:center;
+         justify-content:center; font-size:11px; font-weight:700; }
+.aname { font-size:13px; font-weight:600; }
+.astatus { margin-left:auto; display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ok); }
+.adot { width:6px; height:6px; border-radius:50%; background:var(--ok); }
+.acard:hover .astatus { opacity:0; }
+.adel { position:absolute; top:9px; right:9px; width:24px; height:24px; border-radius:6px;
+        background:transparent; border:1px solid transparent; color:var(--dim); cursor:pointer;
+        opacity:0; display:flex; align-items:center; justify-content:center; }
+.acard:hover .adel { opacity:1; }
+.adel:hover { color:var(--danger); border-color:var(--danger); }
+.ametrics { display:flex; gap:22px; margin-top:10px; }
+.metric .v { font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; }
+.metric .k { font-size:10px; color:var(--dim); margin-top:1px; }
+.ameta { margin-top:8px; font-size:10px; color:var(--dim); }
+</style></head><body>
+<div class="titlebar">token-wallet</div>
+<div class="tabs"><span class="tab">用量</span><span class="tab active">本地 Agent</span></div>
+<div class="content">
+
+  <div class="hero">
+    <div class="hero-top">
+      <span class="hero-label">全部 agent · 近 5 小时</span>
+      <button class="hero-dash">大屏 →</button>
+    </div>
+    <div class="hero-main">
+      <div class="hero-left">
+        <div class="hero-num">258.6M</div>
+        <div class="hero-sub">tokens · 6 agents<br>1,805 calls</div>
+      </div>
+      <div class="hero-right">
+        <div class="hero-chart">
+          <svg viewBox="0 0 180 56" preserveAspectRatio="none">
+            <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#5794f2" stop-opacity=".35"/><stop offset="1" stop-color="#5794f2" stop-opacity="0"/>
+            </linearGradient></defs>
+            <path d="M0,46 L30,42 L60,44 L90,36 L120,38 L150,24 L180,8 L180,56 L0,56 Z" fill="url(#g)"/>
+            <path d="M0,46 L30,42 L60,44 L90,36 L120,38 L150,24 L180,8" fill="none" stroke="#5794f2" stroke-width="1.5"/>
+            <circle cx="180" cy="8" r="2.5" fill="#5794f2"/>
+          </svg>
+        </div>
+        <div class="hero-axis"><span>-5h</span><span>-3h</span><span>-1h</span><span>now</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">AGENT 卡片（2）</div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">N</span><span class="aname">njbx02</span><span class="astatus"><span class="adot"></span>有活动</span></div>
+    <div class="ametrics">
+      <div class="metric"><div class="v">240,188,540</div><div class="k">tokens</div></div>
+      <div class="metric"><div class="v">1,763</div><div class="k">calls</div></div>
+    </div>
+    <div class="ameta">更新 10:26</div>
+  </div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">O</span><span class="aname">opencode-home</span><span class="astatus"><span class="adot" style="background:#8b929c"></span>空闲</span></div>
+    <div class="ametrics">
+      <div class="metric"><div class="v">18,425,400</div><div class="k">tokens</div></div>
+      <div class="metric"><div class="v">42</div><div class="k">calls</div></div>
+    </div>
+    <div class="ameta">更新 09:12</div>
+  </div>
+
+</div>
+</body></html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+/* ═══ 方案 C「置顶迷你工具条 + 大数字让位卡片」— hero 压成 44px 细条, 折线做背景 ═══
+   极端省高: 置顶仅一行(总数+迷你折线+大屏钮), 列表可见 4+ 卡, agent 多时最优 */
+:root { --bg:#16181c; --card:#22262c; --border:#31363e; --fg:#e8eaed; --dim:#8b929c;
+        --accent:#5794f2; --ok:#73bf69; --danger:#e02f44; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); font-family:system-ui; color:var(--fg); width:360px; }
+.titlebar { height:32px; display:flex; align-items:center; padding:0 12px; font-size:12px;
+            color:var(--dim); border-bottom:1px solid var(--border); }
+.tabs { display:flex; gap:4px; padding:0 12px; border-bottom:1px solid var(--border); }
+.tab { padding:8px 10px; font-size:13px; color:var(--dim); border-bottom:2px solid transparent; }
+.tab.active { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
+.content { padding:12px; }
+
+/* 迷你工具条: 一行装下 总数 + sparkline + 大屏钮 */
+.strip { display:flex; align-items:center; gap:10px; background:var(--card);
+         border:1px solid var(--border); border-radius:10px; padding:8px 12px; }
+.strip-num { font-size:16px; font-weight:700; font-variant-numeric:tabular-nums; }
+.strip-unit { font-size:10px; color:var(--dim); }
+.strip-spark { flex:1; height:22px; min-width:0; }
+.strip-spark svg { width:100%; height:100%; display:block; }
+.strip-dash { font-size:11px; color:var(--accent); background:rgba(87,148,242,.12);
+              border:1px solid rgba(87,148,242,.35); border-radius:6px; padding:4px 8px;
+              cursor:pointer; white-space:nowrap; }
+.strip-sub { font-size:10px; color:var(--dim); margin:6px 2px 0; }
+
+.section-title { font-size:13px; font-weight:600; color:var(--dim); margin:14px 0 8px; }
+.acard { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:11px 13px;
+         position:relative; margin-bottom:8px; }
+.acard:hover { border-color:#4a525c; }
+.ahead { display:flex; align-items:center; gap:8px; }
+.alogo { width:22px; height:22px; background:#3a4048; border-radius:6px; display:flex; align-items:center;
+         justify-content:center; font-size:11px; font-weight:700; }
+.aname { font-size:13px; font-weight:600; }
+.astatus { margin-left:auto; display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ok); }
+.adot { width:6px; height:6px; border-radius:50%; background:var(--ok); }
+.acard:hover .astatus { opacity:0; }
+.adel { position:absolute; top:9px; right:9px; width:24px; height:24px; border-radius:6px;
+        background:transparent; border:1px solid transparent; color:var(--dim); cursor:pointer;
+        opacity:0; display:flex; align-items:center; justify-content:center; }
+.acard:hover .adel { opacity:1; }
+.adel:hover { color:var(--danger); border-color:var(--danger); }
+.abody { display:flex; align-items:baseline; margin-top:9px; }
+.anum { font-size:21px; font-weight:700; font-variant-numeric:tabular-nums; }
+.aunit { font-size:11px; color:var(--dim); margin-left:5px; }
+.ameta { display:flex; justify-content:space-between; margin-top:7px; font-size:10px; color:var(--dim); }
+.ameta b { color:var(--fg); }
+</style></head><body>
+<div class="titlebar">token-wallet</div>
+<div class="tabs"><span class="tab">用量</span><span class="tab active">本地 Agent</span></div>
+<div class="content">
+
+  <div class="strip">
+    <div><span class="strip-num">258.6M</span> <span class="strip-unit">tokens/5h</span></div>
+    <div class="strip-spark">
+      <svg viewBox="0 0 120 22" preserveAspectRatio="none">
+        <path d="M0,18 L20,16 L40,17 L60,13 L80,14 L100,8 L120,3" fill="none" stroke="#5794f2" stroke-width="1.4"/>
+        <circle cx="120" cy="3" r="2" fill="#5794f2"/>
+      </svg>
+    </div>
+    <button class="strip-dash">大屏 →</button>
+  </div>
+  <div class="strip-sub">全部 agent · 近 5 小时 · 1,805 calls · 6 agents</div>
+
+  <div class="section-title">AGENT 卡片（4）</div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">N</span><span class="aname">njbx02</span><span class="astatus"><span class="adot"></span>有活动</span></div>
+    <div class="abody"><span class="anum">240,188,540</span><span class="aunit">tokens</span></div>
+    <div class="ameta"><span>calls <b>1,763</b></span><span>10:26</span></div>
+  </div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">O</span><span class="aname">opencode-home</span><span class="astatus"><span class="adot" style="background:#8b929c"></span>空闲</span></div>
+    <div class="abody"><span class="anum">18,425,400</span><span class="aunit">tokens</span></div>
+    <div class="ameta"><span>calls <b>42</b></span><span>09:12</span></div>
+  </div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">C</span><span class="aname">claude-ws1</span><span class="astatus"><span class="adot" style="background:#f2cc0c"></span>空闲</span></div>
+    <div class="abody"><span class="anum">96,220</span><span class="aunit">tokens</span></div>
+    <div class="ameta"><span>calls <b>11</b></span><span>08:40</span></div>
+  </div>
+  <div class="acard">
+    <button class="adel"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <div class="ahead"><span class="alogo">K</span><span class="aname">k3-worker</span><span class="astatus"><span class="adot" style="background:#8b929c"></span>空闲</span></div>
+    <div class="abody"><span class="anum">4,474,000</span><span class="aunit">tokens</span></div>
+    <div class="ameta"><span>calls <b>2</b></span><span>昨天</span></div>
+  </div>
+
+</div>
+</body></html>
