@@ -2611,6 +2611,13 @@ body {
   color: var(--fg);
   font-weight: 600;
 }
+/* 9/24 时间轴真实时钟化: 整点 HH:00 major(亮) / 半点 :30 短标(暗) — 长短交替钟面习惯 */
+.hero-axis .is-major {
+  color: var(--fg-dim);
+}
+.hero-axis .is-minor {
+  opacity: 0.65;
+}
 .hero-hint {
   margin: var(--space-6, 6px) 0 0;
   font-size: var(--font-11, 11px);

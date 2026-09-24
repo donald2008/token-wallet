@@ -82,16 +82,26 @@ test("① 置顶组件正常态对稿: 标签/大数字 28px/折线/时间轴 + 
   await pwExpect(line).toHaveCount(1);
   const stroke = await line.evaluate((el) => getComputedStyle(el).stroke);
   expect(stroke, "折线色走 --chart-1").toBe("rgb(87, 148, 242)");
-  // 数据覆盖整窗 → 折线自刻度 0(-5h)起, 无首点星标/无提示句
-  expect(await line.getAttribute("d")).toMatch(/^M0,/);
+  // 9/24 坐标系统一(真实时间比例): 首桶 08:00 距窗口起点(07:34:56) 25.07min / 300min = 0.0836
+  // → x = 0.0836*320 ≈ 26.74; 折线自首数据桶真实位置起, 无首点星标/无提示句
+  const d = await line.getAttribute("d");
+  expect(parseFloat(d!.match(/^M([\d.]+),/)![1])).toBeCloseTo(26.74, 0);
   await pwExpect(page.getByTestId("hero-point-last")).toHaveCount(1);
   await pwExpect(page.getByTestId("hero-point-first")).toHaveCount(0);
   await pwExpect(page.getByTestId("hero-hint")).toHaveCount(0);
-  // 时间轴 6 刻度 -5h…now
-  await pwExpect(page.getByTestId("hero-axis-tick")).toHaveCount(6);
+  // 时间轴: 真实时钟刻度(整点 HH:00 major / 半点 :30 短标 / 末刻度=now)
+  // e2e 窗口 07:34:56→12:34:56 → 刻度 08:00(major), :30, 09:00(major), ..., 12:00(major), 12:34
   const axisText = await page.getByTestId("hero-axis").textContent();
-  expect(axisText).toContain("-5h");
-  expect(axisText).toContain("now");
+  expect(axisText).toContain("08:00");
+  expect(axisText).toContain("12:00");
+  expect(axisText).toContain("12:34");
+  expect(axisText).not.toContain("-5h");
+  expect(axisText).not.toContain("now");
+  // 长短交替: major 整点(5 枚) + minor 半点(5 枚, 文本 :30)
+  const majorCount = await page.locator(".hero-axis .is-major").count();
+  const minorCount = await page.locator(".hero-axis .is-minor").count();
+  expect(majorCount, "整点 major 5 枚(08~12)").toBe(5);
+  expect(minorCount, "半点 minor 5 枚(:30)").toBe(5);
 
   // 大屏入口全局唯一: 置顶 1 枚 + 卡内 0 枚(agent-detail-* 零残留)
   await pwExpect(page.getByTestId("hero-dashboard-btn")).toHaveCount(1);
@@ -262,7 +272,8 @@ test("⑥ 边界④ 不足窗口(<1h): 首点标记 + 轴星标 + 「首次上�
 
   // 唯一桶 12:00 距窗口终点(12:34:56) 34 分钟 → 不足窗口
   await pwExpect(page.getByTestId("hero-point-first")).toHaveCount(1);
-  await pwExpect(page.getByTestId("hero-axis-first")).toHaveText("-1h*");
+  // 时间轴真实时钟化: 星标 = 首点所在刻度(12:00, major) → 「12:00*」
+  await pwExpect(page.getByTestId("hero-axis-first")).toHaveText("12:00*");
   await pwExpect(page.getByTestId("hero-hint")).toHaveText(
     "首次上报 34 分钟前 — 曲线自首条数据起绘制",
   );
@@ -278,7 +289,9 @@ test("⑥ 边界④ 不足窗口(<1h): 首点标记 + 轴星标 + 「首次上�
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
   await page.getByTestId("main-tab-local-agent").click();
   const d = (await page.getByTestId("hero-line").getAttribute("d")) ?? "";
-  expect(d, `折线应从首个有数据的桶起画, 实际 d=${d}`).toMatch(/^M192,/);
+  // 9/24 坐标系统一: 首桶 11:00 距窗口起点(07:34:56) 205.07min/300min = 0.6836 → x ≈ 218.74
+  // 头部无零值平线(折线不从 x=0 起), 断线起始语义保持
+  expect(d, `折线应从首个有数据的桶起画, 实际 d=${d}`).toMatch(/^M218\.7/);
   await pwExpect(page.getByTestId("hero-baseline")).toHaveCount(0);
   await pwExpect(page.getByTestId("hero-axis-first")).toHaveCount(0);
 });

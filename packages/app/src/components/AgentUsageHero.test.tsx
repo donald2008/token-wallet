@@ -7,7 +7,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AgentUsageHero, HERO_AXIS_LABELS, buildHeroSeries, type HourBucket } from "./AgentUsageHero";
+import { AgentUsageHero, buildHeroAxisLabels, buildHeroSeries, type HourBucket } from "./AgentUsageHero";
 
 const SINCE = "2026-09-24T06:00:00+08:00"; // 窗口起点(-5h)
 const UNTIL = "2026-09-24T11:00:00+08:00"; // 窗口终点(now)
@@ -77,7 +77,7 @@ describe("AgentUsageHero 正常态(plan-a-v3 对稿)", () => {
     expect(c.textContent).toContain("tokens");
   });
 
-  it("折线: svg 存在 + 折线 path + 末点标记 + 6 刻度轴(-5h…now) + 无边界提示", () => {
+  it("折线: svg 存在 + 折线 path + 末点标记 + 6 刻度轴(真实时钟) + 无边界提示", () => {
     const c = mount(hero());
     const svg = c.querySelector('[data-testid="hero-chart"]');
     expect(svg).toBeTruthy();
@@ -88,7 +88,17 @@ describe("AgentUsageHero 正常态(plan-a-v3 对稿)", () => {
     // 数据覆盖整窗 → 不标首点/不生星
     expect(c.querySelector('[data-testid="hero-point-first"]')).toBeNull();
     expect(c.querySelector('[data-testid="hero-axis-first"]')).toBeNull();
-    expect(c.querySelectorAll('[data-testid="hero-axis-tick"]').length).toBe(HERO_AXIS_LABELS.length);
+    // 9/24 时间轴真实时钟化: 刻度锚定整点/半点; 整点 HH:00 major, 半点 :30 短标, 末刻度=until
+    // 单测窗口 06:00→11:00(整对齐) → 06:00(major)/:30/07:00(major)/.../10:30/11:00(major) = 11 枚
+    const labels = buildHeroAxisLabels(SINCE, UNTIL);
+    expect(labels).toHaveLength(11);
+    expect(labels[0]).toMatchObject({ text: "06:00", major: true });
+    expect(labels[1]).toMatchObject({ text: ":30", major: false, fullText: "06:30" });
+    expect(labels[2]).toMatchObject({ text: "07:00", major: true });
+    expect(labels[labels.length - 1]).toMatchObject({ text: "11:00", major: true });
+    expect(labels.some((l) => l.text === "-5h")).toBe(false);
+    expect(labels.some((l) => l.text === "now")).toBe(false);
+    expect(c.querySelectorAll('[data-testid="hero-axis-tick"]').length).toBe(labels.length);
     expect(c.querySelector('[data-testid="hero-hint"]')).toBeNull();
     expect(c.querySelector('[data-testid="hero-chart-degrade"]')).toBeNull();
   });
@@ -125,9 +135,11 @@ describe("AgentUsageHero 边界态", () => {
       }),
     );
     const d = c.querySelector('[data-testid="hero-line"]')?.getAttribute("d") ?? "";
-    expect(d).toMatch(/^M256,/); // 刻度 4(-1h 位) 起画, 不从 x=0 起
+    // 9/24 坐标系统一(真实时间比例): 首点 10:20 距窗口起点 260min / 300min = 0.8667 → x=277.33
+    expect(parseFloat(d.match(/^M([\d.]+),/)![1])).toBeCloseTo(277.33, 0);
     expect(c.querySelector('[data-testid="hero-point-first"]')).toBeTruthy();
-    expect(c.querySelector('[data-testid="hero-axis-first"]')?.textContent).toBe("-1h*");
+    // 时间轴真实时钟化: 星标刻度 = 首点(10:20)之后最近的半点刻度 = 10:30 → 「10:30*」
+    expect(c.querySelector('[data-testid="hero-axis-first"]')?.textContent).toBe("10:30*");
     expect(c.querySelector('[data-testid="hero-hint"]')?.textContent).toBe(
       "首次上报 40 分钟前 — 曲线自首条数据起绘制",
     );
@@ -168,15 +180,15 @@ describe("buildHeroSeries 纯函数", () => {
     const at60 = buildHeroSeries([{ hour: "2026-09-24T10:00", tokens: 1 }], SINCE, UNTIL);
     expect(at60.minutesSinceFirstReport).toBe(60);
     expect(at60.insufficientWindow).toBe(false);
+    // 9/24 坐标系统一: firstTickIndex 移交 Hero(按半点刻度系定位), series 恒 null
     expect(at60.firstTickIndex).toBeNull();
 
     const at59 = buildHeroSeries([{ hour: "2026-09-24T10:01", tokens: 1 }], SINCE, UNTIL);
     expect(at59.minutesSinceFirstReport).toBe(59);
     expect(at59.insufficientWindow).toBe(true);
-    expect(at59.firstTickIndex).toBe(4);
   });
 
-  it("桶落在窗口外 → 刻度钳制在 0..5(不越轴)", () => {
+  it("桶落在窗口外 → x 坐标钳制在 0..VIEW_W(不越轴)", () => {
     const s = buildHeroSeries(
       [
         { hour: "2026-09-24T04:00", tokens: 1 }, // 早于窗口
@@ -185,7 +197,7 @@ describe("buildHeroSeries 纯函数", () => {
       SINCE,
       UNTIL,
     );
-    expect(s.points.map((p) => p.tick)).toEqual([0, 5]);
+    expect(s.points.map((p) => p.x)).toEqual([0, 320]);
   });
 
   it("window 缺失/不可解析 → 退化为 5h 窗并按比例落点, 不抛错", () => {
