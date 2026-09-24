@@ -97,11 +97,13 @@ test("① 置顶组件正常态对稿: 标签/大数字 28px/折线/时间轴 + 
   expect(axisText).toContain("12:34");
   expect(axisText).not.toContain("-5h");
   expect(axisText).not.toContain("now");
-  // 长短交替: major 整点(5 枚) + minor 半点(5 枚, 文本 :30)
+  // 长短交替: major 整点(5 枚) + minor = 半点 :30 ×5 + 末刻度 now 12:34(非整点, minor 语义)
+  // t_ec47affe 校正: 原 toBe(5) 漏计末刻度 now — 本用例上方注释自列 11 枚(5 major + 5 :30 + 12:34),
+  // 组件按「末刻度=now 如实显示」实现, minor 实收 6。变异: 12:34 若消失此断言红。
   const majorCount = await page.locator(".hero-axis .is-major").count();
   const minorCount = await page.locator(".hero-axis .is-minor").count();
   expect(majorCount, "整点 major 5 枚(08~12)").toBe(5);
-  expect(minorCount, "半点 minor 5 枚(:30)").toBe(5);
+  expect(minorCount, "半点 :30 ×5 + 末刻度 now(minor) = 6 枚").toBe(6);
 
   // 大屏入口全局唯一: 置顶 1 枚 + 卡内 0 枚(agent-detail-* 零残留)
   await pwExpect(page.getByTestId("hero-dashboard-btn")).toHaveCount(1);

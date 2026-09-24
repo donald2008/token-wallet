@@ -2390,10 +2390,24 @@ body {
   color: var(--fg-dim);
   font-variant-numeric: tabular-nums;
 }
+/* t_ec47affe: agent 列表区内滚 — 置顶 hero 加入后的滚动策略补全。
+ * 设计裁定(老大 9/24 GATE 3 真机): 列表区自身内滚(与 DW-01 大屏面板内滚同款物理约束),
+ * 整页在滚退役。布局预算:
+ *   卡体估算 = 720 − titlebar 32 − tabs 37 − padding 24 − hero ≈170 − title ≈29 ≈ 428
+ *   实测校准(e2e 探针, 720 视口): 列表 top = 303.8(hero 162.8 + head 16 + 间距/padding),
+ *   panel 内底 = 712(外壳 8px 透明边) → 物理可用 408.2px, 424 会让列表底部 ~16px
+ *   被面板圆角裁切(滚动条 thumb 尾部不可见) → 8px 网格取 max-height 400px。
+ * overscroll-behavior: contain — 滚到列表底不穿透整页(滚动链接不外泄)。
+ * 视口更矮(<720)时回退整页滚: 内容不丢(卡体允许的回退态)。
+ * 少卡时列表总高 < max-height 不约束 → 无空滚区; 全局 ::-webkit-scrollbar
+ * (8px 主题化 thumb, app.css 文件头)自动适用, 无默认灰条。 */
 .agent-card-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-12, 12px);
+  max-height: 400px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .agent-card {
   /* position:relative — 悬浮删除钮 .agent-del-btn 绝对定位锚卡右上(t_6eb3e728 ③) */
