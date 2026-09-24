@@ -38,7 +38,8 @@ import { ScenarioBar } from "./components/ScenarioBar";
 import { SettingsView } from "./components/SettingsView";
 import { AddProviderWizard } from "./components/AddProviderWizard";
 import { FilterIcons, DEFAULT_FILTER, matchesFilter, type FilterSel } from "./components/FilterChips";
-import { AgentCard, AgentCardEmpty } from "./components/AgentCard";
+import { AgentCard, AgentCardEmpty, totalTokens } from "./components/AgentCard";
+import { AgentUsageHero, type HourBucket } from "./components/AgentUsageHero";
 import { AgentDashboardC } from "./components/AgentDashboardC";
 import { mcpUsageSummary, mcpDeleteUsage, type McpQueryResult } from "./mcpQuery";
 import type { UsageSummaryOutput } from "./mcpQueryTypes";
@@ -174,6 +175,13 @@ function AppShell() {
     ok: false,
     reason: "unavailable",
   });
+  // t_56c66972 ②: 置顶组件 5h 折线数据面 = usage_summary(group_by=["hour"], since=now-5h)。
+  // 与三份既有查询同 tick 并行; 独立 state → hour 失败只降级折线区(「数据积累中」),
+  // 不牵动大数字/卡片列表(卡体明示的失败域边界)。
+  const [mcpHourSummary, setMcpHourSummary] = useState<McpQueryResult<UsageSummaryOutput>>({
+    ok: false,
+    reason: "unavailable",
+  });
   // SL-03(SC-02/SC-03) 降级判据: 最近一次刷新里各维是否失败。
   // 与上面 H7 只读缓存合并语义正交 —— 合并决定「展示什么」, 本 state 决定「降级形态怎么标」:
   // 失败但旧 ok 快照仍在 = 面板级降级(快照语义), 从不成功 = 面板内显式失败空态。
@@ -181,6 +189,7 @@ function AppShell() {
     summary: false,
     model: false,
     trend: false,
+    hour: false,
   });
   const tick = useCallback(async () => {
     // 并行 3 查: 单维(agent) / 二维(agent+model) / 单维(day); 每份独立落地, 单份失败不阻塞其余
@@ -196,16 +205,20 @@ function AppShell() {
     // (趋势 max 81M vs hero 526K)。现 hero/三分项/明细/Model 分布/趋势同窗口,
     // 窗口范围由组件读 summary.window 显示在 hero「窗」指标 + 页脚。
     const trendSince = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-    const [r, rm, rt] = await Promise.all([
+    // t_56c66972 ②: 置顶 5h 折线窗 — since = now-5h(daemon 侧不写死窗口, 由调用方传)
+    const hourSince = new Date(Date.now() - 5 * 3600 * 1000).toISOString();
+    const [r, rm, rt, rh] = await Promise.all([
       mcpUsageSummary({ group_by: ["agent"], since: trendSince }),
       mcpUsageSummary({ group_by: ["agent", "model"], since: trendSince }),
       mcpUsageSummary({ group_by: ["day"], since: trendSince }),
+      mcpUsageSummary({ group_by: ["hour"], since: hourSince }),
     ]);
     setMcpSummary((prev) => (r.ok || !prev.ok ? r : prev));
     setMcpModelSummary((prev) => (rm.ok || !prev.ok ? rm : prev));
     setMcpTrendSummary((prev) => (rt.ok || !prev.ok ? rt : prev));
+    setMcpHourSummary((prev) => (rh.ok || !prev.ok ? rh : prev));
     // SL-03: 记录本拍各维成败(供降级形态判定), 不改上面三行的展示语义(H7 不回退)
-    setLastFetchFailed({ summary: !r.ok, model: !rm.ok, trend: !rt.ok });
+    setLastFetchFailed({ summary: !r.ok, model: !rm.ok, trend: !rt.ok, hour: !rh.ok });
     // t_6eb3e728 ①: 首拉完成(成功或失败)即解除「正在连接」态
     setMcpFirstFetchPending(false);
   }, []);
@@ -419,6 +432,11 @@ function AppShell() {
     // 真壳 ok=true 时主进程已开窗, 此处 no-op(独立窗口自己 mcpUsageSummary)
   }, []);
 
+  // t_56c66972 ③ 边界态: 「列表空 + 删除生效回执」。删除成功的下一拍列表为空时, 渲染虚线
+  // 扁平卡(mock 边界③ 逐字); 非删除导致的空列表(窗口内本就零上报)保留原「暂无 Agent 上报
+  // 数据」空态 — 两者语义不同(前者是新上报会回来的临时空, 后者是缺上报源)。
+  const [deleteReceipt, setDeleteReceipt] = useState(false);
+
   // t_6eb3e728 ③: Agent 卡删除回调 — mcpDeleteUsage({agent_id}) → 成功后 mcpSummary 立即重拉;
   // 失败返回 false, AgentCard 显示 daemon 未就绪错误态(不静默)。
   const onAgentDeleteUsage = useCallback(
@@ -427,6 +445,7 @@ function AppShell() {
       if (r.ok) {
         // 删除成功 → 立即重拉刷新列表(不等 30s tick); 删除后行数变化, pending 置位防旧快照闪现
         setMcpFirstFetchPending(true);
+        setDeleteReceipt(true);
         await tick();
         return true;
       }
@@ -434,6 +453,31 @@ function AppShell() {
     },
     [tick],
   );
+
+  // 列表重新有数据(新上报到达)→ 删除回执态自动解除
+  useEffect(() => {
+    if (mcpSummary.ok && mcpSummary.data.rows.length > 0) setDeleteReceipt(false);
+  }, [mcpSummary]);
+
+  // t_56c66972 ② 置顶组件 props:
+  //  大数字 = 主 summary 全局行(total, 全部 agent 聚合 —— 与卡片列表同源同窗);
+  //  折线 = hour 维桶; 两个失败域独立(hour 挂了只降级折线区)。
+  const heroBuckets: HourBucket[] = useMemo(
+    () =>
+      mcpHourSummary.ok
+        ? mcpHourSummary.data.rows.map((r) => ({ hour: r.group, tokens: totalTokens(r) }))
+        : [],
+    [mcpHourSummary],
+  );
+  const heroGlobalTokens = mcpSummary.ok ? totalTokens(mcpSummary.data.total) : 0;
+  // 边界② 全局零数据: 零行 + 全局行 tokens = 0(全新装 / 全部删光)
+  const heroEmptyPage = mcpSummary.ok && mcpSummary.data.rows.length === 0 && heroGlobalTokens === 0;
+  const heroWindow = mcpHourSummary.ok
+    ? mcpHourSummary.data.window
+    : {
+        since: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
+        until: new Date().toISOString(),
+      };
 
   // 真实实例集合: 仅真实实例卡渲染删除钮(dev 场景 mock 预览卡不给无效按钮)
   const realInstanceIds = useMemo(() => new Set(instances.map((i) => i.id)), [instances]);
@@ -676,8 +720,26 @@ function AppShell() {
              (本地 worker 调用量)。LocalAgentSection 占位组件(「即将推出」)整体删除。*/}
           {mainTab === "local-agent" && providers !== null && (
             <section className="agent-card-section" data-testid="agent-card-section">
+              {/* t_56c66972 ②: 置顶组件(大屏入口全局唯一, 卡内已移除)。
+                  仅 daemon 有快照(mcpSummary.ok)时渲染 —— !ok(未连接/鉴权失败)走既有
+                  AgentCardEmpty 显式失败态, 不渲染「假 0」置顶(不静默吞成 0 的既有纪律)。 */}
+              {mcpSummary.ok && (
+                <AgentUsageHero
+                  globalTotalTokens={heroGlobalTokens}
+                  hourBuckets={heroBuckets}
+                  hourAvailable={mcpHourSummary.ok}
+                  windowSince={heroWindow.since}
+                  windowUntil={heroWindow.until}
+                  emptyPage={heroEmptyPage}
+                  onOpenDashboard={onAgentCardDashboard}
+                />
+              )}
               <header className="agent-card-section-head">
-                <span className="agent-card-section-title">Agent 用量</span>
+                {/* t_56c66972 文字减法(mock): 「AGENT 卡片 (N) · X calls 全局」→「AGENTS (N)」
+                    (全局 calls 与置顶重复, 删) */}
+                <span className="agent-card-section-title">
+                  {mcpSummary.ok ? `AGENTS (${mcpSummary.data.rows.length})` : "AGENTS"}
+                </span>
                 {mcpSummary.ok && (
                   <span className="agent-card-section-meta" data-testid="agent-card-section-meta">
                     {fmtGeneratedAt(mcpSummary.generatedAt)}
@@ -687,6 +749,14 @@ function AppShell() {
               <div className="agent-card-list" data-testid="agent-card-list">
                 {mcpSummary.ok ? (
                   mcpSummary.data.rows.length === 0 ? (
+                    deleteReceipt ? (
+                      /* 边界③ 列表空(删除全部 agent 数据后) = 虚线扁平卡 + 删除生效回执(mock 逐字) */
+                      <div className="agent-empty-flat" data-testid="agent-rows-empty-flat">
+                        没有 agent 用量数据
+                        <br />
+                        删除操作已生效 — 新上报到达后 agent 卡会重新出现
+                      </div>
+                    ) : (
                     /* t_4b7984d9 round-7: rows=[] 渲染盲区 — daemon 连接成功但窗口内
                      * 零上报时, map 空数组导致区域整体空白(9/14 用户真机实锤)。
                      * 显式空态: 说明连接正常、缺的是上报数据源。 */
@@ -697,6 +767,7 @@ function AppShell() {
                         需要先在 agent 侧（如 njbx02 的 hook 插件）接入上报。
                       </p>
                     </div>
+                    )
                   ) : (
                   mcpSummary.data.rows.map((row) => {
                     const activity: "active" | "idle" | "no_report_today" =
@@ -712,7 +783,6 @@ function AppShell() {
                         row={row}
                         activity={activity}
                         generatedAt={mcpSummary.generatedAt}
-                        onOpenDashboard={onAgentCardDashboard}
                         onDeleteUsage={onAgentDeleteUsage}
                       />
                     );

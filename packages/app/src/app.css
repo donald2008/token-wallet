@@ -2476,7 +2476,7 @@ body {
   grid-template-columns: 1fr auto;
   grid-template-areas:
     "tokens tokens"
-    "cost   detail"
+    "cost   cost"
     "meta   meta";
   align-items: end;
   gap: var(--space-12, 12px);
@@ -2519,36 +2519,150 @@ body {
   /* 拍板契约: 无金额时彻底留空(不显示 0/—/N/A) */
   display: none;
 }
-.agent-detail-btn {
-  grid-area: detail;
-  align-self: end;
-  background: transparent;
+/* ── t_56c66972 方案 A-rev3: 置顶用量组件 AgentUsageHero ──
+ * 形态唯一依据 = docs/requests/2026-09-24-local-agent-redesign/plan-a-v3.html
+ * (mock 的色值是暗色硬编码; 此处全部换主题 token, dark/light/glass 三主题自适应) */
+.agent-usage-hero {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-12, 12px);
+  padding: var(--space-12, 12px) var(--space-14, 14px);
+  /* mock: linear-gradient(160deg,#232a34 0%,#1d2126 70%) */
+  background: linear-gradient(160deg, var(--bg-hover, #232a35) 0%, var(--bg-elev, #1c2129) 70%);
+}
+.hero-row0 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8, 8px);
+}
+.hero-label {
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+}
+.hero-dash-btn {
+  font-size: var(--font-11, 11px);
   color: var(--accent);
-  border: 1px solid transparent;
-  border-radius: var(--radius-8, 8px);
-  padding: var(--space-4, 4px) var(--space-12, 12px);
-  font-size: var(--font-12, 12px);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-6, 6px);
+  padding: var(--space-4, 4px) var(--space-8, 8px);
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-.agent-detail-btn:hover,
-.agent-detail-btn:focus-visible {
-  background: var(--bg-hover, #232a35);
+.hero-dash-btn:hover,
+.hero-dash-btn:focus-visible {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
   border-color: var(--accent);
   outline: none;
 }
+.hero-num-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6, 6px);
+  margin-top: var(--space-6, 6px);
+}
+.hero-num {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.hero-num.is-empty {
+  /* 边界② 全局零数据: 0 走暗色(mock .hero-empty-num) */
+  color: var(--fg-dim);
+}
+.hero-unit {
+  font-size: var(--font-12, 12px);
+  color: var(--fg-dim);
+}
+.hero-chart {
+  display: block;
+  width: 100%;
+  height: 52px;
+  margin-top: var(--space-8, 8px);
+}
+.hero-chart-degrade {
+  /* hour 查询失败/无桶 → 折线区降级(卡体: 只降折线区, 大数字不受牵动) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  margin-top: var(--space-8, 8px);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-8, 8px);
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+}
+.hero-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-4, 4px);
+  font-size: var(--font-10, 10px);
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.hero-axis .is-first {
+  /* 边界④: 首数据点刻度星标高亮(mock 的 -1h*) */
+  color: var(--fg);
+  font-weight: 600;
+}
+.hero-hint {
+  margin: var(--space-6, 6px) 0 0;
+  font-size: var(--font-11, 11px);
+  line-height: 1.6;
+  color: var(--fg-dim);
+}
+/* meta 行去词化(plan-a-v3): 左 = calls 数字, 右 = 时间; 无「calls」「更新」等词 */
 .agent-meta {
   grid-area: meta;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-8, 8px);
   font-size: var(--font-11, 11px);
   color: var(--fg-dim);
   border-top: 1px dashed var(--border);
   padding-top: var(--space-8, 8px);
   font-variant-numeric: tabular-nums;
 }
-.agent-meta strong {
-  color: var(--fg);
-  font-weight: 600;
+.agent-tokens-number.is-stale {
+  /* 边界①: 陈旧卡大数字降饱和(mock style="color:var(--dim)") */
+  color: var(--fg-dim);
+}
+.agent-stale-band {
+  /* 边界① 快照提示带(mock .stale-band): 文字角色用 --warn-fg(D-016 双 token) */
+  margin: 0;
+  grid-column: 1 / -1; /* 提示带独占整行(卡体为 grid, 不落进 grid-template-areas 单列) */
+  font-size: var(--font-11, 11px);
+  line-height: 1.5;
+  color: var(--warn-fg);
+}
+/* 悬浮删除钮与状态徽章互斥让位(mock .acard:hover .astatus{opacity:0}):
+ * 仅可删卡(is-deletable, 即渲染了删除钮)让位 —— 无删除钮的卡 hover 不藏状态 */
+.agent-card.is-deletable .card-status-text,
+.agent-card.is-deletable .status-dot {
+  transition: opacity 0.15s ease;
+}
+.agent-card.is-deletable:hover .card-status-text,
+.agent-card.is-deletable:hover .status-dot,
+.agent-card.is-deletable:focus-within .card-status-text,
+.agent-card.is-deletable:focus-within .status-dot {
+  opacity: 0;
+}
+/* 边界③ 列表空: 虚线扁平卡 + 删除生效回执(mock .empty-flat) */
+.agent-empty-flat {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-10, 10px);
+  padding: var(--space-20, 20px) var(--space-14, 14px);
+  text-align: center;
+  font-size: var(--font-12, 12px);
+  line-height: 1.7;
+  color: var(--fg-dim);
 }
 .agent-card-empty .agent-empty-reason {
   margin: 0;

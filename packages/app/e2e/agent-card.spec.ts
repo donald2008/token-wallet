@@ -3,7 +3,7 @@
  * - 主页 Agent 卡区存在 + 渲染 daemon 真数据(非 mock — 数据源时间戳可见)
  * - 三种活动态(active / idle / no_report_today)testid 健康度正确
  * - 金额可空留白契约(cost_total=null 时 is-empty 类生效)
- * - 详情按钮 → 切到大屏方案 C(hero + 趋势 + model + 三分项 + 明细五象限)
+ * - t_56c66972: 置顶组件大屏钮 → 切到大屏(hero + 趋势 + model + 三分项 + 明细五象限; 卡内入口已移除)
  * - daemon 断连空态(浏览器无桥 / mock reason=unreachable → AgentCardEmpty)
  * - 大屏断连空态 + 返回按钮
  */
@@ -158,7 +158,7 @@ test("主页 Agent 卡: 真数据渲染 + 三种活动态 + 金额可空留白",
   // njbx02-heavy 卡 = 9 位数字(4,474,000),验证:
   //   ① 全数字展示(4,474,000 不是 4.5M,反向断言无 K/M)
   //   ② tokens 容器装得下完整数字(scrollWidth ≤ width,不被 .card overflow:hidden 裁剪)
-  //   ③ 详情按钮右缘 ≤ 卡右缘(不顶出卡片)
+  //   ③ t_56c66972: 卡内大屏钮已移除, 溢出检查改锚**置顶组件大屏钮**(右缘 ≤ 置顶卡右缘)
   // buggy CSS 实测: 9 位数字 scrollWidth=180+, 容器宽~140 → overflowed=true → 失败
   await pwExpect(njbx02Heavy.locator('[data-testid="agent-tokens"]')).toContainText("4,474,000");
   const heavyTokensText =
@@ -176,15 +176,13 @@ test("主页 Agent 卡: 真数据渲染 + 三种活动态 + 金额可空留白",
     heavyTokensDomOk,
     "njbx02-heavy 9 位数字被 .card 视觉裁掉(round-3 修复: tokens 占整行 1fr, 286px 容器装 180px 数字)",
   ).toBe(true);
-  const heavyCardBox = await njbx02Heavy.boundingBox();
-  const heavyDetailBox = await njbx02Heavy
-    .locator('[data-testid="agent-detail-njbx02-heavy"]')
-    .boundingBox();
-  if (heavyCardBox && heavyDetailBox) {
-    const heavyOverhang = heavyDetailBox.x + heavyDetailBox.width - (heavyCardBox.x + heavyCardBox.width);
+  const heroBox = await page.getByTestId("agent-usage-hero").boundingBox();
+  const heroBtnBox = await page.getByTestId("hero-dashboard-btn").boundingBox();
+  if (heroBox && heroBtnBox) {
+    const heroOverhang = heroBtnBox.x + heroBtnBox.width - (heroBox.x + heroBox.width);
     expect(
-      heavyOverhang,
-      `njbx02-heavy 详情按钮顶出卡片 ${heavyOverhang.toFixed(1)}px`,
+      heroOverhang,
+      `置顶组件大屏钮顶出卡片 ${heroOverhang.toFixed(1)}px`,
     ).toBeLessThanOrEqual(0);
   }
   await pwExpect(njbx02Heavy.locator('[data-testid="agent-cost"]')).toContainText("12.34 USD");
@@ -206,15 +204,15 @@ test("主页 Agent 卡: 真数据渲染 + 三种活动态 + 金额可空留白",
   await pwExpect(desktop.locator('[data-testid="agent-activity-badge"]')).toHaveText("今天无上报");
 });
 
-/** L2 冒烟 2: 详情按钮 → 大屏 Ops Wall(t_15397c99 SL-01)
+/** L2 冒烟 2: 置顶组件大屏钮 → 大屏 Ops Wall(t_15397c99 SL-01; t_56c66972 入口上收)
  * testid 映射见 40-handoff/contracts/testid-contract.md: hero-tokens/cost 保留为 KPI 大数字锚,
  * detail-list testid 保留(DOM ul 改 table), split-bar/seg/model-table/chart/meta/agent-tab 全保留。 */
-test("详情按钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明细全面板渲染", async ({ hostPage, page }) => {
+test("置顶大屏钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明细全面板渲染", async ({ hostPage, page }) => {
   void hostPage;
   await agreeAndSeedMultiFromSingle(page);
 
-  // 点 njbx02 详情 → 大屏
-  await page.getByTestId("agent-detail-njbx02").click();
+  // 点置顶组件大屏钮 → 大屏
+  await page.getByTestId("hero-dashboard-btn").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
 
   // KPI 带: 全 4 卡合计 tokens + 13.57 USD(1.23 + 12.34, home/desktop cost 留空不计)
@@ -313,7 +311,7 @@ test("大屏方案 C 主题跟随全局 data-theme + 顶栏无主题钮(B③ 删
   });
   await page.reload();
   await agreeAndSeed(page);
-  await page.getByTestId("agent-detail-njbx02").click();
+  await page.getByTestId("hero-dashboard-btn").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
 
   // 大屏渲染后 html data-theme 仍为 dark(全局主题, 组件不再内置切换)
@@ -951,7 +949,7 @@ test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + �
   await agreeAndSeedMulti(page);
 
   // 进大屏
-  await page.getByTestId("agent-detail-njbx02").click();
+  await page.getByTestId("hero-dashboard-btn").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
 
   // agent tab 栏渲染(2 agent), 默认选中 tokens 最多的 njbx02
@@ -1019,7 +1017,7 @@ test("t_12c28686 多维失败域隔离: model/day 维度 unreachable → 各模�
   // round-6: agent-card-section 迁入「本地 Agent」tab
   await page.getByTestId("main-tab-local-agent").click();
 
-  await page.getByTestId("agent-detail-njbx02").click();
+  await page.getByTestId("hero-dashboard-btn").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
 
   // 单维数据仍活着: KPI/三分项/明细正常(失败域隔离, KPI=全局 148,400 → 148.4K DW-01); 明细全量 2 行
@@ -1063,7 +1061,7 @@ test("t_12c28686 单模型如实 1 slice + 趋势不足 2 天显「数据积累�
   // round-6: agent-card-section 迁入「本地 Agent」tab
   await page.getByTestId("main-tab-local-agent").click();
 
-  await page.getByTestId("agent-detail-njbx02").click();
+  await page.getByTestId("hero-dashboard-btn").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
 
   // Model 分布: 如实 1 slice(canvas 渲染, 计数=1, 不伪造多色环)

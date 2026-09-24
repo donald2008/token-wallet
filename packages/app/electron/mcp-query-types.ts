@@ -20,7 +20,7 @@ export interface DeleteUsageOutput {
   deleted: number;
 }
 
-/** UsageSummaryInput(§2.2) — group_by 1-3 维 */
+/** UsageSummaryInput(§2.2) — group_by 1-3 维(hour 维 = t_56c66972 v1.1 增补) */
 export interface UsageSummaryInput {
   since?: string;
   until?: string;
@@ -28,7 +28,7 @@ export interface UsageSummaryInput {
   provider?: string;
   model?: string;
   kanban_task?: string;
-  group_by?: Array<"agent" | "provider" | "model" | "day" | "status">;
+  group_by?: Array<"agent" | "provider" | "model" | "day" | "hour" | "status">;
 }
 
 export interface ByStatus {
@@ -38,7 +38,7 @@ export interface ByStatus {
 }
 
 export interface SummaryRow {
-  /** 多维时按 group_by 顺序用 | 连接, 日维 = YYYY-MM-DD */
+  /** 多维时按 group_by 顺序用 | 连接, 日维 = YYYY-MM-DD, 时维 = YYYY-MM-DDTHH:00(本地时区) */
   group: string;
   calls: number;
   input_cache_hit_tokens: number;
@@ -47,6 +47,8 @@ export interface SummaryRow {
   cost_total: number | null;
   currency: string | null;
   by_status: ByStatus;
+  /** t_56c66972 边界①: agent 最近一次上报时间(可选前向兼容, 缺省不判陈旧 —— 见 src/mcpQueryTypes.ts) */
+  latest_ts?: string | null;
 }
 
 export interface SummaryTotal {

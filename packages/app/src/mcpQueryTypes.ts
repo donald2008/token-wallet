@@ -31,7 +31,8 @@ export interface UsageSummaryInput {
   provider?: string;
   model?: string;
   kanban_task?: string;
-  group_by?: Array<"agent" | "provider" | "model" | "day" | "status">;
+  /** t_56c66972: 增 "hour"(协议 §2.2 v1.1 增补, 本地时区语义同 day) — 置顶 5h 折线数据面 */
+  group_by?: Array<"agent" | "provider" | "model" | "day" | "hour" | "status">;
 }
 
 export interface ByStatus {
@@ -41,7 +42,7 @@ export interface ByStatus {
 }
 
 export interface SummaryRow {
-  /** 多维时按 group_by 顺序用 | 连接, 日维 = YYYY-MM-DD */
+  /** 多维时按 group_by 顺序用 | 连接, 日维 = YYYY-MM-DD, 时维 = YYYY-MM-DDTHH:00(本地时区) */
   group: string;
   calls: number;
   input_cache_hit_tokens: number;
@@ -50,6 +51,13 @@ export interface SummaryRow {
   cost_total: number | null;
   currency: string | null;
   by_status: ByStatus;
+  /**
+   * t_56c66972 边界①(数据滞后)所需: 该 agent 最近一次上报时间(daemon 本地时区 ISO)。
+   * ⚠️ 现行协议 §2.2 summary_row **尚无此字段**(additionalProperties:false)——本字段按
+   * 「可选 + 缺失即不判陈旧」的形态前向兼容: daemon 未提供时, meta 右列回落 generated_at,
+   * 不做任何陈旧标记(宁可不标, 不误报)。daemon 侧补齐后无需再改前端。
+   */
+  latest_ts?: string | null;
 }
 
 export interface SummaryTotal {

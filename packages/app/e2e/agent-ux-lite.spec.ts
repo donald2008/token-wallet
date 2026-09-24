@@ -2,8 +2,9 @@
  * agent-ux-lite 三场景 e2e(t_6eb3e728, 老大 9/24 真机反馈):
  * ① MCP 启动后 Agent 区「启动中」态 — 首拉未完成显「正在连接 MCP daemon…」(agent-rows-booting),
  *    首拉完成解除落回列表/空态; daemon 不可达旧数据不存在时不闪「未连接」。
- * ② 详情钮语义归位 — 文案「大屏 →」+ aria-label「打开用量大屏」; testid agent-detail-<id> 保留。
- * ③ Agent 卡悬浮删除钮 — hover 显出 → 二次确认(含 agent_id+行数+不可逆) → 确认删除触发
+ *  ② 置顶组件大屏入口语义(t_56c66972 上收): 文案「用量大屏 →」+ aria-label「打开用量大屏」;
+ *     **卡内不再有入口**(agent-detail-* testid 已随重构移除) — 全局唯一入口 = 置顶组件。
+ *  ③ Agent 卡悬浮删除钮 — hover 显出 → 二次确认(含 agent_id+行数+不可逆) → 确认删除触发
  *    mcp_delete_usage + 重拉; daemon 未就绪(seedDeleteUsage ok:false)显式报错不静默。
  */
 import { expect, expect as pwExpect } from "@playwright/test";
@@ -47,7 +48,10 @@ test("① booting 态: 无快照首拉期间显「正在连接」, 首拉完成�
   await pwExpect(page.getByTestId("agent-card-empty")).toBeVisible();
 });
 
-test("② 大屏按钮语义: 文案「大屏 →」+ aria-label + 点击开整体大屏", async ({ hostPage, page }) => {
+test("② 大屏入口语义: 置顶组件「用量大屏 →」+ aria-label + 点击开整体大屏, 卡内入口零残留", async ({
+  hostPage,
+  page,
+}) => {
   void hostPage;
   await page.getByTestId("consent-agree").click();
   await seedAgentUsageMulti(page, deriveMultiFromSingle(fakeSummary));
@@ -55,10 +59,12 @@ test("② 大屏按钮语义: 文案「大屏 →」+ aria-label + 点击开整�
   await pwExpect(page.getByTestId("card-list")).toBeVisible();
   await page.getByTestId("main-tab-local-agent").click();
 
-  const btn = page.getByTestId("agent-detail-njbx02");
-  await pwExpect(btn).toHaveText("大屏 →");
-  await pwExpect(btn).toHaveAttribute("aria-label", "打开 njbx02 用量大屏");
+  // t_56c66972: 大屏入口全局唯一 — 置顶组件按钮(卡内 agent-detail-* 已移除)
+  const btn = page.getByTestId("hero-dashboard-btn");
+  await pwExpect(btn).toHaveText("用量大屏 →");
+  await pwExpect(btn).toHaveAttribute("aria-label", "打开用量大屏");
   await pwExpect(btn).toHaveAttribute("title", "打开用量大屏");
+  await pwExpect(page.locator('[data-testid^="agent-detail-"]')).toHaveCount(0);
   // 点击 → 打开整体大屏(浏览器降级 = 页内 agent-dashboard 视图)
   await btn.click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();

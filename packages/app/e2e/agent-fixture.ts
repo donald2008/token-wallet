@@ -95,3 +95,101 @@ export function deriveMultiFromSingle(base: typeof fakeSummary) {
     day: { ok: true, data: { ...base, rows: dayRows } },
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// t_56c66972 置顶组件 AgentUsageHero 数据面 fixture(hour 维 = 协议 v1.1 增补)
+// 窗口口径: generated_at(12:34:56) 往前 5h → since 07:34:56, until = generated_at。
+// 前端按 daemon 回显的 window 换算刻度 → 断言与客户端时钟无关(确定性)。
+// ⚠️ 断言值一律按本文件现算, 禁抄旧记忆。
+// ─────────────────────────────────────────────────────────────────────────────
+
+const HOUR_WINDOW = {
+  since: "2026-09-09T07:34:56+08:00",
+  until: "2026-09-09T12:34:56+08:00",
+};
+
+/** hour 维桶行(协议 §2.2 summary_row 同形): tokens 记在 input_cache_miss 分项, 其余分项 0 */
+function hourRow(hour: string, tokens: number) {
+  return {
+    group: hour,
+    calls: Math.round(tokens / 1000),
+    input_cache_hit_tokens: 0,
+    input_cache_miss_tokens: tokens,
+    output_tokens: 0,
+    cost_total: null,
+    currency: null,
+    by_status: { completed: 1, partial: 0, unknown: 0 },
+  };
+}
+
+function hourSummary(buckets: Array<[string, number]>) {
+  const rows = buckets.map(([hour, tokens]) => hourRow(hour, tokens));
+  const miss = buckets.reduce((s, [, t]) => s + t, 0);
+  return {
+    window: { ...HOUR_WINDOW },
+    timezone: "Asia/Shanghai",
+    generated_at: "2026-09-09T12:34:56+08:00",
+    rows,
+    total: {
+      calls: rows.reduce((s, r) => s + r.calls, 0),
+      input_cache_hit_tokens: 0,
+      input_cache_miss_tokens: miss,
+      output_tokens: 0,
+      cost_total: null,
+      currency: null,
+      by_status: { completed: rows.length, partial: 0, unknown: 0 },
+    },
+  };
+}
+
+/** 正常态: 5 个整点桶覆盖 08:00-12:00 → 折线自刻度 0 起, 不标首点星 */
+export const fakeHourSummary = hourSummary([
+  ["2026-09-09T08:00", 1_000_000],
+  ["2026-09-09T09:00", 1_200_000],
+  ["2026-09-09T10:00", 1_100_000],
+  ["2026-09-09T11:00", 1_500_000],
+  ["2026-09-09T12:00", 2_000_000],
+]);
+
+/** 边界④ 不足窗口: 仅当前小时桶(12:00 距 until 34 分钟 < 60min) → 首点标记 + 星标 + 提示句 */
+export const fakeHourSummaryShort = hourSummary([["2026-09-09T12:00", 18_425_400]]);
+
+/** 边界④ 断线起始: 两个桶但首个在 11:00(距 until 94 分钟) → 折线自刻度 3 起(非 x=0 零值平线) */
+export const fakeHourSummaryLate = hourSummary([
+  ["2026-09-09T11:00", 18_425_400],
+  ["2026-09-09T12:00", 20_000_000],
+]);
+
+/** 边界②/③: 全局零数据(零行 + 零 tokens) */
+export const emptySummary = {
+  ...fakeSummary,
+  rows: [],
+  total: {
+    calls: 0,
+    input_cache_hit_tokens: 0,
+    input_cache_miss_tokens: 0,
+    output_tokens: 0,
+    cost_total: null,
+    currency: null,
+    by_status: { completed: 0, partial: 0, unknown: 0 },
+  },
+};
+
+/** 边界①: 陈旧 agent 行(快照前一日 22:14 无上报 > 30min) */
+export const staleAgentSummary = {
+  ...fakeSummary,
+  rows: [
+    {
+      group: "k3-worker",
+      calls: 2,
+      input_cache_hit_tokens: 4_000_000,
+      input_cache_miss_tokens: 474_000,
+      output_tokens: 0,
+      cost_total: null,
+      currency: null,
+      by_status: { completed: 0, partial: 2, unknown: 0 },
+      latest_ts: "2026-09-08T22:14:00+08:00",
+    },
+    ...fakeSummary.rows.map((r) => ({ ...r, latest_ts: "2026-09-09T12:30:00+08:00" })),
+  ],
+};

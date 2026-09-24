@@ -262,13 +262,12 @@ t("真壳真桥: Agent 卡详情 → 主进程开 900×560 独立大屏窗", asy
     if (hasData) {
       // 有 daemon 数据 → 走完整关键路径
       const firstCard = page.locator('[data-testid="agent-card"]').first();
-      const agentId = await firstCard.getAttribute("data-agent");
       // token 全数字契约(无 K/M 简写)在真壳同样成立
       const tokensText = (await firstCard.locator('[data-testid="agent-tokens"]').textContent()) ?? "";
       expect(tokensText, "真壳 Agent 卡出现 K/M 简写").not.toMatch(/\d+\.?\d*K\b|\d+\.?\d*M\b/);
 
-      // 点详情 → open_agent_dashboard 真桥 → 主进程开独立窗
-      await page.getByTestId(`agent-detail-${agentId}`).click();
+      // t_56c66972: 大屏入口上收到置顶组件(卡内入口已移除) → 点置顶大屏钮 → open_agent_dashboard 真桥
+      await page.getByTestId("hero-dashboard-btn").click();
       const dashPage = await app.waitForEvent("window", { timeout: 15_000 });
       await dashPage.waitForLoadState("domcontentloaded");
 
