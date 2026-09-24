@@ -163,23 +163,33 @@ export function avgOf(buckets: TrendBucket[]): number {
   return buckets.reduce((a, b) => a + b.tokens, 0) / buckets.length;
 }
 
-/** model distribution = group_by=["agent","model"] rows 过滤当前 agent。
- *  只 1 个模型 → 如实 1 slice(不伪造多色环); 0 模型 → 空数组(空态由调用方判)。
- *  slice 列 calls/hit/miss/out(迷你数据表列, 全部现有 summary 字段)。 */
-function buildModelSlices(summary: UsageSummaryOutput, agentId: string): ModelSlice[] {
-  const slices: ModelSlice[] = [];
+/** model distribution = group_by=["agent","model"] rows 跨全部 agent 按 model 聚合(t_c1e454aa①:
+ *  agent tab 删除后无过滤口径, 同 model 的 tokens/calls/hit/miss/out 累加)。
+ *  只 1 个模型 → 如实 1 slice(不伪造多色环); 0 模型 → 空数组(空态由调用方判)。 */
+function buildModelSlices(summary: UsageSummaryOutput): ModelSlice[] {
+  const byModel = new Map<string, ModelSlice>();
   for (const r of summary.rows) {
     const dims = splitGroupDims(r.group, ["agent", "model"]);
-    if (!dims || dims[0] !== agentId || !dims[1]) continue;
-    slices.push({
-      model: dims[1],
-      tokens: rowTokens(r),
-      calls: r.calls,
-      hit: r.input_cache_hit_tokens,
-      miss: r.input_cache_miss_tokens,
-      out: r.output_tokens,
-    });
+    if (!dims || !dims[1]) continue;
+    const prev = byModel.get(dims[1]);
+    if (prev) {
+      prev.tokens += rowTokens(r);
+      prev.calls += r.calls;
+      prev.hit += r.input_cache_hit_tokens;
+      prev.miss += r.input_cache_miss_tokens;
+      prev.out += r.output_tokens;
+    } else {
+      byModel.set(dims[1], {
+        model: dims[1],
+        tokens: rowTokens(r),
+        calls: r.calls,
+        hit: r.input_cache_hit_tokens,
+        miss: r.input_cache_miss_tokens,
+        out: r.output_tokens,
+      });
+    }
   }
+  const slices = [...byModel.values()];
   slices.sort((a, b) => b.tokens - a.tokens);
   return slices;
 }
@@ -210,6 +220,55 @@ async function loadChartJs(): Promise<any> {
     throw new Error("chart.js only loads in browser environment");
   }
   return ChartJs;
+}
+
+/** t_c1e454aa③: Model 外置浮层 DOM(external tooltip handler 共用)。
+ *  锚在 .dash-pbody-model(position:relative)内 — wrap 定容仅 128px(DW-01), 200px 浮层
+ *  物理放不进(左缘裁切实锤), 升到 pbody 容器定位; 跟随 caretX/Y(canvas 相对坐标
+ *  + wrap 在 pbody 内偏移), 右缘碰撞 flip 左侧 + 左缘 clamp; 内容固定结构 +
+ *  textContent 填充(零 innerHTML 注入面)。 */
+type ModelFloatContent = { model: string; tokens: string; calls: string; hit: string };
+function renderModelFloat(
+  tooltip: { opacity: number; caretX: number; caretY: number } | null,
+  content: ModelFloatContent | null,
+): void {
+  if (typeof document === "undefined") return;
+  const host = document.querySelector<HTMLElement>(".dash-pbody-model");
+  const wrap = document.querySelector<HTMLElement>(".chart-wrap-model");
+  if (!host || !wrap) return;
+  let el = host.querySelector<HTMLElement>(".dash-model-float");
+  if (!el) {
+    el = document.createElement("div");
+    el.className = "dash-model-float";
+    el.setAttribute("data-testid", "agent-dashboard-c-model-float");
+    el.setAttribute("role", "status");
+    host.appendChild(el);
+  }
+  const show = tooltip != null && tooltip.opacity > 0 && content != null;
+  if (!show) {
+    el.classList.remove("is-visible");
+    return;
+  }
+  el.innerHTML =
+    '<b class="m"></b><span class="tk"></span><span class="cl"></span><span class="ht"></span>';
+  const c = content as ModelFloatContent;
+  (el.querySelector(".m") as HTMLElement).textContent = c.model;
+  (el.querySelector(".tk") as HTMLElement).textContent = c.tokens;
+  (el.querySelector(".cl") as HTMLElement).textContent = c.calls;
+  (el.querySelector(".ht") as HTMLElement).textContent = c.hit;
+  el.classList.add("is-visible");
+  // 定位: caret(canvas 相对坐标)换算到 pbody 系(wrap offset + caret); point 右侧 12px;
+  // 右缘碰撞(越出 pbody) → flip 左侧; 左缘 clamp ≥0(pbody overflow:hidden 会裁负坐标)
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  const cx = wrap.offsetLeft + tooltip!.caretX;
+  const cy = wrap.offsetTop + tooltip!.caretY;
+  const flip = cx + 12 + w > host.clientWidth;
+  const left = Math.max(0, flip ? cx - 12 - w : cx + 12);
+  const top = Math.max(0, Math.min(cy - h / 2, host.clientHeight - h));
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  el.classList.toggle("is-flipped", flip);
 }
 
 // ---- 主题 ----
@@ -321,33 +380,24 @@ export function AgentDashboardC({
     if (typeof window === "undefined") return "dark";
     return document.documentElement.dataset.theme === "light" || document.documentElement.dataset.theme === "light-glass" ? "light" : "dark";
   });
-  // t_12c28686: 多 agent 切换(H4) — 默认选中 tokens 最多的 agent
+  // t_12c28686: 多 agent 数据面(detailRows 全量一行一 agent)
   const detailRows = useMemo(() => buildDetailRows(summary), [summary]);
-  const [selectedAgent, setSelectedAgent] = useState<string>(() => {
-    if (detailRows.length === 0) return "";
-    return [...detailRows].sort((a, b) => b.tokens - a.tokens)[0]!.agent_id;
-  });
-  // 数据刷新后选中 agent 可能已不在 rows 里(30s 轮询窗口变化) → 回退到最大 tokens 行
-  const activeAgent = detailRows.some((r) => r.agent_id === selectedAgent)
-    ? selectedAgent
-    : detailRows.length > 0
-      ? [...detailRows].sort((a, b) => b.tokens - a.tokens)[0]!.agent_id
-      : "";
 
   const trend = useMemo(
     () => (trendSummary.ok ? buildTrend(trendSummary.data) : []),
     [trendSummary],
   );
+  // t_c1e454aa①: agent tab 删除(用户拍板过滤没必要) → 模型分布改跨全部 agent 全局聚合
   const slices = useMemo(
-    () => (modelSummary.ok && activeAgent ? buildModelSlices(modelSummary.data, activeAgent) : []),
-    [modelSummary, activeAgent],
+    () => (modelSummary.ok ? buildModelSlices(modelSummary.data) : []),
+    [modelSummary],
   );
   const trendCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const modelCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstancesRef = useRef<{ trend: unknown; model: unknown }>({ trend: null, model: null });
-  // DW-01 hover 详情: 图例 ↔ 扇区双向联动(关 canvas 内置 tooltip, 详情走 DOM hoverdetail 行)
+  // DW-01 hover 联动: 图例 ↔ 扇区双向(关 canvas 内置 tooltip);
+  // t_c1e454aa③: 具体数值改外置浮层(external tooltip), hoverdetail DOM 行退役
   const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
-  const hoverSlice = hoveredSlice != null ? slices[hoveredSlice] : undefined;
 
   // 趋势空态语义: 拉取失败 → failed; day 桶不足 2 天(兼容退路的「今日」单桶也算 1 天) → 数据积累中
   const trendState: "ok" | "failed" | "accumulating" = !trendSummary.ok
@@ -462,8 +512,8 @@ export function AgentDashboardC({
           responsive: true,
           maintainAspectRatio: false,
           cutout: "55%",
-          // DW-01(卡体裁定): 内置 tooltip 压图形(真机实锤④) → 关闭; 具体数值走 DOM
-          // hover 详情行, hover 联动 = chartjs-compact-cards skill 坑①解法。
+          // t_c1e454aa③(B 方案): 内置 tooltip 保持关闭, 悬浮信息改外置 DOM 浮层
+          // (定位容器 .chart-wrap-model, 右缘碰撞 flip 左侧; 内容=模型名/tokens/calls/命中率)
           events: ["mousemove", "mouseout"],
           onHover: (_evt: unknown, elements: { index: number }[]) => {
             const idx = elements.length > 0 ? (elements[0]!.index ?? null) : null;
@@ -471,16 +521,80 @@ export function AgentDashboardC({
           },
           plugins: {
             legend: { display: false },
-            tooltip: { enabled: false },
+            tooltip: {
+              enabled: false,
+              external: (context: {
+                tooltip: {
+                  opacity: number;
+                  caretX: number;
+                  caretY: number;
+                  dataPoints?: { dataIndex: number }[];
+                };
+              }) => {
+                const tp = context.tooltip;
+                const idx = tp.dataPoints?.[0]?.dataIndex;
+                const s = idx != null ? slices[idx] : undefined;
+                renderModelFloat(
+                  tp,
+                  s
+                    ? {
+                        model: s.model,
+                        tokens: `${fmtWhole.format(s.tokens)} tokens`,
+                        calls: `${t("dash.callsPre")}${fmtWhole.format(s.calls)}${t("dash.callsPost")}`,
+                        hit:
+                          s.hit + s.miss > 0
+                            ? `hit ${((s.hit / (s.hit + s.miss)) * 100).toFixed(1)}%`
+                            : "hit —",
+                      }
+                    : null,
+                );
+              },
+            },
           },
         },
       });
     }
-  }, [trend, slices, trendState, modelState, hoveredSlice]);
+    // t_c1e454aa②(hover 闪烁根治): hoveredSlice 移出依赖数组 —
+    // 图例 hover 只走独立 setActiveElements 高亮 effect, 两张 chart 不再 destroy+new 重建
+  }, [trend, slices, trendState, modelState]);
 
   useEffect(() => {
     void renderCharts();
   }, [renderCharts]);
+
+  // t_c1e454aa②: 扇区高亮独立 effect — setActiveElements + update('none'),
+  // 无动画、禁重建(hoveredSlice 已移出 renderCharts 依赖, 两张 chart 不再重播入场动画)。
+  // t_c1e454aa③: 图例 li hover 联动外置浮层 = chart.tooltip.setActiveElements 路径。
+  useEffect(() => {
+    const chart = chartInstancesRef.current.model as {
+      setActiveElements?: (active: { datasetIndex: number; index: number }[]) => void;
+      update?: (mode?: string) => void;
+      tooltip?: {
+        setActiveElements?: (
+          active: { datasetIndex: number; index: number }[],
+          pos: { x: number; y: number },
+        ) => void;
+      };
+      getDatasetMeta?: (i: number) => { data?: { x: number; y: number }[] };
+    } | null;
+    if (!chart || typeof chart.setActiveElements !== "function") return;
+    if (hoveredSlice != null) {
+      chart.setActiveElements([{ datasetIndex: 0, index: hoveredSlice }]);
+      // 浮层锚点 = 扇区中心(canvas 相对坐标), 与 canvas 扇区 hover 同一 external 出口
+      const p = chart.getDatasetMeta?.(0)?.data?.[hoveredSlice];
+      if (chart.tooltip?.setActiveElements && p) {
+        chart.tooltip.setActiveElements([{ datasetIndex: 0, index: hoveredSlice }], {
+          x: p.x,
+          y: p.y,
+        });
+      }
+      chart.update?.("none");
+    } else {
+      chart.setActiveElements([]);
+      chart.tooltip?.setActiveElements?.([], { x: 0, y: 0 });
+      chart.update?.("none");
+    }
+  }, [hoveredSlice]);
 
   useEffect(() => {
     // dark-first 演示立场(mock 契约, 既有 e2e 锁定): 挂载即落 dark。
@@ -705,34 +819,11 @@ export function AgentDashboardC({
           </div>
         </section>
 
-        {/* Model span4: 环形 + 中心总量 + chips 表(S5/S7); agent tab(H4) 落 phead */}
+        {/* Model span4: 环形 + 中心总量 + chips 表(S5/S7); t_c1e454aa① agent tab 退役 */}
         <section className={panelCls("dash-panel dash-span4 dash-p-model", panelStale.model)} data-stale={staleAttr(panelStale.model)}>
           <header className="dash-phead">
             <h2>{t("dash.pModel")}</h2>
-            {detailRows.length > 1 ? (
-              <div
-                className="dash-agent-tabs"
-                role="tablist"
-                aria-label={t("dash.agentTabsAria")}
-                data-testid="dash-agent-tabs"
-              >
-                {detailRows.map((r) => (
-                  <button
-                    key={r.agent_id}
-                    type="button"
-                    role="tab"
-                    aria-selected={r.agent_id === activeAgent}
-                    className={`dash-agent-tab${r.agent_id === activeAgent ? " active" : ""}`}
-                    data-testid={`dash-agent-tab-${r.agent_id}`}
-                    onClick={() => setSelectedAgent(r.agent_id)}
-                  >
-                    {r.agent_id}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <span className="dash-pnote">{t("dash.tokensShare")}</span>
-            )}
+            <span className="dash-pnote">{t("dash.tokensShare")}</span>
           </header>
           <div className="dash-pbody dash-pbody-model">
             {modelState === "ok" ? (
@@ -772,27 +863,6 @@ export function AgentDashboardC({
                     );
                   })}
                 </ul>
-                {/* hover 详情行(DW-01 裁定: 具体数值悬浮呈现, 不占常驻布局预算) */}
-                <div className="dash-model-hoverdetail" data-testid="agent-dashboard-c-model-hoverdetail" aria-live="polite">
-                  {hoverSlice ? (
-                    <>
-                      <b>{hoverSlice.model}</b>
-                      <span>{fmtWhole.format(hoverSlice.tokens)} tokens</span>
-                      <span>
-                        {t("dash.callsPre")}
-                        {fmtWhole.format(hoverSlice.calls)}
-                        {t("dash.callsPost")}
-                      </span>
-                      <span>
-                        hit {(hoverSlice.hit + hoverSlice.miss > 0
-                          ? `${((hoverSlice.hit / (hoverSlice.hit + hoverSlice.miss)) * 100).toFixed(1)}%`
-                          : "—")}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="hint">{t("dash.hoverHint")}</span>
-                  )}
-                </div>
               </>
             ) : modelState === "empty" ? (
               <ModuleEmpty testid="dash-model-empty" text={t("dash.noModelData")} />
@@ -829,13 +899,10 @@ export function AgentDashboardC({
                 {detailRowsWithModels.map((r) => {
                   const share =
                     totalTokens > 0 ? ((r.tokens / totalTokens) * 100).toFixed(1) : "0.0";
-                  const selected = r.agent_id === activeAgent;
                   return (
                     <tr
                       key={r.agent_id}
                       data-testid={`agent-dashboard-c-detail-${r.agent_id}`}
-                      data-selected={selected ? "true" : undefined}
-                      className={selected ? "is-selected" : undefined}
                     >
                       <td className="name">
                         <i

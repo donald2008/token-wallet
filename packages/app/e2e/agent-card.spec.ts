@@ -233,8 +233,8 @@ test("置顶大屏钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明�
   // 命中率 = hit/(hit+miss) = 3,370,760 / 4,213,450 ≈ 80.0%
   await pwExpect(page.getByTestId("agent-dashboard-c-hit-rate")).toHaveText(/80\.0%/);
   await pwExpect(page.getByTestId("agent-dashboard-c-window")).toHaveText("09-09 ~ 09-09");
-  await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("2"); // 多维: njbx02 glm+kimi
-  // Model 图例(DW-01 设计稿形态: 环左 + 图例右), njbx02 2 模型 → 2 行
+  await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("2"); // 全局聚合: 2 agent × {glm,kimi} → 2 模型(t_c1e454aa①)
+  // Model 图例(DW-01 设计稿形态: 环左 + 图例右), 全局聚合 glm+kimi → 2 行(t_c1e454aa①)
   await pwExpect(page.getByTestId("agent-dashboard-c-model-table")).toBeVisible();
   await pwExpect(page.locator('[data-testid="agent-dashboard-c-model-table"] li')).toHaveCount(2);
   // glm 图例行占比 = deriveMultiFromSingle 对半拆分(glm=kimi=4,555,000/2) → 50%
@@ -262,13 +262,13 @@ test("置顶大屏钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明�
   await pwExpect(page.getByTestId("agent-dashboard-c-chart-model")).toHaveCount(1);
 
   // 明细表 = agent 维全量 4 行(t_15397c99: appendix 数据接线, 不再只渲染当前 agent 一行);
-  // 当前 agent(tokens 最大的 njbx02-heavy)行 data-selected 高亮 = H4 联动语义保留
+  // t_c1e454aa①: agent tab 退役, 明细行不可选 → data-selected 高亮一并退役
   const list = page.getByTestId("agent-dashboard-c-detail-list");
   await pwExpect(list.locator("tbody tr")).toHaveCount(4);
   const detailHeavy = page.getByTestId("agent-dashboard-c-detail-njbx02-heavy");
   await pwExpect(detailHeavy).toContainText("njbx02-heavy");
   await pwExpect(detailHeavy).toContainText("4,474,000");
-  await pwExpect(detailHeavy).toHaveAttribute("data-selected", "true");
+  await pwExpect(list.locator('[data-selected="true"]')).toHaveCount(0);
   // W1 裁定(SL-02): 明细第 7 列 = 成本(cost_total/currency 接线, 对齐锁定参考 ops-wall)
   await pwExpect(list.locator("thead th")).toHaveText([
     "Agent",
@@ -285,9 +285,8 @@ test("置顶大屏钮切大屏 Ops Wall: KPI + 趋势 + model + 三分项 + 明�
     page.getByTestId("agent-dashboard-c-detail-home-computer").locator("td:last-child"),
   ).toHaveText("");
   // H4 agent tab 落 Model 面板头: 切 home-computer → 明细高亮切行(选中态 = is-selected 类)
-  await page.getByTestId("dash-agent-tab-home-computer").click();
-  await pwExpect(page.getByTestId("agent-dashboard-c-detail-home-computer")).toHaveClass(/is-selected/);
-  await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02-heavy")).not.toHaveClass(/is-selected/);
+  // t_c1e454aa①: tab 已退役 → 反向断言: 全仓零 dash-agent-tab 引用 + 明细行不可选
+  await pwExpect(page.getByTestId("dash-agent-tabs")).toHaveCount(0);
 
   // footer 显示 daemon 时间戳(非 mock 拍脑袋)
   await pwExpect(page.getByTestId("agent-dashboard-c-meta")).toContainText("2026-09-09T12:34:56+08:00");
@@ -941,7 +940,7 @@ async function agreeAndSeedMulti(page: import("@playwright/test").Page) {
   await page.getByTestId("main-tab-local-agent").click();
 }
 
-test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + 趋势多天桶", async ({
+test("t_c1e454aa Model 面板三修: agent tab 退役 + 全局聚合 + 常驻 tokensShare", async ({
   hostPage,
   page,
 }) => {
@@ -952,21 +951,25 @@ test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + �
   await page.getByTestId("hero-dashboard-btn").click();
   await pwExpect(page.getByTestId("agent-dashboard-c")).toBeVisible();
 
-  // agent tab 栏渲染(2 agent), 默认选中 tokens 最多的 njbx02
-  await pwExpect(page.getByTestId("dash-agent-tabs")).toBeVisible();
-  await pwExpect(page.getByTestId("dash-agent-tab-njbx02")).toHaveAttribute("aria-selected", "true");
-  await pwExpect(page.getByTestId("dash-agent-tab-home-computer")).toHaveAttribute("aria-selected", "false");
+  // t_c1e454aa①: agent tab 栏退役 → 零引用; Model phead 恢复常驻 tokensShare
+  await pwExpect(page.getByTestId("dash-agent-tabs")).toHaveCount(0);
+  await pwExpect(page.locator(".dash-agent-tab")).toHaveCount(0);
+  await pwExpect(page.locator(".dash-p-model .dash-phead .dash-pnote")).toHaveText("tokens 占比");
 
-  // hero = 全局 total(148,400 → DW-01 M 缩写 148.4K), tab 只联动 Model 分布/明细
+  // hero = 全局 total(148,400 → DW-01 M 缩写 148.4K), 口径不随交互变化
   await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148.4K");
   await pwExpect(page.getByTestId("agent-dashboard-c-hero-cost")).toContainText("3.06 USD");
 
-  // Model 分布: njbx02 有 glm + kimi 两个模型 → 模型计数 2(真实多模型, 非单 slice 占位)
-  await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("2");
+  // t_c1e454aa① 全局聚合: seedMulti 里 glm 跨 njbx02+home-computer 两 agent 出现,
+  // kimi(njbx02) / deepseek(home) 各一 agent → 聚合后 3 模型(旧按 agent 过滤口径 = 2)
+  await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("3");
   await pwExpect(page.getByTestId("agent-dashboard-c-chart-model")).toHaveCount(1);
-  // 环形中心总量(S7 契约表 agent-dashboard-c-model-total) = 当前 agent 模型 tokens 合计
-  // njbx02: glm(105k) + kimi(23k) = 128,000; 切 home 后 = (7000+3400+1600)+(5000+2600+800) = 20,400
-  await pwExpect(page.getByTestId("agent-dashboard-c-model-total")).toContainText("128.0K");
+  // 环形中心总量 = 全部 agent 全部模型 tokens 合计(全局口径, 非单 agent 128,000)
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-total")).toContainText("148.4K");
+  // 三模型图例行全在场(跨 agent 模型不因 agent 维过滤丢失)
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-row-glm-5.3-flash")).toBeVisible();
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-row-kimi-k2")).toBeVisible();
+  await pwExpect(page.getByTestId("agent-dashboard-c-model-row-deepseek-v3")).toBeVisible();
   // 无占位 slice: 旧退路的 model:"tokens" 不得出现(canvas labels 无法直读,
   // 用「模块空态不出现 + 模型计数真实」双重锚定)
   await pwExpect(page.getByTestId("dash-model-empty")).toHaveCount(0);
@@ -979,26 +982,14 @@ test("t_12c28686 多维数据面: agent tab 切换联动 Model 分布/明细 + �
   await pwExpect(trendNote).toContainText("日粒度");
   await pwExpect(trendNote).toContainText("均值 128,000"); // 2 桶各 128,000(100000+20000+8000) → 均值 128,000
 
-  // 明细: agent 维全量 2 行(appendix 数据接线); 当前 agent njbx02 行 data-selected
+  // 明细: agent 维全量 2 行(appendix 数据接线); t_c1e454aa① 行不可选, 无 data-selected
   const list = page.getByTestId("agent-dashboard-c-detail-list");
   await pwExpect(list.locator("tbody tr")).toHaveCount(2);
-  await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02")).toHaveAttribute("data-selected", "true");
+  await pwExpect(list.locator('[data-selected="true"]')).toHaveCount(0);
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02")).toContainText("128,000");
   // W1 成本列: 各行带原币种原值, 不做跨行换汇(D-055 混币种语义)
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02").locator("td:last-child")).toContainText("2.46 USD");
   await pwExpect(page.getByTestId("agent-dashboard-c-detail-home-computer").locator("td:last-child")).toContainText("0.60 USD");
-
-  // 切 agent → KPI 保持全局口径, Model 分布/明细高亮联动(选中态 = is-selected 类)
-  await page.getByTestId("dash-agent-tab-home-computer").click();
-  await pwExpect(page.getByTestId("dash-agent-tab-home-computer")).toHaveAttribute("aria-selected", "true");
-  await pwExpect(page.getByTestId("dash-agent-tab-njbx02")).toHaveAttribute("aria-selected", "false");
-  // KPI 保持全局口径(148,400 → 148.4K DW-01), Model 分布联动
-  await pwExpect(page.getByTestId("agent-dashboard-c-hero-tokens")).toHaveText("148.4K");
-  await pwExpect(page.getByTestId("agent-dashboard-c-models")).toHaveText("2"); // glm + deepseek
-  // 环形中心总量联动切换: home-computer = glm(12,000) + deepseek(8,400) = 20,400 → DW-01 M 缩写 20.4K
-  await pwExpect(page.getByTestId("agent-dashboard-c-model-total")).toContainText("20.4K");
-  await pwExpect(page.getByTestId("agent-dashboard-c-detail-home-computer")).toHaveClass(/is-selected/);
-  await pwExpect(page.getByTestId("agent-dashboard-c-detail-njbx02")).not.toHaveClass(/is-selected/);
 });
 
 test("t_12c28686 多维失败域隔离: model/day 维度 unreachable → 各模块显式空态, 单维不拖累", async ({
@@ -1048,10 +1039,13 @@ test("t_12c28686 单模型如实 1 slice + 趋势不足 2 天显「数据积累�
   await page.getByTestId("consent-agree").click();
   await seedAgentUsageMulti(page, {
     "agent": { ok: true, data: multiAgent },
-    // njbx02 只有 1 个模型
+    // t_c1e454aa① 全局聚合口径: 全部 agent 只剩 glm 一个模型(旧注释「njbx02 只有 1 个模型」随 tab 退役失效)
     "agent,model": {
       ok: true,
-      data: { ...multiModelAgent, rows: multiModelRows.filter((r) => r.group !== "njbx02|kimi-k2") },
+      data: {
+        ...multiModelAgent,
+        rows: multiModelRows.filter((r) => r.group.endsWith("|glm-5.3-flash")),
+      },
     },
     // daemon 刚启用: 只有 1 天数据
     "day": { ok: true, data: { ...multiDay, rows: [multiDay.rows[0]] } },

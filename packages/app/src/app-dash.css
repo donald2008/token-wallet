@@ -317,16 +317,18 @@
 
 /* ---- Model(span4): 环左 128px 定容 + 图例右(DW-01 形态回归, 设计稿 ops-wall .p-model) ----
  * SL-08 两轮纵向化/5 列表修复按本卡裁定退役(叠加漂移回设计稿形态)。
- * 网格: 列 = donut 128px + 图例 1fr; 行 = 主区 1fr + hover 详情 auto —
- * 具体数值走 hover(DW-01 裁定), 详情行定高防 hover 切换布局位移。 */
+ * t_c1e454aa③: hover 详情行退役(具体数值改外置浮层), 网格回单行两列。 */
 .dash-pbody-model {
   display: grid;
   grid-template-columns: 128px minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   gap: var(--space-4, 4px) var(--space-12, 12px);
   align-items: center;
   min-height: 0;
   overflow: hidden;
+  /* t_c1e454aa③: 外置浮层定位容器 — wrap 仅 128px 定容放不下浮层,
+   * 锚点升到 pbody(200px 级浮层在面板宽内自由 flip/clamp) */
+  position: relative;
 }
 .dash-pbody-model .chart-wrap-model {
   position: relative;
@@ -401,30 +403,6 @@
   color: var(--fg-dim);
   font-variant-numeric: tabular-nums;
 }
-/* hover 详情行(DW-01 裁定): 具体数值悬浮呈现; 定高 24px 防 hover 态切换位移 */
-.dash-model-hoverdetail {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--space-8, 8px);
-  height: 24px;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  font-size: var(--font-11, 11px);
-  color: var(--fg-dim);
-  font-variant-numeric: tabular-nums;
-}
-.dash-model-hoverdetail b {
-  color: var(--fg);
-  font-weight: 600;
-}
-.dash-model-hoverdetail .hint {
-  letter-spacing: 0.05em;
-}
-
 /* chips 图例色点(S5): 与扇区同源同序 */
 .dash-chip {
   display: inline-block;
@@ -484,10 +462,8 @@
 .dash-detail-table tbody tr:last-child td {
   border-bottom: 0;
 }
-/* H4 联动: 当前 agent 行高亮(小面积 hover 色同源, 禁整行状态色 B4 反向红线) */
-.dash-detail-table tbody tr.is-selected td {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
+/* H4 联动高亮: t_c1e454aa① agent tab 退役后行不可选, is-selected 驱动源删除;
+ * tr:hover 悬停反馈保留 */
 .dash-detail-table tbody tr:hover td {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
@@ -623,33 +599,39 @@
   border: 1px dashed var(--border);
   border-radius: var(--radius-8, 8px);
 }
-.dash-agent-tabs {
+/* t_c1e454aa③: Model 外置浮层(external tooltip 自绘 DOM) — 锚 .dash-pbody-model
+ * (position:relative; wrap 128px 定容放不下, 见 TSX renderModelFloat 注),
+ * 跟随鼠标/扇区, 右缘碰撞 flip 左侧(is-flipped) + 左缘 clamp;
+ * 内容 = 模型名/tokens/calls/hit 率。覆盖在上层但不拦截鼠标(pointer-events:none)。 */
+.dash-model-float {
+  position: absolute;
+  z-index: 5;
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4, 4px);
-  min-width: 0;
-}
-.dash-agent-tab {
-  background: transparent;
+  align-items: center;
+  gap: var(--space-8, 8px);
+  padding: 3px var(--space-8, 8px);
+  background: var(--bg-elev, #1c2129);
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill, 999px);
-  color: var(--fg-dim);
+  border-radius: var(--radius-4, 4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   font-size: var(--font-11, 11px);
-  padding: 0 var(--space-8, 8px);
-  cursor: pointer;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 16px;
+  color: var(--fg-dim);
   white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.08s linear;
 }
-.dash-agent-tab:hover {
+.dash-model-float.is-visible {
+  opacity: 1;
+}
+.dash-model-float b {
   color: var(--fg);
-}
-.dash-agent-tab.active {
-  color: var(--bg);
-  background: var(--accent);
-  border-color: var(--accent);
   font-weight: 600;
+}
+.dash-model-float .tk {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- standalone 自绘 chrome(t_185002af 继承, 壳不动 H8) ---- */
@@ -749,13 +731,10 @@
     padding-top: 0;
   }
   /* DW-01(紧凑段): Model 回归环左+图例右后, donut 128px 在 560 窗口内吃掉行高预算 —
-   * 紧凑段收 donut 96px + hover 详情行 20px, 保一屏收口(SL-08 紧凑刻度经验复用)。 */
+   * 紧凑段收 donut 96px, 保一屏收口(SL-08 紧凑刻度经验复用)。 */
   .dash-pbody-model .chart-wrap-model {
     width: 96px;
     height: 96px;
-  }
-  .dash-model-hoverdetail {
-    height: 20px;
   }
   .dash-module-empty {
     min-height: 80px;
@@ -786,15 +765,12 @@
   .dash-kpi-sub,
   .dash-model-legend,
   .dash-model-legend-li,
-  .dash-model-hoverdetail,
   .dash-detail-table,
   .dash-detail-table thead th,
   .dash-detail-table tbody td,
   .dash-splitrows .r,
   .dash-module-empty,
   .dash-module-empty button,
-  .dash-agent-tabs,
-  .dash-agent-tab,
   .dash-foot,
   .dash-foot-stale,
   .dash-foot-retry {
@@ -808,19 +784,8 @@
     padding: var(--space-4, 4px) var(--space-12, 12px);
   }
   /* SL-08 紧凑段纵向预算⑤(900×560 dash-chrome 在场): phead 28→26(两面板行 ×2 = -4),
-   * trend chart-wrap min-height 100→88(-12, 图表 flex:1 自适应缩放不受影响)。 */
-  /* SL-08 紧凑段纵向预算⑥: agent tabs 压缩刻度 — Model 面板头 tabs 4 个时允许 2×2 网格
-   * 收窄占位(max-width 让 phead 两行排布而不是把 h2 挤下去), 18px 行高紧凑刻度。 */
-  .dash-agent-tab {
-    line-height: 16px;
-    padding: 0 var(--space-4, 4px);
-    font-size: var(--font-10, 10px);
-  }
-  .dash-agent-tabs {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, auto));
-    gap: var(--space-4, 4px);
-  }
+   * trend chart-wrap min-height 100→88(-12, 图表 flex:1 自适应缩放不受影响)。
+   * t_c1e454aa①: agent tabs 压缩刻度⑥随 tabs 退役删除。 */
   .dash-phead {
     min-height: 26px;
   }

@@ -5,8 +5,10 @@
  *   hero-tokens/hero-cost 保留), detail-list→detail-table(testid 名保留, DOM ul→table)
  * - 金额可空留白契约(hero-cost is-empty; 明细表 pricing 未接入无金额列)
  * - 主题切换/返回钮已删减契约(SL-08 B③); canvas 存在(chart.js 异步)
- * - t_12c28686/t_e83ad982 语义继承: agent tab 切换联动(现在落 Model 面板头, 联动明细行
- *   高亮 + 模型分布过滤); 模块空态(失败重试/积累中/单模型)
+ * - t_12c28686/t_e83ad982 语义继承: 模块空态(失败重试/积累中/单模型);
+ *   t_c1e454aa①: agent tab 退役, Model 分布改跨全部 agent 全局聚合(明细行不可选,
+ *   data-selected 高亮一并退役); t_c1e454aa③: hover 详情 DOM 行退役 → 外置浮层
+ *   (canvas external tooltip 渲染, jsdom 不画图, 浮层断言走空态/缺省契约)
  * - t_5cf22ba4 回归锁: 补 0 桶/一位小数不吞项/tokens 标注
  */
 // @vitest-environment jsdom
@@ -212,8 +214,8 @@ describe("AgentDashboardC(Ops Wall 常态渲染 SC-01)", () => {
     expect(njbx02?.querySelector(".num")?.textContent).toMatch(/64,000/);
     // W1 成本列接线: cost_total/currency 进第 7 列(H3: null 留空)
     expect(njbx02?.querySelector("td:last-child")?.textContent).toContain("1.23 USD");
-    // 当前 agent(njbx02, tokens 最大)行高亮 = H4 联动语义保留
-    expect(njbx02?.getAttribute("data-selected")).toBe("true");
+    // t_c1e454aa①: agent tab 退役, 明细行不可选 → data-selected 高亮一并退役
+    expect(njbx02?.getAttribute("data-selected")).toBeNull();
     const home = table?.querySelector('[data-testid="agent-dashboard-c-detail-home-computer"]');
     expect(home?.getAttribute("data-selected")).toBeNull();
   });
@@ -297,48 +299,60 @@ describe("AgentDashboardC(Ops Wall 常态渲染 SC-01)", () => {
   });
 });
 
-describe("AgentDashboardC(多维数据面 + agent tab H4)", () => {
-  it("多 agent 渲染 tab 栏(Model 面板头) + 切换联动明细行高亮/KPI 保持全局口径", () => {
+describe("AgentDashboardC(t_c1e454aa Model 面板三修: tab 退役 + 全局聚合)", () => {
+  it("agent tab 退役: Model 面板头恢复常驻 tokensShare, 全仓零 dash-agent-tab 引用", () => {
     const { container: c } = mountDash();
-    const tabs = c.querySelectorAll(".dash-agent-tab");
-    expect(tabs).toHaveLength(2);
-    expect(c.querySelector('[data-testid="dash-agent-tab-njbx02"]')?.getAttribute("aria-selected")).toBe("true");
-    expect(c.querySelector('[data-testid="dash-agent-tab-home-computer"]')?.getAttribute("aria-selected")).toBe("false");
-    // KPI = 全局 total 81,000 → 81.0K(DW-01 M 缩写; tab 不联动 KPI)
+    // t_c1e454aa①: tabs 条件渲染块删除, phead 右侧恢复常驻副题
+    expect(c.querySelector('[data-testid="dash-agent-tabs"]')).toBeNull();
+    expect(c.querySelector('[data-testid="dash-agent-tab-njbx02"]')).toBeNull();
+    expect(c.querySelector(".dash-agent-tabs")).toBeNull();
+    const phead = c.querySelector(".dash-p-model .dash-phead");
+    expect(phead?.textContent).toContain("tokens 占比");
+    // KPI = 全局 total 81,000 → 81.0K(tab 退役, 口径本就全局)
     expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81.0K");
-    // 切到 home-computer → KPI 不变, 明细高亮切行
-    const homeTab = c.querySelector('[data-testid="dash-agent-tab-home-computer"]') as HTMLButtonElement;
-    act(() => homeTab.click());
-    expect(c.querySelector('[data-testid="agent-dashboard-c-hero-tokens"]')?.textContent).toBe("81.0K");
+    // 明细行无 data-selected 驱动源(高亮随 tabs 退役)
     const list = c.querySelector('[data-testid="agent-dashboard-c-detail-list"]');
-    expect(list?.querySelector('[data-testid="agent-dashboard-c-detail-home-computer"]')?.getAttribute("data-selected")).toBe("true");
-    expect(list?.querySelector('[data-testid="agent-dashboard-c-detail-njbx02"]')?.getAttribute("data-selected")).toBeNull();
+    expect(list?.querySelector('[data-selected="true"]')).toBeNull();
   });
 
-  it("Model 分布: 二维 rows 过滤当前 agent, 多模型 ≥2 slice + 模型计数", () => {
+  it("Model 分布: 跨全部 agent 全局聚合(同 model tokens/calls/hit/miss 累加), 模型计数=3", () => {
     const { container: c } = mountDash(fakeSummary, okResult);
-    expect(c.querySelector('[data-testid="agent-dashboard-c-models"]')?.textContent).toBe("2");
+    // multiModelSummary: 2 agent × {glm-5.3-flash, kimi-k2, deepseek-v3} → 全局聚合 3 模型
+    // (旧口径按 agent 过滤 = 2; t_c1e454aa① 改全局聚合 → deepseek 计入)
+    expect(c.querySelector('[data-testid="agent-dashboard-c-models"]')?.textContent).toBe("3");
     expect(c.querySelector('[data-testid="agent-dashboard-c-chart-model"]')).toBeTruthy();
     expect(c.querySelector('[data-testid="agent-dashboard-c-model-table"]')).toBeTruthy();
-    // 切 home-computer → 也是 2 模型(glm + deepseek)
-    const homeTab = c.querySelector('[data-testid="dash-agent-tab-home-computer"]') as HTMLButtonElement;
-    act(() => homeTab.click());
-    expect(c.querySelector('[data-testid="agent-dashboard-c-models"]')?.textContent).toBe("2");
+    // deepseek-v3(仅 home-computer 有)进入全局聚合图例
+    expect(
+      c.querySelector('[data-testid="agent-dashboard-c-model-row-deepseek-v3"]'),
+    ).toBeTruthy();
+    // glm-5.3-flash 跨两 agent 累加: 图例行在场
+    expect(
+      c.querySelector('[data-testid="agent-dashboard-c-model-row-glm-5.3-flash"]'),
+    ).toBeTruthy();
   });
 
-  it("Model 图例(DW-01 设计稿形态): 每模型一行(模型名+占比) + chips 色点(S3 同源) + hover 详情", () => {
+  it("buildModelSlices: 同 model 跨 agent 行 tokens 累加(全局聚合口径直测)", () => {
+    // multiModelSummary: glm 在 njbx02/home-computer 各一行(各 50,000/10,000 hit 邻位),
+    // 聚合后 glm 图例占比应为两行合计占比; 单 agent 过滤口径下该占比=单行 — 用总和锚定
+    const { container: c } = mountDash(fakeSummary, okResult);
+    const legend = c.querySelector('[data-testid="agent-dashboard-c-model-table"]');
+    expect(legend?.querySelectorAll("li")).toHaveLength(3); // 全局 3 模型(旧口径 2)
+  });
+
+  it("Model 图例(DW-01 设计稿形态): 每模型一行(模型名+占比) + chips 色点(S3 同源); hover 详情改外置浮层", () => {
     const { container: c } = mountDash(fakeSummary, okResult);
     const legend = c.querySelector('[data-testid="agent-dashboard-c-model-table"]');
     expect(legend?.tagName).toBe("UL"); // DW-01: 表→图例(设计稿 .legend), testid 契约沿用
-    expect(legend?.querySelectorAll("li")).toHaveLength(2);
+    expect(legend?.querySelectorAll("li")).toHaveLength(3);
     const glm = legend?.querySelector('[data-testid="agent-dashboard-c-model-row-glm-5.3-flash"]');
     expect(glm?.textContent).toContain("glm-5.3-flash");
-    // DW-01: 具体数值(tables 全精度)退役到 hover 详情行; 图例只留模型名+占比整数
+    // DW-01: 图例只留模型名+占比整数; t_c1e454aa③: hoverdetail DOM 行退役 →
+    // 具体数值走外置浮层(canvas external tooltip 渲染, jsdom 不画图故无浮层节点)
     expect(glm?.textContent).toContain("50%");
     expect(legend?.querySelectorAll("thead th")).toHaveLength(0); // 无表头 — 图例形态
-    // hover 详情行在场(具体数值: 千分位 tokens + 调用 + 命中率)
-    const detail = c.querySelector('[data-testid="agent-dashboard-c-model-hoverdetail"]');
-    expect(detail?.textContent).toContain("悬停"); // hint 态
+    expect(c.querySelector('[data-testid="agent-dashboard-c-model-hoverdetail"]')).toBeNull();
+    expect(c.querySelector('[data-testid="dash-model-hoverdetail"]')).toBeNull();
     // chips 色点 = var(--chart-N), 组件禁硬编码色值(H9)
     const chip = glm?.querySelector<HTMLDivElement>(".dash-chip");
     expect(chip?.getAttribute("style")).toContain("var(--chart-1)");
@@ -365,10 +379,10 @@ describe("AgentDashboardC(多维数据面 + agent tab H4)", () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it("Model 分布: ok 但当前 agent 无模型行 → 「暂无模型数据」(无重试)", () => {
+  it("Model 分布: ok 但全部 agent 均无模型行 → 「暂无模型数据」(无重试, 全局聚合口径)", () => {
     const emptyModel = {
       ...multiModelSummary,
-      rows: multiModelSummary.rows.filter((r) => !r.group.startsWith("njbx02|")),
+      rows: [], // t_c1e454aa①: 全局聚合下空态 = 任意 agent 都无模型行(rows 全空)
     };
     const { container: c } = mountDash(fakeSummary, { ok: true, data: emptyModel, generatedAt: "" });
     expect(c.querySelector('[data-testid="dash-model-empty"]')?.textContent).toMatch(/暂无模型数据/);
@@ -401,10 +415,11 @@ describe("AgentDashboardC(多维数据面 + agent tab H4)", () => {
     expect(c.querySelector('[data-testid="dash-trend-empty-retry"]')).toBeNull();
   });
 
-  it("单模型如实 1 slice(不伪造多色环): 当前 agent 只有 1 个模型时模型计数=1", () => {
+  it("单模型如实 1 slice(不伪造多色环): 全部 agent 合计只有 1 个模型时模型计数=1(全局聚合)", () => {
     const single = {
       ...multiModelSummary,
-      rows: multiModelSummary.rows.filter((r) => r.group !== "njbx02|kimi-k2"),
+      // t_c1e454aa①: 只保留跨 agent 的同一模型行 → 全局聚合后 1 slice
+      rows: multiModelSummary.rows.filter((r) => r.group.endsWith("|glm-5.3-flash")),
     };
     const { container: c } = mountDash(fakeSummary, { ok: true, data: single, generatedAt: "" });
     expect(c.querySelector('[data-testid="agent-dashboard-c-models"]')?.textContent).toBe("1");
@@ -429,11 +444,9 @@ describe("AgentDashboardC(多维数据面 + agent tab H4)", () => {
     const glm = c.querySelector('[data-testid="agent-dashboard-c-model-row-glm-5.3-flash"]');
     expect(glm).toBeTruthy();
     expect(glm?.textContent).not.toMatch(/NaN|Infinity/);
-    // DW-01: 具体数值(holdout 命中率「—」)走 hover 详情行(hoverSlice 联动), 图例行无「—」;
-    // 守卫语义保留 = 详情行 hint 态不含 NaN/Infinity, 图例占比正常渲染
-    expect(c.querySelector('[data-testid="agent-dashboard-c-model-hoverdetail"]')?.textContent).not.toMatch(
-      /NaN|Infinity/,
-    );
+    // t_c1e454aa③: hoverdetail DOM 行退役 → 具体数值(含「—」命中率)走外置浮层
+    // (external tooltip, jsdom 不画图无浮层节点); 守卫语义 = 图例占比正常渲染无 NaN
+    expect(c.querySelector('[data-testid="agent-dashboard-c-model-hoverdetail"]')).toBeNull();
     expect(glm?.textContent).toMatch(/100%/); // 纯 output 行占比 = 100%
   });
 });
