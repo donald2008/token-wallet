@@ -26,20 +26,24 @@ test("① booting 态: 无快照首拉期间显「正在连接」, 首拉完成�
   await pwExpect(page.getByTestId("agent-card-empty")).toBeVisible();
   await pwExpect(page.getByTestId("agent-rows-booting")).toHaveCount(0);
 
-  // tw-mcp-started 事件 → 置 pending + 立即重拉: 重拉落地前(快照仍无)显「正在连接」;
-  // mock 立即回 unreachable → 首拉完成解除, 落回错误空态 — 验证 pending 态真渲染过。
+  // P1-1(评论 1771)确定性捕获: 注入 3000ms mock 延迟 → tw-mcp-started 重拉落地前
+  // booting 态必现在场(无容忍分支, booting 不出现 = 用例直接红)
+  await page.evaluate(() => {
+    localStorage.setItem("token-wallet.mock.mcp.usagedelayms", "3000");
+  });
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("tw-mcp-started")));
-  // 事件处理是异步链(dispatch → tick → setState), 轮询捕捉 booting 短暂在场
-  const sawBooting = await page
-    .waitForSelector('[data-testid="agent-rows-booting"]', { timeout: 1500 })
-    .then(() => true)
-    .catch(() => false);
-  if (sawBooting) {
-    const title = await page.locator('[data-testid="agent-rows-booting"]').textContent();
-    expect(title ?? "").toContain("正在连接 MCP daemon");
-  }
-  // 终态: 首拉完成解除 → 回错误空态(booting 不残留)
-  await pwExpect(page.getByTestId("agent-rows-booting")).toHaveCount(0, { timeout: 5000 });
+  const booting = page.getByTestId("agent-rows-booting");
+  await pwExpect(booting).toBeVisible();
+  await pwExpect(booting).toContainText("正在连接 MCP daemon");
+  // 对稿证据(验收 5): 真 booting 态截图, 独立于 hover/确认态(文件内容互异)
+  await page.screenshot({ path: "verification/agent-ux2/01-booting.png", fullPage: false });
+  await pwExpect(booting).not.toBeAttached(); // sanity: 后续断言前元素已随首拉完成卸载
+
+  // 清延迟 → 首拉完成解除 → 落回错误空态(booting 不残留, 不闪「未连接」形态)
+  await page.evaluate(() => {
+    localStorage.setItem("token-wallet.mock.mcp.usagedelayms", "0");
+  });
+  await pwExpect(page.getByTestId("agent-rows-booting")).toHaveCount(0);
   await pwExpect(page.getByTestId("agent-card-empty")).toBeVisible();
 });
 

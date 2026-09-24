@@ -2440,9 +2440,8 @@ body {
 .agent-confirm .confirm-text {
   white-space: normal; /* 覆盖 .card-confirm .confirm-text 的 nowrap — 长文案(agent_id+行数)允许换行 */
 }
-/* t_6eb3e728 ③: 删除失败错误行 — 跨整行(meta 前), text-error 红字语义 */
+/* t_6eb3e728 ③: 删除失败错误行 — text-error 红字语义(卡片为 flex 布局, 错误行天然独占整行) */
 .agent-del-error {
-  grid-column: 1 / -1;
   margin: 0;
   font-size: var(--font-12, 12px);
   line-height: 1.5;

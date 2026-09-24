@@ -106,7 +106,7 @@ export function AgentCard({
     void onDeleteUsage(agentId).then((ok) => {
       setDelError(!ok);
       if (!ok) {
-        // 错误态瞬态常驻到下次操作/重拉 — 不自动消失(用户必须看到失败), 重新 hover 再删可清
+        // 错误态瞬态 8s 自动清除(用户可见窗口足够; IPC 超时 5s + UI 停留 8s), 重新 hover 再删可清
         window.setTimeout(() => setDelError(false), 8000);
       }
     });

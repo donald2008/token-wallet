@@ -240,6 +240,14 @@ export const ipcMocks: Record<string, IpcHandler> = {
   //   缺对应维度的 seed → 返回 unreachable(该模块显式空态, 不静默)。
   mcp_usage_summary: (args?: Record<string, unknown>) => {
     const groupBy = Array.isArray(args?.group_by) ? (args!.group_by as string[]).join(",") : "agent";
+    // t_6eb3e728 P1-1: 可注入延迟(localStorage token-wallet.mock.mcp.usagedelayms, 同
+    // httpdelayms 模式) → 让 booting 态在 mock 面确定性可捕捉(首拉期间无 ok 快照)
+    let delayMs = 0;
+    try {
+      delayMs = Number(localStorage.getItem("token-wallet.mock.mcp.usagedelayms") ?? 0) || 0;
+    } catch {
+      /* ignore */
+    }
     let s:
       | { ok: boolean; reason?: string; data?: unknown }
       | { byGroupBy?: Record<string, { ok: boolean; reason?: string; data?: unknown }> }
@@ -250,16 +258,22 @@ export const ipcMocks: Record<string, IpcHandler> = {
     } catch {
       /* ignore */
     }
+    let result: { ok: boolean; reason?: string; data?: unknown };
     if ("byGroupBy" in s && s.byGroupBy) {
       const one = s.byGroupBy[groupBy];
-      return one && one.ok && one.data
+      result = one && one.ok && one.data
         ? { ok: true, data: one.data }
         : { ok: false, reason: one?.reason ?? "unreachable" };
+    } else {
+      const single = s as { ok: boolean; reason?: string; data?: unknown };
+      result = single.ok && single.data
+        ? { ok: true, data: single.data }
+        : { ok: false, reason: single.reason ?? "unreachable" };
     }
-    const single = s as { ok: boolean; reason?: string; data?: unknown };
-    return single.ok && single.data
-      ? { ok: true, data: single.data }
-      : { ok: false, reason: single.reason ?? "unreachable" };
+    if (delayMs > 0) {
+      return new Promise((res) => setTimeout(() => res(result), delayMs));
+    }
+    return result;
   },
   mcp_usage_report_echo: () => {
     let s: { ok: boolean; reason?: string; data?: unknown } = { ok: false, reason: "unreachable" };
