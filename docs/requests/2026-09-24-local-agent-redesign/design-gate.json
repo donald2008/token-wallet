@@ -1,8 +1,9 @@
 {
-  "design": "local-agent-redesign plan-a-rev2",
+  "design": "local-agent-redesign plan-a-rev3",
   "approved": true,
   "approved_by": "老大",
   "approved_at": "2026-09-24",
-  "evidence": "主会话原话「plan-a的v2版不错」; mock docs/requests/2026-09-24-local-agent-redesign/plan-a-v2*.png",
-  "vision_selfcheck": "零重叠/零裁切/720首屏两卡完整可见/大数字独占行/空闲态灰化"
+  "evidence": "主会话原话「OK。目前来看没什么问题了，落gate2吧」; mock: plan-a-v3*.png (正常态+四边界态)",
+  "vision_selfcheck": "文字减法落地确认 / 四边界态清晰合理 / 零重叠零裁切",
+  "supersedes": "d5c7357 的 plan-a-rev2 翻牌记录(未生效, 被老大暂停)"
 }
