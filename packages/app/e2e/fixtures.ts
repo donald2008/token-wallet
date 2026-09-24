@@ -271,6 +271,21 @@ export const ipcMocks: Record<string, IpcHandler> = {
     }
     return s.ok && s.data ? { ok: true, data: s.data } : { ok: false, reason: s.reason ?? "unreachable" };
   },
+  // t_6eb3e728 ③: delete_usage mock — 读 localStorage token-wallet.mock.mcp.delete(由
+  // seedDeleteUsage 注入期望行为)。缺省 {ok:true, data:{deleted:0}}(mock 面默认可删);
+  // 测「daemon 未就绪报错态」用 seedDeleteUsage(page, {ok:false, reason:"unreachable"})。
+  // 成功路径在 mock 面不做真实行数扣减(列表更新由 seedAgentUsage 重注入新快照驱动)。
+  mcp_delete_usage: (args?: Record<string, unknown>) => {
+    let s: { ok: boolean; reason?: string; data?: unknown } = { ok: true, data: { deleted: 0 } };
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.mcp.delete");
+      if (raw) s = JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    if (s.ok) return { ok: true, data: { deleted: (args?.agent_id ? 1 : 0) + 0 } };
+    return { ok: false, reason: s.reason ?? "unreachable" };
+  },
   // t_4b7984d9 C: 详情大屏独立窗口 IPC mock — 浏览器无桥降级返 ok:false,
   // 让 App.tsx onAgentCardDetail 自动 setView("agent-dashboard") 复用既有大屏渲染路径
   // (e2e 行为与 round-2 一致; 真壳路径: 主进程真开 900×600 BrowserWindow, 与本 mock 解耦)
@@ -805,6 +820,19 @@ export async function seedAgentUsage(
  * keys: "agent" / "agent,model" / "day" — mcp_usage_summary mock 按调用方 group_by
  * join(",") 后查表返回; 缺 key 的维度 → unreachable(该模块显式空态)。
  */
+/**
+ * t_6eb3e728 ③: 注入 delete_usage mock 行为。
+ * {ok:true} → 删除成功; {ok:false, reason:"unreachable"} → daemon 未就绪错误态。
+ */
+export async function seedDeleteUsage(
+  page: import("@playwright/test").Page,
+  payload: { ok: boolean; reason?: string },
+): Promise<void> {
+  await page.evaluate((p) => {
+    localStorage.setItem("token-wallet.mock.mcp.delete", JSON.stringify(p));
+  }, payload);
+}
+
 export async function seedAgentUsageMulti(
   page: import("@playwright/test").Page,
   byGroupBy: Record<"agent" | "agent,model" | "day", { ok: boolean; reason?: string; data?: unknown }>,

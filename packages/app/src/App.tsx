@@ -40,7 +40,7 @@ import { AddProviderWizard } from "./components/AddProviderWizard";
 import { FilterIcons, DEFAULT_FILTER, matchesFilter, type FilterSel } from "./components/FilterChips";
 import { AgentCard, AgentCardEmpty } from "./components/AgentCard";
 import { AgentDashboardC } from "./components/AgentDashboardC";
-import { mcpUsageSummary, type McpQueryResult } from "./mcpQuery";
+import { mcpUsageSummary, mcpDeleteUsage, type McpQueryResult } from "./mcpQuery";
 import type { UsageSummaryOutput } from "./mcpQueryTypes";
 import type { InstanceConfig } from "./instances/schema";
 import { getSharedKeyring, getSharedStore, loadPersistedInstances, useInstances, usePersistError } from "./instances/store";
@@ -159,6 +159,10 @@ function AppShell() {
     ok: false,
     reason: "unavailable",
   });
+  // t_6eb3e728 ①: 启动中态 — 首拉未完成且无 ok 快照时, Agent 区显示「正在连接 MCP daemon…」,
+  // 不闪「daemon 未连接」(误读为服务异常)。首拉完成(成功或失败)即解除; daemon 启动成功事件
+  // (tw-mcp-started)触发立即重拉并置 pending(不等 30s tick)。
+  const [mcpFirstFetchPending, setMcpFirstFetchPending] = useState(true);
   // t_12c28686: 大屏多维数据面 — Model 分布(group_by=["agent","model"]) + 趋势(group_by=["day"])
   // 两个附加查询, 与单维查询同一 tick 并行发起(3 次 invoke 而非 4 次; 明细/三分项从单维 summary 取)。
   // 独立 state: 主页 Agent 卡区只消费单维结果, 大屏消费三维 — 失败域互不拖累(模块级空态+重试)。
@@ -202,6 +206,8 @@ function AppShell() {
     setMcpTrendSummary((prev) => (rt.ok || !prev.ok ? rt : prev));
     // SL-03: 记录本拍各维成败(供降级形态判定), 不改上面三行的展示语义(H7 不回退)
     setLastFetchFailed({ summary: !r.ok, model: !rm.ok, trend: !rt.ok });
+    // t_6eb3e728 ①: 首拉完成(成功或失败)即解除「正在连接」态
+    setMcpFirstFetchPending(false);
   }, []);
   useEffect(() => {
     let alive = true;
@@ -215,6 +221,17 @@ function AppShell() {
       alive = false;
       window.clearInterval(timer);
     };
+  }, [tick]);
+
+  // t_6eb3e728 ①: MCP daemon 启动成功事件 — McpServicePanel 启动/重启成功后 dispatch,
+  // App 置 pending(下次落回启动中态防旧数据误显) + 立即重拉(不等 30s tick)。卸载时移除监听。
+  useEffect(() => {
+    const onMcpStarted = () => {
+      setMcpFirstFetchPending(true);
+      void tick();
+    };
+    window.addEventListener("tw-mcp-started", onMcpStarted);
+    return () => window.removeEventListener("tw-mcp-started", onMcpStarted);
   }, [tick]);
 
   // 首开判定(§10, P0-7 接真): Rust get_bootstrap 读 settings.json consent;
@@ -389,10 +406,11 @@ function AppShell() {
     getSharedStore().remove(id, getSharedKeyring());
   }, []);
 
-  // t_4b7984d9 C: 详情按钮回调 → 真壳路径调 openAgentDashboard() 开 900×600 独立窗口
+  // t_4b7984d9 C + t_6eb3e728 ②: 大屏按钮回调 → 真壳路径调 openAgentDashboard() 开 900×600 独立窗口
   // (主进程 open_agent_dashboard IPC), 浏览器降级(e2e / 纯 dev)回到 setView 切页内视图,
   // 复用既有的 AgentDashboardC 渲染, e2e 兼容性不变。同一回调双分支 = 数据契约 + UI 一致。
-  const onAgentCardDetail = useCallback(async () => {
+  // ②语义归位: 原 onAgentCardDetail 改名 onAgentCardDashboard — 按钮语义 = 打开整体用量大屏。
+  const onAgentCardDashboard = useCallback(async () => {
     const r = await openAgentDashboard();
     if (!r.ok) {
       // 浏览器无桥降级: 切到页内 dashboard 视图(与原 view="agent-dashboard" 路径同形态)
@@ -400,6 +418,22 @@ function AppShell() {
     }
     // 真壳 ok=true 时主进程已开窗, 此处 no-op(独立窗口自己 mcpUsageSummary)
   }, []);
+
+  // t_6eb3e728 ③: Agent 卡删除回调 — mcpDeleteUsage({agent_id}) → 成功后 mcpSummary 立即重拉;
+  // 失败返回 false, AgentCard 显示 daemon 未就绪错误态(不静默)。
+  const onAgentDeleteUsage = useCallback(
+    async (agentId: string): Promise<boolean> => {
+      const r = await mcpDeleteUsage({ agent_id: agentId });
+      if (r.ok) {
+        // 删除成功 → 立即重拉刷新列表(不等 30s tick); 删除后行数变化, pending 置位防旧快照闪现
+        setMcpFirstFetchPending(true);
+        await tick();
+        return true;
+      }
+      return false;
+    },
+    [tick],
+  );
 
   // 真实实例集合: 仅真实实例卡渲染删除钮(dev 场景 mock 预览卡不给无效按钮)
   const realInstanceIds = useMemo(() => new Set(instances.map((i) => i.id)), [instances]);
@@ -678,11 +712,20 @@ function AppShell() {
                         row={row}
                         activity={activity}
                         generatedAt={mcpSummary.generatedAt}
-                        onOpenDetail={onAgentCardDetail}
+                        onOpenDashboard={onAgentCardDashboard}
+                        onDeleteUsage={onAgentDeleteUsage}
                       />
                     );
                   })
                   )
+                ) : mcpFirstFetchPending ? (
+                  /* t_6eb3e728 ①: 启动中态 — 首拉未完成且无 ok 快照, 显「正在连接 MCP daemon…」
+                   * (复用 .agent-rows-empty 样式); 首拉完成即解除, 落回 列表/空态 二选一,
+                   * 不闪「daemon 未连接」误读为服务异常。 */
+                  <div className="agent-rows-empty" data-testid="agent-rows-booting">
+                    <p className="agent-rows-empty-title">正在连接 MCP daemon…</p>
+                    <p className="agent-rows-empty-hint">正在拉取 Agent 用量数据，请稍候。</p>
+                  </div>
                 ) : (
                   <AgentCardEmpty reason={mcpSummary.reason} />
                 )}

@@ -7,6 +7,19 @@
  * vite 浏览器构建会拖进去)。本文件零运行时副作用,纯类型。
  */
 
+/**
+ * delete_usage 输入/输出契约(t_6eb3e728, docs/mcp-protocol.md v1.1 §2.4 增补形态):
+ * - 输入: { agent_id }(必填) — 清除该 agent 的全部上报数据, 不可逆
+ * - 输出: { deleted: number } — 实际删除的 usage 事件行数
+ */
+export interface DeleteUsageInput {
+  agent_id: string;
+}
+
+export interface DeleteUsageOutput {
+  deleted: number;
+}
+
 /** UsageSummaryInput(§2.2) — group_by 1-3 维 */
 export interface UsageSummaryInput {
   since?: string;

@@ -30,6 +30,8 @@ import { loadMcpEnv } from "./mcp-env";
 
 export type {
   ByStatus,
+  DeleteUsageInput,
+  DeleteUsageOutput,
   SummaryRow,
   SummaryTotal,
   UsageReportEchoEvent,

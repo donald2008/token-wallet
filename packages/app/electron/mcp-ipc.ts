@@ -2,9 +2,10 @@
  * MCP daemon IPC 桥注册(D-055, t_4bd214de):
  * 把 mcp-env/mcp-daemon/mcp-autostart 三个纯逻辑模块挂到 ipcMain.handle。
  *
- * 11 通道: mcp_probe / mcp_start / mcp_stop / mcp_restart / mcp_get_config / mcp_gen_key /
+ * 12 通道: mcp_probe / mcp_start / mcp_stop / mcp_restart / mcp_get_config / mcp_gen_key /
  *         mcp_set_autostart / mcp_get_autostart / mcp_get_guide /
- *         mcp_usage_summary / mcp_usage_report_echo(t_9255cb63)
+ *         mcp_usage_summary / mcp_usage_report_echo(t_9255cb63) /
+ *         mcp_delete_usage(t_6eb3e728, 协议 v1.1 §2.4 管理面)
  *  (round-2 增 mcp_restart 编排 stop+start, 让 key regen 后 daemon 真实重启用上新 key)
  *  (t_9255cb63 增 usage_summary + usage_report_echo 读数据桥 — 主页 Agent 卡 + 大屏方案 C 数据源)
  *
@@ -42,6 +43,8 @@ import {
   callMcpToolFromEnv,
   defaultHttpShim as defaultQueryHttpShim,
   McpCallError,
+  type DeleteUsageInput,
+  type DeleteUsageOutput,
   type HttpShim as QueryHttpShim,
   type UsageReportEchoInput,
   type UsageReportEchoOutput,
@@ -389,6 +392,36 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
         const kind = e instanceof McpCallError ? e.kind : "protocol_error";
         console.log(
           `[mcp-ipc] usage_report_echo ok=false ${Date.now() - t0}ms reason=${kind} detail=${e instanceof Error ? e.message : String(e)}`,
+        );
+        if (e instanceof McpCallError) return { ok: false, reason: e.kind };
+        return { ok: false, reason: "protocol_error" };
+      }
+    },
+  );
+
+  // ---- 通道: mcp_delete_usage(t_6eb3e728, 协议 v1.1 §2.4)----
+  // 调 daemon `delete_usage` 工具(按 agent_id 清除全部上报数据, 管理面)。
+  // Bearer key 即授权边界; daemon 未跑/401/协议错 → { ok:false, reason } 显式报错, 不静默。
+  ipcMain.handle(
+    "mcp_delete_usage",
+    async (
+      _event,
+      input: DeleteUsageInput,
+    ): Promise<{ ok: true; data: DeleteUsageOutput } | { ok: false; reason: string }> => {
+      const t0 = Date.now();
+      try {
+        const r = await callMcpToolFromEnv<DeleteUsageOutput>(
+          configDir(),
+          { name: "delete_usage", arguments: (input ?? {}) as unknown as Record<string, unknown> },
+          queryHttp,
+          { timeoutMs: 5000 },
+        );
+        console.log(`[mcp-ipc] delete_usage ok=true ${Date.now() - t0}ms deleted=${r.parsed.deleted}`);
+        return { ok: true, data: r.parsed };
+      } catch (e) {
+        const kind = e instanceof McpCallError ? e.kind : "protocol_error";
+        console.log(
+          `[mcp-ipc] delete_usage ok=false ${Date.now() - t0}ms reason=${kind} detail=${e instanceof Error ? e.message : String(e)}`,
         );
         if (e instanceof McpCallError) return { ok: false, reason: e.kind };
         return { ok: false, reason: "protocol_error" };

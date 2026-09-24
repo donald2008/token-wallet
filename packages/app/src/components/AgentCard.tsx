@@ -4,13 +4,13 @@
  * 数据源 = MCP daemon usage_summary(group_by=["agent"]) — **非 mock**。
  *
  * 视觉同构(任务卡定稿):
- *   header: logo + 名称 + 状态点[有活动/空闲/今天无上报]
+ *   header: logo + 名称 + 状态点[有活动/空闲/今天无上报] + 悬浮删除钮(t_6eb3e728 ③)
  *   主体: token 总量(大数字,必有) + 金额副标(可空留白, 拍板契约)
- *   尾部: [详情→] 进入大屏方案 C
+ *   尾部: [大屏 →] 打开用量大屏(t_6eb3e728 ②语义归位: 大屏=整体大屏, 非单 agent 详情)
  *
  * 降级: daemon 不可达 → 整卡显式「daemon 未连接」空态(不静默吞成 0)
  */
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 import type { SummaryRow } from "../mcpQueryTypes";
 
@@ -30,8 +30,10 @@ export interface AgentCardProps {
   activity: AgentActivityState;
   /** daemon 数据生成时间戳(来自 usage_summary.generated_at),note 区展示 */
   generatedAt: string;
-  /** 详情按钮回调(打开大屏方案 C) */
-  onOpenDetail: (agentId: string) => void;
+  /** 大屏入口回调(t_6eb3e728 ②语义归位: 打开整体用量大屏; 原 onOpenDetail 纯内部接口改名) */
+  onOpenDashboard: (agentId: string) => void;
+  /** 删除该 agent 全部上报数据回调(t_6eb3e728 ③; 缺省=不渲染删除钮, e2e mock 场景可控) */
+  onDeleteUsage?: (agentId: string) => Promise<boolean>;
 }
 
 const ACTIVITY_LABEL: Record<AgentActivityState, string> = {
@@ -86,16 +88,88 @@ export function AgentCard({
   row,
   activity,
   generatedAt,
-  onOpenDetail,
+  onOpenDashboard,
+  onDeleteUsage,
 }: AgentCardProps): ReactNode {
   const tokens = totalTokens(row);
   const costStr = formatCost(row.cost_total, row.currency);
   const health = ACTIVITY_HEALTH[activity];
+  // t_6eb3e728 ③: 删除确认二态(false=普通卡 / true=确认气泡浮出); ProviderCard.confirming 同模式
+  const [confirming, setConfirming] = useState(false);
+  // 删除失败错误态(daemon 未就绪等): 显式报错不静默(卡面 ③ 错误态要求)
+  const [delError, setDelError] = useState(false);
 
-  const onClick = useCallback(() => onOpenDetail(agentId), [agentId, onOpenDetail]);
+  const onDashboard = useCallback(() => onOpenDashboard(agentId), [agentId, onOpenDashboard]);
+  const onConfirmDelete = useCallback(() => {
+    setConfirming(false);
+    if (!onDeleteUsage) return;
+    void onDeleteUsage(agentId).then((ok) => {
+      setDelError(!ok);
+      if (!ok) {
+        // 错误态瞬态常驻到下次操作/重拉 — 不自动消失(用户必须看到失败), 重新 hover 再删可清
+        window.setTimeout(() => setDelError(false), 8000);
+      }
+    });
+  }, [agentId, onDeleteUsage]);
 
   return (
-    <section className="card agent-card" data-testid="agent-card" data-agent={agentId} data-health={health}>
+    <section
+      className="card agent-card"
+      data-testid="agent-card"
+      data-agent={agentId}
+      data-health={health}
+      data-del-error={delError ? "true" : undefined}
+    >
+      {/* t_6eb3e728 ③: 悬浮删除钮 — ProviderCard.card-del-btn 同款纪律(按钮自为热区:
+          opacity:0 + pointer-events:auto, .agent-card:hover 单条触发, focus 键盘可达;
+          不叠多层热区)。绝对定位锚卡右上, 确认气泡浮出时互斥隐藏(与 ProviderCard 同)。 */}
+      {onDeleteUsage && !confirming && (
+        <button
+          type="button"
+          className="btn btn-icon btn-danger agent-del-btn"
+          data-testid={`agent-delete-${agentId}`}
+          title={`删除 ${agentId} 的全部上报数据`}
+          aria-label={`删除 ${agentId} 的全部上报数据`}
+          onClick={() => setConfirming(true)}
+        >
+          {/* 手绘垃圾桶(D-002 不引图标库, 与 ProviderCard.card-del-btn 同 stroke 风格) */}
+          <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path
+              d="M3.4 4.6h9.2M6.4 4.6V3.1h3.2v1.5M4.6 4.6l.5 8.3h5.8l.5-8.3M6.8 6.9v4.1M9.2 6.9v4.1"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
+      {onDeleteUsage && confirming && (
+        // 二次确认气泡(t_6eb3e728 ③): ProviderCard.card-confirm 同款形态(绝对定位浮卡右上,
+        // 不挤压 360px 卡头), 文案含 agent_id + 将删除行数(calls) + 不可逆
+        <span className="confirm-row card-confirm agent-confirm" data-testid={`agent-confirm-row-${agentId}`}>
+          <span className="confirm-text">
+            将删除 agent <b>{agentId}</b> 的全部 {row.calls} 条上报数据，不可逆
+          </span>
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            data-testid={`agent-confirm-del-${agentId}`}
+            onClick={onConfirmDelete}
+          >
+            确认删除
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            data-testid={`agent-confirm-cancel-${agentId}`}
+            onClick={() => setConfirming(false)}
+          >
+            取消
+          </button>
+        </span>
+      )}
       <div className="card-head">
         <span className="agent-logo" data-testid="agent-logo" aria-hidden="true">
           {logoGlyph(agentId)}
@@ -124,11 +198,17 @@ export function AgentCard({
           type="button"
           className="agent-detail-btn"
           data-testid={`agent-detail-${agentId}`}
-          onClick={onClick}
-          aria-label={`查看 ${agentId} 大屏`}
+          onClick={onDashboard}
+          aria-label={`打开 ${agentId} 用量大屏`}
+          title="打开用量大屏"
         >
-          详情 →
+          大屏 →
         </button>
+        {delError && (
+          <p className="agent-del-error text-error" data-testid={`agent-delete-error-${agentId}`} role="alert">
+            删除失败：agent {agentId} 的数据未删除 — daemon 未连接或删除未生效，请确认 daemon 运行后重试。
+          </p>
+        )}
         <div className="agent-meta" data-testid="agent-meta">
           calls <strong>{row.calls}</strong>
           {generatedAt && (
