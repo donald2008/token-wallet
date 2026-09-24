@@ -164,7 +164,8 @@ export interface AgentUsageHeroProps {
   windowTokens: number | null;
   /** hour 维桶序列(折线数据面) */
   hourBuckets: HourBucket[];
-  /** hour 查询是否可用(false → 折线区「数据积累中」降级, 大数字不受影响) */
+  /** hour 查询是否可用(false → 折线区「数据积累中」降级 + 大数字显「—」暗色,
+   *  与 :249-257 渲染一致; hour 域失败时大数字跟随降级, 禁假 0) */
   hourAvailable: boolean;
   /** 5h 窗起点(daemon 回显 window.since) */
   windowSince: string;

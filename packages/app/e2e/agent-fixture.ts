@@ -108,6 +108,11 @@ const HOUR_WINDOW = {
   until: "2026-09-09T12:34:56+08:00",
 };
 
+/** hour 维真实窗(5h) 单一事实源: 任何直充 hour 维的 summary 回显都必须覆盖此窗,
+ *  全天窗(fakeSummary 原样)是 agent 维形态, 直充 hour 维会让 30min 刻度密排溢出
+ *  (t_235f60c0 round-2 P2-2)。 */
+export const HOUR_WINDOW_EXPORT = HOUR_WINDOW;
+
 /** hour 维桶行(协议 §2.2 summary_row 同形): tokens 记在 input_cache_miss 分项, 其余分项 0 */
 function hourRow(hour: string, tokens: number) {
   return {

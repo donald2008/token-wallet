@@ -22,6 +22,7 @@ import {
   fakeHourSummaryShort,
   fakeSummary,
   staleAgentSummary,
+  HOUR_WINDOW_EXPORT as HOUR_WINDOW,
 } from "./agent-fixture";
 
 type MultiSeed = Parameters<typeof seedAgentUsageMulti>[1];
@@ -343,8 +344,11 @@ test("⑧ 5h 窗零数据: hour ok 但桶空 → 大数字真实 0(正常色非�
   void hostPage;
   // agent 维有历史数据(非边界②), hour 维 ok 但 5h 窗内零桶 → 真实 0 正常色
   // hour 面 rows=[] → daemon 回显 total 同步零值(与 rows 一致的真实形态)
+  // window 必须覆盖 hour 维真实 5h 窗(round-2 P2-2: 全天窗直充 hour 维是 fixture
+  // 失真形态, 同 commit ④ 已修, ⑧ 同步补齐), 见 agent-fixture HOUR_WINDOW 注释
   const emptyHour = {
     ...fakeSummary,
+    window: { ...HOUR_WINDOW },
     rows: [] as typeof fakeSummary.rows,
     total: {
       calls: 0,
