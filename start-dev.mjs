@@ -151,9 +151,155 @@ if (needInstall) {
   ok("依赖已就绪（lock 未变动，跳过安装）");
 }
 
-if (CHECK_ONLY) {
+if (CHECK_ONLY && !WEB_MODE) {
+  // --check 也报告 daemon 新鲜度(只报告不构建 — CI/首次准备场景需要知道会不会卡构建)
+  info("检查 MCP daemon 产物新鲜度");
+  const st = daemonStaleness();
+  if (!st.stale) {
+    ok(st.reason === "fresh" ? `daemon 与当前代码一致(${st.builtHash})` : "git 不可用, 跳过新鲜度判定");
+  } else {
+    const why = st.reason === "missing" ? "产物不存在(起壳时将自动构建)" : st.reason === "no_marker" ? "产物无构建标记(起壳时将自动重建)" : `产物构建于 ${st.builtHash} ≠ 当前 ${st.headHash}(起壳时将自动重建)`;
+    console.log(`    ${yellow("!")} daemon 陈旧 — ${why}`);
+  }
   console.log(`\n${green("环境就绪")} — 起壳请运行: ${bold(`${pmName} dev`)}`);
   process.exit(0);
+}
+
+// ---- 5.5 MCP daemon 产物新鲜度(9/24 老大提议: 「启动前重新构建 mcp 服务(如果需要的话)」) ----
+// 问题背景: daemon = resources/ 下的 PyInstaller 现场构建产物(不进 git), 代码前进后 exe 不会跟着变 —
+// 两次真机事故同根(置顶折线 hour 维缺数据 / guide 旧版): UI 新 daemon 旧, 排障绕远。
+// 新鲜度判定: 读产物尾部 TW_MCP_BUILD_ID marker 的 <git短hash> 段 vs 当前 HEAD 短hash —
+//   一致 → 新鲜跳过(日常启动零等待); 不一致/缺失/解析失败 → 陈旧, 现场重建。
+// 豁免: TW_SKIP_DAEMON_BUILD=1(与 dist:win 同款约定); --web 模式无 daemon 不检查。
+// 跨平台: win=build-exe.ps1; linux/mac=PyInstaller 直调(exe-entry.py 平台无关)。
+function daemonExePath() {
+  return path.join(ROOT, "packages", "app", "resources", IS_WIN ? "token-wallet-mcp.exe" : "token-wallet-mcp");
+}
+
+function readDaemonGitHash(exePath) {
+  try {
+    const fd = fs.openSync(exePath, "r");
+    const size = fs.fstatSync(fd).size;
+    const tailLen = Math.min(4096, size); // marker 附着在文件尾(最后一个写入块)
+    const buf = Buffer.alloc(tailLen);
+    fs.readSync(fd, buf, 0, tailLen, size - tailLen);
+    fs.closeSync(fd);
+    const m = buf.toString("latin1").match(/TW_MCP_BUILD_ID=([0-9a-f]+)-/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+function daemonStaleness() {
+  const exePath = daemonExePath();
+  if (!fs.existsSync(exePath)) return { stale: true, reason: "missing" };
+  const builtHash = readDaemonGitHash(exePath);
+  if (!builtHash) return { stale: true, reason: "no_marker" };
+  let headHash = null;
+  try {
+    headHash = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: ROOT, encoding: "utf8" }).stdout.trim();
+  } catch { /* git 不可用 → 视为无法判定 */ }
+  if (!headHash) return { stale: false, reason: "no_git" }; // 无法判定时不折腾(保守跳过)
+  return { stale: builtHash !== headHash, reason: builtHash !== headHash ? "stale_hash" : "fresh", builtHash, headHash };
+}
+
+function buildDaemon() {
+  const ps1 = path.join(ROOT, "packages", "mcp-server", "deploy", "build-exe.ps1");
+  if (IS_WIN) {
+    if (!fs.existsSync(ps1)) {
+      warn(`daemon 构建脚本缺失: ${ps1}`);
+      return false;
+    }
+    console.log(dim("    powershell -ExecutionPolicy Bypass -File packages\\mcp-server\\deploy\\build-exe.ps1"));
+    const r = spawnSync(
+      "powershell",
+      ["-ExecutionPolicy", "Bypass", "-File", ps1],
+      { stdio: "inherit" },
+    );
+    return r.status === 0;
+  }
+  // linux/mac: PyInstaller 直调(与 build-exe.ps1 同参, exe-entry.py 平台无关)
+  console.log(dim("    python -m PyInstaller --onefile … (deploy/exe-entry.py)"));
+  const specDir = path.join(ROOT, "packages", "mcp-server", "build");
+  fs.mkdirSync(specDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(specDir, "token-wallet-mcp.spec"),
+    `# -*- mode: python ; coding: utf-8 -*-\n` +
+    `from PyInstaller.utils.hooks import copy_metadata\n` +
+    `MD_PKGS = ['fastmcp','fastmcp-slim','mcp','mcp-types','pydantic','pydantic-settings','anyio','starlette','sse-starlette','uvicorn','httpx','httpcore','click','h11','certifi','idna','sniffio','typing_extensions','annotated_types']\n` +
+    `def _has(p):\n` +
+    `    try:\n` +
+    `        copy_metadata(p); return True\n` +
+    `    except Exception: return False\n` +
+    `def _extra_datas():\n` +
+    `    return []\n` +
+    `a = Analysis(['${path.join(ROOT, "packages", "mcp-server", "deploy", "exe-entry.py")}'],\n` +
+    `    pathex=['${path.join(ROOT, "packages", "mcp-server", "src")}'],\n` +
+    `    hiddenimports=['fastmcp','fastmcp.server','fastmcp.client','fastmcp.tools','fastmcp.prompts',\n` +
+    `      'fastmcp.resources','fastmcp.server.server','fastmcp.server.http','fastmcp.server.middleware',\n` +
+    `      'fastmcp.server.auth','fastmcp.exceptions','fastmcp.mcp_config','fastmcp.utilities',\n` +
+    `      'mcp','mcp.server','mcp.server.fastmcp','mcp.shared','tzdata','uvicorn',\n` +
+    `      'uvicorn.logging','uvicorn.loops.auto','uvicorn.protocols.http.auto',\n` +
+    `      'uvicorn.protocols.websockets.auto','uvicorn.lifespan.on','uvicorn.lifespan.off',\n` +
+    `      'anyio._backends._asyncio','email_validator','pydantic','pydantic_settings'],\n` +
+    `    noarchive=False,\n` +
+    `    datas=[md_t for p in MD_PKGS if _has(p) for md_t in copy_metadata(p)] + _extra_datas(),\n` +
+    `pyz = PYZ(a.pure)\n` +
+    `exe = EXE(pyz, a.scripts, a.binaries, a.datas, name='token-wallet-mcp', console=True,\n` +
+    `    distpath='${path.join(ROOT, "packages", "app", "resources")}', workpath='${specDir}')\n`,
+  );
+  const r = spawnSync("python3", ["-m", "PyInstaller", "--noconfirm", path.join(specDir, "token-wallet-mcp.spec")], {
+    cwd: ROOT,
+    stdio: "inherit",
+  });
+  if (r.status !== 0) return false;
+  // PyInstaller spec 模式忽略 EXE(distpath=...) → 产物固定落 <cwd>/dist/, 手动移入 resources/
+  const built = path.join(ROOT, "dist", "token-wallet-mcp");
+  if (!fs.existsSync(built)) {
+    warn(`构建完成但未找到产物: ${built}`);
+    return false;
+  }
+  fs.mkdirSync(distDir, { recursive: true });
+  fs.renameSync(built, path.join(distDir, "token-wallet-mcp"));
+  // marker 附着(与 build-exe.ps1 同格式): <git短hash>-<UTC ts>, 追加到产物尾 —
+  // 新鲜度判定(daemonStaleness)与 app 侧 build_id 比对都依赖它, 缺失 = 每次启动都判陈旧
+  let gitShort = "nogit";
+  try {
+    gitShort = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: ROOT, encoding: "utf8" }).stdout.trim() || "nogit";
+  } catch { /* keep nogit */ }
+  const buildId = `${gitShort}-${new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14)}`;
+  const exePath = path.join(distDir, "token-wallet-mcp");
+  fs.appendFileSync(exePath, `\n# TW_MCP_BUILD_ID=${buildId}\n`);
+  return true;
+}
+
+if (!WEB_MODE && process.env.TW_SKIP_DAEMON_BUILD !== "1") {
+  info("检查 MCP daemon 产物新鲜度");
+  const st = daemonStaleness();
+  if (!st.stale) {
+    ok(st.reason === "fresh" ? `daemon 与当前代码一致(${st.builtHash})` : "git 不可用, 跳过新鲜度判定");
+  } else {
+    const why = st.reason === "missing" ? "产物不存在" : st.reason === "no_marker" ? "产物无构建标记(太旧)" : `产物构建于 ${st.builtHash}, 当前代码 ${st.headHash}`;
+    console.log(`    ${yellow("!")} daemon 陈旧 — ${why}`);
+    if (process.env.TW_SKIP_DAEMON_BUILD_PROMPT !== "1") {
+      console.log(dim("    提示: 重建约 2-5 分钟; 跳过请设 TW_SKIP_DAEMON_BUILD=1"));
+    }
+    if (!buildDaemon()) {
+      fail("MCP daemon 重建失败", [
+        "看上方 PyInstaller/PowerShell 报错; 常见为缺 python 依赖(脚本会自动 pip 装)",
+        "确认要跳过可设 TW_SKIP_DAEMON_BUILD=1(将用旧产物启动, MCP 面板可能行为不符)",
+      ]);
+    }
+    // 复验: 重建后产物必须在位且标记与 HEAD 一致
+    const after = daemonStaleness();
+    if (after.stale) {
+      fail("daemon 重建后仍陈旧", [`build_id=${after.builtHash ?? "(无)"} vs HEAD=${after.headHash ?? "(无)"} — 检查 build-exe 脚本的 marker 注入段`]);
+    }
+    ok(`daemon 已重建(${after.headHash})`);
+  }
+} else if (!WEB_MODE) {
+  info("MCP daemon 构建检查 — TW_SKIP_DAEMON_BUILD=1 豁免跳过");
 }
 
 // ---- 6. 起壳 ------------------------------------------------------------
