@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | 状态 | **权威源**（本文档即协议，实现卡照此落地） |
-| 版本 | v1.1（AgentUsageReport `schema_version` 不变: 1；v1.1 = 2026-09-24 工具面增补，见 §2.4/§10） |
+| 版本 | v1.1（AgentUsageReport `schema_version` 不变: 1；v1.1 = 2026-09-24 工具面增补，见 §2.2 hour 维/§2.4/§10） |
 | 日期 | 2026-09-06（v1）/ 2026-09-24（v1.1） |
 | 决策记录 | D-055（docs/DECISIONS.md） |
 | 上游分支 | `feat/theme-glass`，本文在 `docs/mcp-protocol` 分支 |
@@ -221,8 +221,8 @@ token-wallet MCP Server 是**唯一数据访问面**：
     "kanban_task":  { "type": "string" },
     "group_by": {
       "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
-      "items": { "enum": ["agent", "provider", "model", "day", "status"] },
-      "description": "缺省 [\"agent\"]"
+      "items": { "enum": ["agent", "provider", "model", "day", "hour", "status"] },
+      "description": "缺省 [\"agent\"]。hour = 本地时区整点桶 (v1.1 增补 2026-09-24, 如 2026-09-24T14:00); 5h 折线等短窗场景由调用方传 since"
     }
   }
 }
@@ -269,7 +269,7 @@ token-wallet MCP Server 是**唯一数据访问面**：
                    "cost_total", "currency", "by_status"],
       "properties": {
         "group": { "type": "string",
-          "description": "多维度时按 group_by 顺序用 | 连接，如 njbx02|glm-5.3-flash；day 维度 = YYYY-MM-DD（daemon 本地时区）" },
+          "description": "多维度时按 group_by 顺序用 | 连接，如 njbx02|glm-5.3-flash；day 维度 = YYYY-MM-DD、hour 维度 = YYYY-MM-DDTHH:00（daemon 本地时区）" },
         "calls": { "type": "integer", "minimum": 0 },
         "input_cache_hit_tokens":  { "type": "integer", "minimum": 0 },
         "input_cache_miss_tokens": { "type": "integer", "minimum": 0 },
@@ -772,3 +772,4 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 |---|---|---|
 | v1 | 2026-09-06 | 初版定稿：AgentUsageReport v1 schema（§1）、数据面三工具 report_usage / usage_summary / usage_report_echo（§2.1–§2.3）、两级判重（§3）、存储与 TTL（§4）、Bearer 鉴权（§5）、fixtures（§8） |
 | v1.1 | 2026-09-24 | 工具面 3→4：新增 §2.4 `delete_usage`（管理面删除，物理 DELETE + 幂等 + 可选 before_ts 上界；老大 9/24 真机反馈③ daemon 侧）。显式版本化增补，§2.1–§2.3 既有工具行为零改动；AgentUsageReport `schema_version` 保持 1 不变 |
+| v1.1 增补 | 2026-09-24 | §2.2 `usage_summary` `group_by` 维清单增 `hour`（本地时区整点桶 `YYYY-MM-DDTHH:00`，语义同 `day`，禁 UTC 硬编码；置顶 5h 折线数据面，窗口由调用方传 `since`，不新增参数）。§2.1–§2.4 既有工具行为零改动 |

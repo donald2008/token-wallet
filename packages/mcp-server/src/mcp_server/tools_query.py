@@ -23,7 +23,7 @@ from .schema import (
 from .tzutil import local_tz
 
 STATUS_KEYS = ("completed", "partial", "unknown")
-GROUP_DIMS = ("agent", "provider", "model", "day", "status")
+GROUP_DIMS = ("agent", "provider", "model", "day", "hour", "status")
 # 币种维度 (§2.2 混币种分行): 分组键尾部追加币种; 行 group 串不含币种
 _NO_CURRENCY = "\0none"  # cost null 条目桶 (行 currency=null)
 
@@ -114,6 +114,8 @@ class SummaryEngine:
             return r["status"]
         if dim == "day":  # daemon 本地时区日界 (§2.2, 终审 P1: 禁 UTC 硬编码)
             return datetime.fromtimestamp(ep, tz=self._tz).strftime("%Y-%m-%d")
+        if dim == "hour":  # v1.1 增补 (2026-09-24): 本地时区整点桶, 语义同 day (禁 UTC 硬编码)
+            return datetime.fromtimestamp(ep, tz=self._tz).strftime("%Y-%m-%dT%H:00")
         raise ValueError(f"unknown group dim: {dim}")
 
     def _currency_key(self, r: sqlite3.Row) -> str:

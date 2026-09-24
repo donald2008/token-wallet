@@ -105,6 +105,85 @@ class TestSummary:
         assert out.rows[0].group == "home-computer|2026-09-06"
         assert out.rows[0].calls == 1
 
+    def test_group_by_hour_local_tz(self, storage):
+        """hour 整点桶 = daemon 本地时区 (v1.1 增补, 语义同 day, 禁 UTC 硬编码)。"""
+        from mcp_server.tools_query import SummaryEngine
+
+        scoped = SummaryEngine(storage.conn, tz_name="Asia/Shanghai")
+        report_usage(ALL_FIXTURES["F1"], storage)  # ts=2026-09-06 01:49:30+08:00
+        out = scoped.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00",
+                                               group_by=["agent", "hour"]))
+        # 01:49:30 → 整点桶 01:00 (东八区); UTC 桶会是 09-05T17:00
+        assert out.rows[0].group == "home-computer|2026-09-06T01:00"
+        assert out.rows[0].calls == 1
+        assert out.timezone == "Asia/Shanghai"
+
+    def test_group_by_hour_tz_boundary(self, storage):
+        """跨时区边界: 同一 epoch 在不同 daemon 时区下落不同 hour 桶。"""
+        import copy
+
+        from mcp_server.tools_query import SummaryEngine
+
+        base = ALL_FIXTURES["F1"]["reports"][0]
+        e = copy.deepcopy(base)
+        e["event_id"] = "01912345-6789-7abc-8def-0123456793ab"
+        e["ts"] = "2026-09-06T00:30:00+08:00"  # epoch = 2026-09-05T16:30Z
+        report_usage({"reports": [e]}, storage)
+
+        # 东八区: 00:30 → 09-06T00:00 桶
+        sh = SummaryEngine(storage.conn, tz_name="Asia/Shanghai")
+        out_sh = sh.summary(UsageSummaryInput(since="2026-09-01T00:00:00+08:00",
+                                              group_by=["hour"]))
+        assert [r.group for r in out_sh.rows] == ["2026-09-06T00:00"]
+
+        # UTC: 同一事件 → 09-05T16:00 桶 (禁 UTC 硬编码的反证: 桶确实随时区变)
+        utc = SummaryEngine(storage.conn, tz_name="UTC")
+        out_utc = utc.summary(UsageSummaryInput(since="2026-09-01T00:00:00+00:00",
+                                                group_by=["hour"]))
+        assert [r.group for r in out_utc.rows] == ["2026-09-05T16:00"]
+
+    def test_group_by_hour_single_bucket_with_since(self, storage):
+        """5h 折线用法: since=now-5h 配合 hour 单桶聚合, 同一小时内两事件合一桶。"""
+        import copy
+
+        from mcp_server.tools_query import SummaryEngine
+
+        base = ALL_FIXTURES["F1"]["reports"][0]
+        a = copy.deepcopy(base)
+        a["event_id"] = "01912345-6789-7abc-8def-0123456794ab"
+        a["ts"] = "2026-09-06T10:10:00+08:00"
+        b = copy.deepcopy(base)
+        b["event_id"] = "01912345-6789-7abc-8def-0123456795ab"
+        b["ts"] = "2026-09-06T10:50:00+08:00"
+        assert report_usage({"reports": [a, b]}, storage)["accepted"] == 2
+
+        scoped = SummaryEngine(storage.conn, tz_name="Asia/Shanghai")
+        out = scoped.summary(UsageSummaryInput(since="2026-09-06T06:00:00+08:00",
+                                               group_by=["hour"]))
+        # 同一小时两事件 → 单桶 calls=2, tokens 合计 (F1 15230/1200/845 × 2)
+        assert len(out.rows) == 1
+        row = out.rows[0]
+        assert row.group == "2026-09-06T10:00"
+        assert row.calls == 2
+        assert row.input_cache_hit_tokens == 15230 * 2
+        assert row.input_cache_miss_tokens == 1200 * 2
+        assert row.output_tokens == 845 * 2
+        # 窗口前界外的事件不进桶: since 推到 10:30 → 只剩 10:50 一条
+        out2 = scoped.summary(UsageSummaryInput(since="2026-09-06T10:30:00+08:00",
+                                                group_by=["hour"]))
+        assert len(out2.rows) == 1 and out2.rows[0].calls == 1
+
+    def test_group_by_hour_rejects_unknown_dim_shape(self, storage, engines):
+        """schema 层拒非法 dim (hour 在枚举内, 假名被拒); ≤3 维约束不变。"""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            UsageSummaryInput(group_by=["week"])  # 不存在的维
+        with pytest.raises(ValidationError):
+            UsageSummaryInput(group_by=["agent", "day", "hour", "status"])  # >3 维
+        # hour 与 day 同组合法 (跨日 5h 窗场景)
+        UsageSummaryInput(group_by=["day", "hour"])
+
     def test_mixed_currency_split_rows(self, storage, engines):
         """混币种按币种分行 (§2.2): 同 agent 同窗口 USD 一行、CNY 一行。"""
         import copy

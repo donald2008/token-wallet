@@ -71,7 +71,8 @@ def build_server(
     ) -> dict:
         """读聚合: 按窗口/维度分组出 rows+total。
 
-        group_by ⊆ {agent,provider,model,day,status} ≤3 维, 缺省 ["agent"]。
+        group_by ⊆ {agent,provider,model,day,hour,status} ≤3 维, 缺省 ["agent"]。
+        hour = 本地时区整点桶 (v1.1 增补 2026-09-24, 如 2026-09-24T14:00)。
         unknown 状态不计 tokens 只计 calls; 混币种分行, total 混币种时为 null。
         """
         from .schema import UsageSummaryInput

@@ -288,7 +288,7 @@ def doc_sections() -> list[dict]:
                 ]},
                 {"type": "p", "text": (
                     "约束提醒：usage_summary 的 group_by 至多 3 维"
-                    "（agent / provider / model / day / status）；"
+                    "（agent / provider / model / day / hour / status）；"
                     "usage_report_echo 的 event_id 与 session_id 互斥、至多出现一个。"
                     "完整语义以 docs/mcp-protocol.md §2 为权威。"
                 )},

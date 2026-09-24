@@ -206,7 +206,7 @@ class UsageSummaryInput(BaseModel):
     provider: Optional[str] = None
     model: Optional[str] = None
     kanban_task: Optional[str] = None
-    group_by: list[Literal["agent", "provider", "model", "day", "status"]] = Field(
+    group_by: list[Literal["agent", "provider", "model", "day", "hour", "status"]] = Field(
         default=["agent"], min_length=1, max_length=3
     )
 
