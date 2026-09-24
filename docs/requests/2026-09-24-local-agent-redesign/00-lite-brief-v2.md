@@ -47,3 +47,9 @@
 
 - 老二（daemon）：GROUP_DIMS + hour 维（协议 §2.2 语义扩展，v1.1 增补节一笔带过）
 - 老三（app）：置顶组件（新） + AgentCard 重构 + App.tsx 区块装配 + e2e（booting/大屏入口位置变更回归）
+
+## GATE 2 翻牌（2026-09-24）
+
+- **选型：方案 A rev2**（老大原话：「plan-a的v2版不错」）
+- design-gate.json：approved=true，翻牌人=老大（本 comment 为凭）
+- 落选：B（双区条）/ C（迷你工具条）——保留 mock 归档备查

@@ -1,0 +1,8 @@
+{
+  "design": "local-agent-redesign plan-a-rev2",
+  "approved": true,
+  "approved_by": "老大",
+  "approved_at": "2026-09-24",
+  "evidence": "主会话原话「plan-a的v2版不错」; mock docs/requests/2026-09-24-local-agent-redesign/plan-a-v2*.png",
+  "vision_selfcheck": "零重叠/零裁切/720首屏两卡完整可见/大数字独占行/空闲态灰化"
+}
