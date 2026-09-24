@@ -66,26 +66,68 @@
 | **派生约束** | 三主题×密度成本意识（新组件须三主题过目） |
 | **tokens 权威源** | `docs/design-tokens/`（三层 DTCG + tokens.css 生成映射 + validate_aliases.py） |
 
-### 5. 首页 / Provider 卡 / 添加向导
+### 5. 首页（Provider 卡列表）
 
 | 项 | 值 |
 |---|---|
-| **surface** | `components/ProviderCard.tsx` · 添加向导组件 · 标题栏 |
-| **基线版本** | 2026-09 系（早于 requests 目录制度，无独立 request 目录） |
-| **形态裁定源** | `docs/frontend-AGENTS.md`（前端契约）+ `docs/DECISIONS.md`（D-015/D-024/D-029/D-030/D-038 等）+ `docs/design-tokens/` |
-| **验收锚点** | 三主题三密度截图 `packages/app/verification/` · e2e 契约（settings/agent-card/panel-semantics 等 spec） |
-| **⚠️ 缺口** | 无独立 mock 基线文档；改动前须从 e2e 断言 + verification 截图反推形态基准，或先补基线 |
+| **surface** | `App.tsx`（usage tab）· `components/ProviderCard.tsx` · `components/BottomBar.tsx` · `components/States.tsx` |
+| **基线版本** | **v1**（2026-09-24 缺口补档 — 现状快照） |
+| **基线文档** | `docs/design-baseline/01-home-provider-cards.md` |
+| **基线截图** | `_shots/home-{dark,light,glass}.png` |
+| **形态裁定源** | 该文档「形态裁定」节 + `docs/DECISIONS.md` + e2e 契约 |
+| **关键回归锁** | `e2e/b2-overlap.spec.ts`（删除钮与 badge 零重叠）· 删除钮 `top: var(--space-28)` 禁回 4px |
+
+### 6. 添加 Provider 向导
+
+| 项 | 值 |
+|---|---|
+| **surface** | `components/AddProviderWizard.tsx` · `ChannelTree.tsx` · `DynamicForm.tsx` |
+| **基线版本** | **v1**（2026-09-24 缺口补档 — 现状快照） |
+| **基线文档** | `docs/design-baseline/02-add-wizard.md` |
+| **基线截图** | `_shots/wizard-{theme}.png`（选平台）· `wizard-expanded-{theme}.png`（展开）· `wizard-form-{theme}.png`（配置表单） |
+| **形态裁定源** | 该文档 + D-025（树形两段式）/ D-026（双重 zod）/ D-017（测试连接） |
+
+### 7. 标题栏 / 托盘面板壳（产品身份层）
+
+| 项 | 值 |
+|---|---|
+| **surface** | `components/TitleBar.tsx` · `BottomBar.tsx` · `electron/main.ts`（createWindow）· `.titlebar`/`.bottombar` |
+| **基线版本** | **v1**（2026-09-24 缺口补档 — 现状快照） |
+| **基线文档** | `docs/design-baseline/03-titlebar-shell.md` |
+| **基线截图** | `_shots/titlebar-{theme}.png` · `_shots/home-{theme}.png` |
+| **形态裁定源** | 该文档 + D-024 家族 / D-033（无边框壳） |
+| **⚠️ 敏感度** | 用户偏好明确：无边框透明圆角悬浮 + 托盘即弹，**反感普通 app 窗口观感**。窗壳改动（frame/transparent/尺寸）须先出稿并确认 |
+
+### 8. 设置页（全量区块）
+
+| 项 | 值 |
+|---|---|
+| **surface** | `components/SettingsView.tsx` 及各子区块 · `.settings-*` |
+| **基线版本** | **v1**（2026-09-24 缺口补档 + 已含 MCP/主题两轮修订） |
+| **基线文档** | `docs/design-baseline/04-settings.md` |
+| **基线截图** | `_shots/settings-{top,mid,bottom}-{theme}.png`（三屏覆盖全量区块） |
+| **区块顺序** | 主题 → 语言 → 排序 → 开机自启 → 存储路径 → 关于 → MCP 服务（D-038 信息架构，**调序须走完整管线**） |
 
 ---
 
 ## 基线缺口（待补）
 
-按纪律，以下 surface 尚无锁定 mock 基线，**任何形态改动前必须先补基线**：
+~~首页 Provider 卡列表 / 添加向导 / 标题栏托盘 / 设置页其余区块~~ → **2026-09-24 已补齐**（上述 5-8 条，现状快照形态）。
 
-- 首页 Provider 卡列表（仅有 e2e 契约与截图，无设计稿）
-- 添加 Provider 向导（同上）
-- 标题栏 / 托盘面板 / 悬浮窄条
-- 设置页其余区块（语言/排序/开机自启/存储路径/关于）
+**仍缺**（将来动到这些面之前必须补）：
+
+- 悬浮窄条形态（「可最小化到托盘」之外的第二形态，尚未实现 —— 要做先出稿）
+- 托盘右键菜单 / 通知气泡
+- 各 Provider 渠道的指标区视觉规范（余额制 vs 窗口制，现仅代码实现）
+- 空态/错误态全谱系（`States.tsx` 各 reason 变体）
+
+**⚠️ 补档性质提醒**：5-8 号基线是**现状快照**（反向提取），不是设计意图稿——它们能防「静默漂移」，但不能防「现状本身就不理想」。将来要简化/改版这些界面时，应先出设计稿（走 lite 或完整管线），再更新基线。
+
+## 产图工具
+
+- `packages/app/e2e/capture-baseline.cjs` —— 本目录 `_shots` 的产图脚本（mock 桥经 esbuild 转译自 `e2e/fixtures.ts`，与 e2e 单一事实源）。
+- 用法：先起 dev server，再 `BASE=http://127.0.0.1:<port> node e2e/capture-baseline.cjs`
+- 覆盖：首页 / 标题栏 / 向导（选平台·展开·表单）/ 设置页（上·中·下三屏）× 三主题 = 24 张
 
 ## 维护规则
 
