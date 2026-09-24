@@ -32,11 +32,13 @@ class TestWireFormat:
         tools = _list_tools(_build())
         by_name = {t.name: t for t in tools}
         # t_2b9fa065: 数据面三工具 + 引导工具 get_onboarding_guide
+        # v1.1 增补 (2026-09-24): + delete_usage (§2.4)
         assert set(by_name) == {
             "report_usage",
             "usage_summary",
             "usage_report_echo",
             "get_onboarding_guide",
+            "delete_usage",
         }
 
         schema = by_name["report_usage"].parameters
@@ -45,13 +47,24 @@ class TestWireFormat:
         assert "payload" not in props
         assert "reports" in props
 
-    def test_data_plane_has_only_three_tools(self):
-        """维护/运维入口不在数据面 tools/list (终审复验 P2 #2)。
-        引导工具 get_onboarding_guide 属于接入面, 随数据面一并暴露 (t_2b9fa065)。"""
+    def test_delete_usage_input_flat(self):
+        """delete_usage 参数平铺: required=[agent_id], before_ts 可选 (§2.4)。"""
+        tools = _list_tools(_build())
+        by_name = {t.name: t for t in tools}
+        schema = by_name["delete_usage"].parameters
+        props = schema.get("properties", {})
+        assert schema.get("required") == ["agent_id"]
+        assert set(props) == {"agent_id", "before_ts"}
+        assert "payload" not in props
+
+    def test_data_plane_tools_v11(self):
+        """v1.1 增补 (2026-09-24): 数据面 3 工具 + 引导工具 + delete_usage。
+        维护/运维入口仍不在数据面 tools/list (终审复验 P2 #2)。"""
         names = {t.name for t in _list_tools(_build())}
         assert names == {
             "report_usage",
             "usage_summary",
             "usage_report_echo",
             "get_onboarding_guide",
+            "delete_usage",
         }

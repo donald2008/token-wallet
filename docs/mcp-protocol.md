@@ -1,14 +1,14 @@
-# token-wallet MCP 协议规范（v1）
+# token-wallet MCP 协议规范（v1.1）
 
 | | |
 |---|---|
 | 状态 | **权威源**（本文档即协议，实现卡照此落地） |
-| 版本 | v1（`schema_version: 1`） |
-| 日期 | 2026-09-06 |
+| 版本 | v1.1（AgentUsageReport `schema_version` 不变: 1；v1.1 = 2026-09-24 工具面增补，见 §2.4/§10） |
+| 日期 | 2026-09-06（v1）/ 2026-09-24（v1.1） |
 | 决策记录 | D-055（docs/DECISIONS.md） |
 | 上游分支 | `feat/theme-glass`，本文在 `docs/mcp-protocol` 分支 |
 | 下游实现卡 | daemon 实现卡（Python fastmcp）/ hook 插件卡（TS zod）/ App 展示卡（后置） |
-| 覆盖关系 | 本文 supersede DESIGN.md §8 中「计划工具(P3): quota_status / quota_history / agent_usage」的早期工具面清单；quota 两工具转为二期（§2.4） |
+| 覆盖关系 | 本文 supersede DESIGN.md §8 中「计划工具(P3): quota_status / quota_history / agent_usage」的早期工具面清单；quota 两工具转为二期（§2.5） |
 
 ---
 
@@ -151,7 +151,7 @@ token-wallet MCP Server 是**唯一数据访问面**：
 
 ---
 
-## 2. MCP 工具面（v1 全部 = 3 个）
+## 2. MCP 工具面（v1 全部 = 3 个；v1.1 增补，2026-09-24：+ `delete_usage`，共 4 个）
 
 传输：MCP streamable-http，端点 `http://<host>:9131/mcp`，Bearer 鉴权（§5）。
 
@@ -366,9 +366,58 @@ token-wallet MCP Server 是**唯一数据访问面**：
 
 用途：验收自证（上报后 echo 回读核对）+ 对账排查原始视图。
 
-### 2.4 二期预览（不在 v1 实现面）
+### 2.4 `delete_usage`（管理面删除，v1.1 增补，2026-09-24）
 
-`quota_status` / `quota_history`（provider 套餐快照与历史，原 P3 三工具中的两个）顺延为二期；v1 工具面**只有** §2.1–§2.3 三个工具。
+> 老大 9/24 真机反馈③的 daemon 侧落地（lite brief ③）：测试上报的 agent 用量数据无法删除——新增本工具补齐删除能力。**破坏性操作，不可逆**：物理 DELETE，无软删。
+
+**input JSON Schema**：
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeleteUsageInput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent_id"],
+  "properties": {
+    "agent_id":  { "type": "string", "minLength": 1,
+                   "description": "要清除用量的 agent 标识，与 report_usage 的 agent_id 同一命名空间" },
+    "before_ts": { "type": "string", "format": "date-time",
+                   "description": "可选：只删除该时刻之前的事件（ISO8601，必须带时区偏移）；缺省 = 整清该 agent 全部数据。本轮最小面：只做整清 + 可选时间上界，不做单条删除" }
+  }
+}
+```
+
+**output JSON Schema**：
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeleteUsageOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deleted", "agent_id"],
+  "properties": {
+    "deleted":  { "type": "integer", "minimum": 0,
+                  "description": "实际删除的事件行数" },
+    "agent_id": { "type": "string",
+                  "description": "回显本次删除操作的 agent_id" }
+  }
+}
+```
+
+**语义约定**：
+
+1. **物理删除**：直接 `DELETE` `usage_events` 行，无软删；`event_id`（一级判重）与 `fingerprint`（二级判重，§3）随行清理——删除后重报同一 `event_id` 或同内容事件按**新数据**落库；
+2. **幂等**：agent 不存在 / 0 行 → `{"deleted": 0, "agent_id": ...}`，**不报错**；
+3. **范围**：只动 `usage_events`；`usage_records` 聚合表（§4.2）**不在删除范围**（长期趋势数据保留，与 §4.3 TTL 同口径）；
+4. `before_ts` 语义 = 严格上界：只删 `ts_epoch < before_ts` 的事件（与 §4.3 TTL 的 `<` 同口径），恰好等于该时刻的事件保留；
+5. **管理面语义**：与其他工具同一 Bearer key 鉴权（§5）——**key 即授权边界**，持 key 即可删除该 daemon 数据面内任意 agent 的用量数据；调用方（app 删除钮 / agent 自清）必须先做二次确认（列出 agent_id 与将删除的行数）；
+6. **v1 工具面冻结语义不变**：§2.1–§2.3 三个工具的行为零改动，本节为显式版本化增补（v1.1），非静默破坏。
+
+### 2.5 二期预览（不在实现面）
+
+`quota_status` / `quota_history`（provider 套餐快照与历史，原 P3 三工具中的两个）顺延为二期；v1 数据面**只有** §2.1–§2.3 三个工具（§2.4 `delete_usage` 为 v1.1 管理面增补）。
 
 ---
 
@@ -714,3 +763,12 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 ## 9. 开放问题
 
 无阻塞项。备忘一条已定性事项：`usage_records.cost_cny` 列名与实际存 USD 值的错位（§4.2），系历史遗留兼容取舍，已在此登记，不做改列名破坏性变更。
+
+---
+
+## 10. 版本沿革
+
+| 版本 | 日期 | 变更 |
+|---|---|---|
+| v1 | 2026-09-06 | 初版定稿：AgentUsageReport v1 schema（§1）、数据面三工具 report_usage / usage_summary / usage_report_echo（§2.1–§2.3）、两级判重（§3）、存储与 TTL（§4）、Bearer 鉴权（§5）、fixtures（§8） |
+| v1.1 | 2026-09-24 | 工具面 3→4：新增 §2.4 `delete_usage`（管理面删除，物理 DELETE + 幂等 + 可选 before_ts 上界；老大 9/24 真机反馈③ daemon 侧）。显式版本化增补，§2.1–§2.3 既有工具行为零改动；AgentUsageReport `schema_version` 保持 1 不变 |

@@ -42,7 +42,9 @@ def build_server(
         "token-wallet-mcp",
         instructions=(
             "token-wallet usage data-plane (D-055). report_usage=写, "
-            "usage_summary=读聚合, usage_report_echo=读原文。协议权威源: docs/mcp-protocol.md"
+            "usage_summary=读聚合, usage_report_echo=读原文, "
+            "delete_usage=删该 agent 用量 (破坏性, v1.1)。"
+            "协议权威源: docs/mcp-protocol.md"
         ),
     )
 
@@ -107,6 +109,30 @@ def build_server(
             limit=limit,
         )
         return echo_engine.echo(q).model_dump()
+
+    @mcp.tool
+    def delete_usage(
+        agent_id: str,
+        before_ts: str | None = None,
+    ) -> dict:
+        """删除该 agent 的全部用量数据 (破坏性操作, 不可逆; v1.1 增补 §2.4)。
+
+        agent_id 必填非空; before_ts 可选 (ISO8601 带时区偏移) = 只删该时刻
+        之前的事件。物理 DELETE, 无软删; event_id / fingerprint 判重索引随行
+        清理 — 删除后重报同一 event_id 会被当作新数据落库。
+        幂等: agent 不存在 / 0 行 → {"deleted": 0, "agent_id": ...}, 不报错。
+        管理面语义: 与其他工具同一 Bearer key 鉴权, key 即授权边界。
+        """
+        from .schema import DeleteUsageInput, parse_ts
+
+        q = DeleteUsageInput(agent_id=agent_id, before_ts=before_ts)
+        before_epoch = (
+            int(parse_ts(q.before_ts).timestamp()) if q.before_ts else None
+        )
+        deleted = storage.delete_usage(
+            agent_id=q.agent_id, before_epoch=before_epoch
+        )
+        return {"deleted": deleted, "agent_id": q.agent_id}
 
     @mcp.tool
     def get_onboarding_guide() -> dict:

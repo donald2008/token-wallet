@@ -194,6 +194,31 @@ class EventStorage:
             self.conn.commit()
         return cur.rowcount == 1
 
+    # -- 删除 (v1.1 增补, spec §2.4) ------------------------------------------
+
+    def delete_usage(
+        self,
+        *,
+        agent_id: str,
+        before_epoch: Optional[int] = None,
+    ) -> int:
+        """物理 DELETE 该 agent 的 usage_events (无软删, spec §2.4)。
+
+        before_epoch=None = 整清该 agent 全部数据; 给定时只删 ts_epoch < before_epoch
+        (before_ts 严格上界, 与 §4.3 TTL 的 `<` 同口径)。event_id / fingerprint
+        随行删除 — 判重两级索引 (UNIQUE) 挂在行上, DELETE 即同步清理。
+        返回实际删除行数; agent 不存在 / 0 行 → 0, 不报错 (幂等)。
+        """
+        sql = "DELETE FROM usage_events WHERE agent_id = ?"
+        params: list[Any] = [agent_id]
+        if before_epoch is not None:
+            sql += " AND ts_epoch < ?"
+            params.append(before_epoch)
+        with self._lock:
+            cur = self.conn.execute(sql, params)
+            self.conn.commit()
+        return cur.rowcount
+
     # -- 查询 ---------------------------------------------------------------
 
     def query_events(

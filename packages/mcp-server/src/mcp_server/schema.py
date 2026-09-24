@@ -252,6 +252,36 @@ class UsageReportEchoOutput(BaseModel):
     total_count: int = Field(ge=0)
 
 
+# ---------------------------------------------------------------------------
+# delete_usage (spec §2.4, v1.1 增补 2026-09-24) — 管理面破坏性操作
+# ---------------------------------------------------------------------------
+
+
+class DeleteUsageInput(BaseModel):
+    """spec §2.4 input — agent_id 必填非空; before_ts 可选 ISO8601 上界。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: str = Field(min_length=1)
+    before_ts: Optional[str] = None
+
+    @field_validator("before_ts")
+    @classmethod
+    def _iso_with_tz(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            parse_ts(v)  # 与 ts 同规格: ISO8601 且必须带时区偏移
+        return v
+
+
+class DeleteUsageOutput(BaseModel):
+    """spec §2.4 output — deleted=N 幂等: agent 不存在/0 行 → deleted=0。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    deleted: int = Field(ge=0)
+    agent_id: str
+
+
 def format_validation_error(exc: ValidationError) -> str:
     """压成单行逐字段明细, 供 rejected[].error (spec §2.1: 逐条校验失败明细)。"""
     parts = []
