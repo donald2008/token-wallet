@@ -605,6 +605,36 @@ export const ipcMocks: Record<string, IpcHandler> = {
     return result;
   },
   command_auth_cancel: () => ({ ok: true }),
+  // ---- t_e371caca: web_session 一键授权(D-058 app 侧) ----
+  // 失败路径: wsauthfail=1 → start ok:false(契约/环境错误)
+  // 成功路径: wsauthdelay=<ms> 延迟后 resolve ok(模拟 SSO 轮询窗), 落 keyring mock
+  // (与真壳语义同构: 主进程 saveSecret → keyring_set 同一 mock 后端)
+  web_session_auth_start: (args) => {
+    let fail = false;
+    let delayMs = 0;
+    try {
+      fail = localStorage.getItem("token-wallet.mock.wsauthfail") === "1";
+      delayMs = Number(localStorage.getItem("token-wallet.mock.wsauthdelay") ?? 0) || 0;
+    } catch {
+      /* ignore */
+    }
+    const instanceId = String(args?.instanceId ?? "");
+    if (fail) return { ok: false, saved: false, message: "web_session_auth_start: 参数缺失(auth 契约不完整)" };
+    const done = () => {
+      try {
+        localStorage.setItem(
+          `token-wallet.mock.keyring.token-wallet:${String(args?.secretKey ?? `${instanceId}:web_session`)}`,
+          "api-platform_serviceToken=<mock-token>; userId=<mock-user-id>",
+        );
+      } catch {
+        /* ignore */
+      }
+      return { ok: true, saved: true };
+    };
+    if (delayMs > 0) return new Promise((res) => setTimeout(() => res(done()), delayMs));
+    return done();
+  },
+  web_session_auth_cancel: () => ({ ok: true }),
   sqlite_batch: () => null,
   sqlite_exec: (args) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

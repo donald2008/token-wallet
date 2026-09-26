@@ -22,7 +22,7 @@
  * get_autostart / get_guide) — 注: round-1 自述 7 通道, round-2 增 mcp_restart 编排
  * 通道用于 key regen 后真实停启 daemon(BLOCKING-1 修复)。
  */
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, session, shell, Tray } from "electron";
 import type { IpcMainInvokeEvent } from "electron";
 import { autoUpdater } from "electron-updater";
 import * as fs from "node:fs";
@@ -45,6 +45,14 @@ import {
 import { authDefFor } from "./auth-defs";
 import { AppUpdaterController } from "./updater";
 import { registerMcpIpc } from "./mcp-ipc";
+import {
+  cancelWebSessionAuth,
+  startWebSessionAuth,
+  abortAllWebSessionAuths,
+  type AuthWindowLike,
+  type WebSessionAuthShims,
+} from "./web-session-auth";
+import type { WebSessionAuthContract } from "./web-session-auth";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
@@ -545,6 +553,58 @@ function registerIpc(): void {
     return { ok: true };
   });
 
+  // ---- t_e371caca: web_session 一键授权(D-058 app 侧, B 方案 ①) ----
+  // 用户点「授权登录」→ 主进程开独立 BrowserWindow 加载 login_url(小米 SSO 接管)
+  // → 轮询 session.cookies 目标域必需 cookie → 拼装 Cookie 串 → safeStorage 落盘
+  // (keyring blob, 与 api_key 同级) → 关窗 → renderer 触发该实例立即重采。
+  // 出口: 成功 / 手动关窗=静默取消 / 5min 超时; 防多开(同实例单例窗)。
+  // 域锁(D-058): 截获 cookie 只进 keyring, 由 core 组合器只发 cookie_domain 端点。
+  const wsAuthShims: WebSessionAuthShims = {
+    createWindow: (url) => {
+      const win = new BrowserWindow({
+        width: 1024,
+        height: 768,
+        title: "token-wallet 授权登录",
+        // 常规 OS 边框窗(非壳的 frameless 主题窗): 授权页是第三方站点, 用原生导航
+        autoHideMenuBar: true,
+        webPreferences: {
+          // 授权页不需要 node 能力; contextIsolation 默认开启, 渲染零特权
+          nodeIntegration: false,
+          contextIsolation: true,
+        },
+      });
+      void win.loadURL(url);
+      return win as unknown as AuthWindowLike;
+    },
+    getSession: () =>
+      session.defaultSession as unknown as ReturnType<WebSessionAuthShims["getSession"]>,
+    showWindow: (win) => {
+      win.focus?.();
+    },
+  };
+  ipcMain.handle(
+    "web_session_auth_start",
+    (_event, payload: { instanceId?: string; auth?: WebSessionAuthContract; secretKey?: string } | undefined) => {
+      const instanceId = String(payload?.instanceId ?? "");
+      const auth = payload?.auth;
+      if (!instanceId || !auth || auth.kind !== "web_session" || !auth.cookie_domain || !auth.required_cookies?.length || !auth.login_url) {
+        return Promise.resolve({ ok: false, saved: false, message: "web_session_auth_start: 参数缺失(auth 契约不完整)" });
+      }
+      return startWebSessionAuth(wsAuthShims, {
+        instanceId,
+        auth,
+        // 与 renderer keyringSet 同后端(main.ts 顶部已构建 safeStorageAdapter)
+        saveSecret: (svc, key, value) =>
+          Promise.resolve(setSecret(safeStorageAdapter, storagePaths().dataDir, svc, key, value)),
+        secretKey: String(payload?.secretKey ?? `${instanceId}:web_session`),
+      });
+    },
+  );
+  ipcMain.handle("web_session_auth_cancel", (_event, payload: { instanceId?: string } | undefined) => {
+    cancelWebSessionAuth(String(payload?.instanceId ?? ""));
+    return { ok: true };
+  });
+
   // ---- D-046: 自动更新三通道(状态机在 updater.ts, node vitest 直测) ----
   // updater_check: 查当前态+触发检查; updater_download: 用户显式下载(进度走 updater_event);
   // updater_install: quitAndInstall(仅 ready 态生效)。dev 下三通道恒 unavailable。
@@ -618,6 +678,7 @@ if (!gotLock) {
   });
   app.on("will-quit", () => {
     abortAllAuthSessions(); // 授权会话残留子进程清理(t_fb8c44d8)
+    abortAllWebSessionAuths(); // web_session 授权窗残留清理(t_e371caca)
     closeAll(); // sqlite 连接统一关闭(见 sqlite.ts), 失败不阻断退出
   });
 }

@@ -291,6 +291,51 @@ export async function commandAuthCancel(sessionId: string): Promise<{ ok: boolea
   return viaHost ?? { ok: false };
 }
 
+// ---------------- t_e371caca: web_session 一键授权(D-058 app 侧) ----------------
+
+/** web_session 授权契约(与 core descriptor.auth 同形; app 主进程不 import core 专有面) */
+export interface WebSessionAuthContract {
+  kind: "web_session";
+  cookie_domain: string;
+  required_cookies: string[];
+  login_url: string;
+  header_name?: string;
+}
+
+export interface WebSessionAuthResult {
+  ok: boolean;
+  /** cookie 已落 keyring(成功才 true) */
+  saved: boolean;
+  /** 用户手动关窗 = 静默取消(不算错误, UI 回 idle 即可) */
+  cancelled?: boolean;
+  message?: string;
+}
+
+/**
+ * web_session 一键授权 — 主进程开独立 BrowserWindow 加载 login_url(小米 SSO),
+ * 截目标域必需 cookie → 拼装 → safeStorage 落盘(secretKey 形态 = `${instanceId}:web_session`,
+ * 与 makeCredentialRef 同规) → 关窗。成功后调用方立即触发该实例重采。
+ * 浏览器预览模式(无桥)显式不可用, 不静默假成功。
+ */
+export async function webSessionAuthStart(
+  instanceId: string,
+  auth: WebSessionAuthContract,
+  secretKey?: string,
+): Promise<WebSessionAuthResult> {
+  const viaHost = await hostInvoke<WebSessionAuthResult>("web_session_auth_start", {
+    instanceId,
+    auth,
+    secretKey,
+  });
+  return viaHost ?? { ok: false, saved: false, message: "授权通道不可用(浏览器预览模式)" };
+}
+
+/** 取消 web_session 授权窗(关窗 = 静默取消出口) */
+export async function webSessionAuthCancel(instanceId: string): Promise<{ ok: boolean }> {
+  const viaHost = await hostInvoke<{ ok: boolean }>("web_session_auth_cancel", { instanceId });
+  return viaHost ?? { ok: false };
+}
+
 // ---------------- E1 新增: 窗口控制(HTML TitleBar 的 min/close) ----------------
 
 /** 最小化窗口(无边框窗的 HTML TitleBar 按钮); 浏览器降级 no-op */
