@@ -154,16 +154,22 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
     // D-043 key 判重(DynamicForm 提交时, 添加向导提交前): 同 channel 下 key 已存在 → 内联阻断。
     // 计算本次提交的 secret 明文指纹(与 saveInstance 同规: 非空 secret 按字段 key 排序拼接),
     // 比对既有实例同 channel 的 key_fingerprint。命中 → 内联报错, 不落 store、不弹窗。
-    const fpSecretPairs = secretFields
-      .map((k) => [k, params[k]] as const)
-      .filter(([, v]) => v !== undefined && v !== null && v !== "")
-      .sort(([a], [b]) => a.localeCompare(b));
-    if (fpSecretPairs.length) {
-      const fp = await keyFingerprint(fpSecretPairs.map(([, v]) => String(v)).join("\n"));
-      const dup = findKeyDuplicate(existingInstances(), channel.channel, fp);
-      if (dup) {
-        setKeyError(t("form.keyDup", { name: dup.name }));
-        return;
+    // t_e371caca P1-B(review 1972/1976): web_session 一键授权通道不参与判重 —— 表单无 key
+    // 输入框, params.web_session 仅占位常量, 参与指纹 = SHA256("authorized") 恒等 → 同通道
+    // 第二实例被误拦(判重退化为「同 channel 只允许一个实例」)。cookie 明文不过 renderer,
+    // 本就无从判重; 凭据一致性由主进程授权流(域内截取)承担。
+    if (!isWebSession) {
+      const fpSecretPairs = secretFields
+        .map((k) => [k, params[k]] as const)
+        .filter(([, v]) => v !== undefined && v !== null && v !== "")
+        .sort(([a], [b]) => a.localeCompare(b));
+      if (fpSecretPairs.length) {
+        const fp = await keyFingerprint(fpSecretPairs.map(([, v]) => String(v)).join("\n"));
+        const dup = findKeyDuplicate(existingInstances(), channel.channel, fp);
+        if (dup) {
+          setKeyError(t("form.keyDup", { name: dup.name }));
+          return;
+        }
       }
     }
     setPending(true);
@@ -330,9 +336,14 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
       </label>
 
       <div className="form-actions">
-        <button type="button" className="btn" data-testid="test-conn" disabled={testing} onClick={onTest}>
-          {testing ? t("form.testing") : t("form.test")}
-        </button>
+        {/* t_e371caca P2-1(review 1972): web_session 通道不渲染测试连接钮 —— 表单无 key 输入框
+            (占位值参与采集必假红「API Key 无效」), 且 cookie 已在授权流落 keyring。真实验证 =
+            保存后由引擎按 cookie 采集, 卡片状态即验证结果。 */}
+        {!isWebSession && (
+          <button type="button" className="btn" data-testid="test-conn" disabled={testing} onClick={onTest}>
+            {testing ? t("form.testing") : t("form.test")}
+          </button>
+        )}
         <button type="submit" className="btn btn-primary" data-testid="save-instance" disabled={pending}>
           {pending ? t("form.saving") : t("form.save")}
         </button>

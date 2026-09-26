@@ -6,7 +6,9 @@ import { t } from "../i18n";
 import { BrandHandle } from "./ProviderCardLayouts";
 import { StatusDot } from "./StatusDot";
 import type { DragHandleProps } from "../useCardDragSort";
-import { commandAuthCancel, commandAuthFinish, commandAuthStart } from "../ipc";
+import { commandAuthCancel, commandAuthFinish, commandAuthStart, webSessionAuthStart, type WebSessionAuthContract } from "../ipc";
+import { getSharedStore } from "../instances/store";
+import { getPresetChannel } from "@token-wallet/core/channels";
 
 /**
  * 从 setup_hint 提取可复制的完整命令原文(契约4): 提取首个 `…` 反引号包裹段;
@@ -328,6 +330,85 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
   );
 }
 
+/**
+ * t_e371caca P1-A(review 1972/1976): web_session 型卡 auth_expired 态的重授权组件
+ * （OneClickAuth 的 web_session 同族）。卡面 ②「auth_expired 态卡 → 按钮触发 ①」：
+ * 点「重新授权」→ webSessionAuthStart(instanceId, auth, `${instanceId}:web_session`)
+ * → 主进程开 BrowserWindow 截 cookie 落 keyring → 成功即触发该卡重采(onRefresh)。
+ * auth 契约按 provider_id → instances store 查 channel → PRESET_CHANNELS[channel].auth
+ * 自取（零 renderer 传契约攻击面）；通道/auth 缺失 = 不渲染按钮（不给可点但无效的按钮）。
+ * 出口复用授权流三态：成功 done（触发重采）/ 手动关窗静默取消（回 idle）/ 显式错误。
+ */
+function WebSessionReauth({ providerId, onRefresh }: { providerId: string; onRefresh?: (id: string) => void }) {
+  const [stage, setStage] = useState<"idle" | "working" | "done" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const onStart = () => {
+    const inst = getSharedStore().list().find((i) => i.id === providerId);
+    const descriptor = inst ? getPresetChannel(inst.channel) : undefined;
+    const auth = descriptor?.auth;
+    if (!inst || descriptor?.auth?.kind !== "web_session" || !auth) return;
+    setStage("working");
+    setErrorMsg("");
+    void webSessionAuthStart(inst.id, auth as WebSessionAuthContract, `${inst.id}:web_session`).then((res) => {
+      if (res.ok && res.saved) {
+        setStage("done");
+        // 授权成功 = 立即触发该实例重采（与 command done 态同 UX, 卡面 ① 语义）
+        onRefresh?.(providerId);
+      } else if (res.cancelled) {
+        setStage("idle"); // 手动关窗 = 静默取消(卡面 ①), 可重试
+      } else {
+        setErrorMsg(res.message ?? t("form.wsAuthFailed"));
+        setStage("error");
+      }
+    });
+  };
+
+  return (
+    <div className="web-session-reauth" data-testid="web-session-reauth">
+      {stage === "idle" || stage === "done" ? (
+        <button
+          type="button"
+          className="btn btn-sm oneclick-auth-btn"
+          data-testid="oneclick-auth-btn"
+          onClick={onStart}
+        >
+          {stage === "done" ? t("form.wsAuthOk") : t("card.wsReauth")}
+        </button>
+      ) : null}
+      {stage === "working" ? (
+        <span className="oneclick-auth-note" data-testid="web-session-reauth-note">
+          {t("form.wsAuthWaiting")}
+        </span>
+      ) : null}
+      {stage === "error" ? (
+        <>
+          <span className="oneclick-auth-note text-error" data-testid="web-session-reauth-error">
+            {errorMsg}
+          </span>
+          <button type="button" className="btn btn-sm oneclick-auth-retry" data-testid="web-session-reauth-retry" onClick={() => setStage("idle")}>
+            {t("card.authRetry")}
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * P1-A 通道分流 gate：web_session 型卡（按 provider_id 查 instances store →
+ * descriptor.auth.kind）渲染 WebSessionReauth；command 型卡保持 OneClickAuth 零改。
+ * 查不到实例/通道（mock 预览卡、刚删除）→ 退回 OneClickAuth（维持既有形态, 不空白）。
+ */
+function WebSessionReauthGate({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: string) => void }) {
+  const inst = getSharedStore().list().find((i) => i.id === p.provider_id);
+  const auth = inst ? getPresetChannel(inst.channel)?.auth : undefined;
+  if (auth?.kind === "web_session") {
+    return <WebSessionReauth providerId={p.provider_id} onRefresh={onRefresh} />;
+  }
+  return <OneClickAuth hint={p.setup_hint ?? ""} providerId={p.provider_id} onRefresh={onRefresh} />;
+}
+
 /** 品牌色块(§6.1 第 4 条): 16px 平台识别色 — P1(t_696ec820)起由内置单色 SVG 品牌图标(BrandLogo)取代 */
 
 /* ---------------- t_e371caca U3: web_session 通道卡副行(卡面 ③) ---------------- */
@@ -470,7 +551,9 @@ function AbnormalBody({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: 
             </span>
             <span className="setup-hint-text">⚑ {p.setup_hint}</span>
             <HintCopyButton hint={p.setup_hint} />
-            <OneClickAuth hint={p.setup_hint} providerId={p.provider_id} onRefresh={onRefresh} />
+            {/* t_e371caca P1-A: 按通道分流重授权入口 —— web_session 卡走 WebSessionReauth
+                (webSessionAuthStart, 卡面 ②「按钮触发 ①」), command 卡保持 OneClickAuth 零改。 */}
+            <WebSessionReauthGate p={p} onRefresh={onRefresh} />
           </div>
         ) : null}
         {p.error_message ? (
@@ -506,7 +589,7 @@ function AbnormalBody({ p, onRefresh }: { p: ProviderSnapshot; onRefresh?: (id: 
             {/* t_66b67453 契约4: 一键复制授权命令(反引号内完整原文), 免手抄易错 */}
             <HintCopyButton hint={p.setup_hint} />
             {/* t_fb8c44d8: command 通道一键授权 — 自动开浏览器 + 粘贴 code 回喂, 消灭开终端 */}
-            <OneClickAuth hint={p.setup_hint} providerId={p.provider_id} onRefresh={onRefresh} />
+            <WebSessionReauthGate p={p} onRefresh={onRefresh} />
           </div>
         ) : null}
         <div className="card-error-note">
