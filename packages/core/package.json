@@ -36,6 +36,10 @@
       "types": "./dist/channels/volcengine-ark.d.ts",
       "import": "./dist/channels/volcengine-ark.js"
     },
+    "./channels/mimo": {
+      "types": "./dist/channels/mimo.d.ts",
+      "import": "./dist/channels/mimo.js"
+    },
     "./mapping/jsonpath": {
       "types": "./dist/mapping/jsonpath.d.ts",
       "import": "./dist/mapping/jsonpath.js"

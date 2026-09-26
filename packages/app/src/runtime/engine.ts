@@ -13,6 +13,7 @@
  */
 import { GenericHttpAdapter, type AdapterContext } from "@token-wallet/core/generic-http";
 import { CHANNEL_MAPPINGS, getPresetChannel, type ChannelDescriptor } from "@token-wallet/core/channels";
+import { mimoCompositeAdapter } from "@token-wallet/core/channels/mimo";
 import { COMMAND_ADAPTERS } from "@token-wallet/core/channels/aliyun-bailian";
 import { Scheduler } from "@token-wallet/core/scheduler";
 import { dailyRateFromHistory } from "@token-wallet/core/rate";
@@ -160,7 +161,13 @@ export class RuntimeEngine {
         this.latest.set(inst.id, unsupportedSnapshot(inst));
         continue;
       }
-      const adapter = new GenericHttpAdapter(mapping, runtimeFetch);
+      // t_e371caca: web_session 通道分流(D-058, core web-session.ts:114 消费面契约)——
+      // 三端点组合器(WebSessionCompositeAdapter)替代单请求 GenericHttpAdapter;
+      // fetchImpl 仍走主进程 http_get_json 桥(runtimeFetch), cookie 凭据仍 resolveCredential(keyring)。
+      // 非 web_session 通道路径字节级不变(既有 api_key 通道零回归)。
+      const adapter = descriptor.auth?.kind === "web_session"
+        ? mimoCompositeAdapter(runtimeFetch)
+        : new GenericHttpAdapter(mapping, runtimeFetch);
 
       const coreInstance = {
         id: inst.id,

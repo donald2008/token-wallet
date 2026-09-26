@@ -14,6 +14,7 @@ import type { ProviderSnapshot } from "../types";
 import type { ChannelDescriptor } from "@token-wallet/core/channels";
 import { CHANNEL_MAPPINGS, getPresetChannel } from "@token-wallet/core/channels";
 import { GenericHttpAdapter } from "@token-wallet/core/generic-http";
+import { mimoCompositeAdapter } from "@token-wallet/core/channels/mimo";
 import { commandRun, httpGetJson } from "../ipc";
 import { t } from "../i18n";
 
@@ -45,7 +46,10 @@ async function realHttpTest(
   if (!mapping || !descriptor) {
     return { ok: false, error: t("test.notWired", { channel: channel.channel }) };
   }
-  const adapter = new GenericHttpAdapter(mapping, testFetch);
+  const adapter = descriptor.auth?.kind === "web_session"
+    ? // t_e371caca: web_session 通道走组合器(与 engine 分流同契约, D-058)
+      mimoCompositeAdapter(testFetch)
+    : new GenericHttpAdapter(mapping, testFetch);
   const instance = {
     id: "test-conn",
     channel: channel.channel,

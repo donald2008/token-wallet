@@ -2723,3 +2723,21 @@ body {
   border-bottom-color: var(--accent);
 }
 
+
+/* ---- t_e371caca U3: web_session 卡副行(卡面 ③: 余额 + 重置 + Credits 窗/骨架降级) ---- */
+.ws-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4, 4px) var(--space-12, 12px);
+  padding: var(--space-4, 4px) var(--space-8, 8px) 0;
+  font-size: var(--font-11, 11px);
+  color: var(--fg-dim);
+}
+.ws-footer-usage {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.ws-footer-balance,
+.ws-footer-period {
+  font-variant-numeric: tabular-nums;
+}

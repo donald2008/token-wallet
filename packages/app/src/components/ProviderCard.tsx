@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { ProviderSnapshot } from "../types";
+import type { Metric, ProviderSnapshot } from "../types";
 import { providerHealth, statusBadge } from "../health";
 import { getTemplateFor } from "../templates/registry";
 import { t } from "../i18n";
@@ -330,6 +330,86 @@ function OneClickAuth({ hint, providerId, onRefresh }: { hint: string; providerI
 
 /** 品牌色块(§6.1 第 4 条): 16px 平台识别色 — P1(t_696ec820)起由内置单色 SVG 品牌图标(BrandLogo)取代 */
 
+/* ---------------- t_e371caca U3: web_session 通道卡副行(卡面 ③) ---------------- */
+
+/** web_session 通道判定: 由 logo key 识别(快照不带通道名; core 侧 mimo 通道 logo="mimo",
+ * 通用 web_session 卡扩展未来走快照扩展字段, 本卡先落 MiMo 形态)。 */
+function isWebSessionCard(p: ProviderSnapshot): boolean {
+  return p.logo === "mimo";
+}
+
+/** 千分位整数(Credits 计数, 卡面 ③「千分位」) */
+function fmtCredits(n: number): string {
+  return Math.round(n).toLocaleString("en-US");
+}
+
+/** 余额行(¥25.51 形态; 币种映射与 ticker 同规) */
+function balanceLine(m: Metric): string | null {
+  if (m.kind !== "balance" || m.remaining === undefined) return null;
+  const symbol = m.currency?.toUpperCase() === "CNY" ? "¥" : (m.currency ? `${m.currency} ` : "");
+  return `${symbol}${m.remaining.toFixed(2)}`;
+}
+
+/** 重置时间(reset_at unix 秒 → 短日期, 与 resetText 同源数据不同呈现: 副行要绝对日期) */
+function periodLine(m: Metric): string | null {
+  if (m.reset_at === undefined || m.reset_at <= 0) return null;
+  const d = new Date(m.reset_at * 1000);
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** 千分位 Credits 窗值(BarsTemplate WindowRow 不做千分位; 卡面 ③ 要求千分位 → 副行承载)
+ *  —— 由 wsWindowUsageLine 在 footer 消费(used=0/limit=0 骨架时返回 null)。 */
+function wsWindowUsageLine(m: Metric): string | null {
+  if (m.used === 0 && m.limit === 0) return null; // 骨架 → 降级「—」
+  if (m.limit === undefined || m.limit <= 0) return null;
+  return `${fmtCredits(m.used)} / ${fmtCredits(m.limit)} ${t("unit.credits")}`;
+}
+
+/**
+ * web_session 卡副行(卡面 ③): 套餐名(契约字段未随快照下发, 真机 L4 对账后随 core
+ * 扩展落地——本卡先落余额 + 重置时间, 套餐名/expired 位预留显式缺省)。
+ * **0/0 骨架降级(comment 1965 裁定)**: monthly_credits used=0 && limit=0(usage 端点
+ * best-effort 失败的骨架)→ 进度条区显「—」灰字, 不渲染假 0% 进度条。
+ */
+function MimoCardFooter({ p }: { p: ProviderSnapshot }) {
+  if (!isWebSessionCard(p)) return null;
+  const balanceMetric = p.metrics.find((m) => m.kind === "balance");
+  const balance = balanceMetric ? balanceLine(balanceMetric) : null;
+  const windowMetric = p.metrics.find((m) => m.key === "monthly_credits");
+  const windowIsSkeleton =
+    !!windowMetric && windowMetric.used === 0 && windowMetric.limit === 0;
+  const period = windowMetric ? periodLine(windowMetric) : null;
+  if (balance === null && !windowIsSkeleton && period === null) return null;
+  return (
+    <div className="ws-card-footer" data-testid="ws-card-footer">
+      {windowMetric && (
+        windowIsSkeleton ? (
+          <span className="ws-footer-skeleton text-unknown" data-testid="ws-window-skeleton" title={t("card.wsSkeletonTitle")}>
+            {t("card.wsSkeleton")}
+          </span>
+        ) : (
+          wsWindowUsageLine(windowMetric) && (
+            <span className="ws-footer-usage" data-testid="ws-window-usage">
+              {wsWindowUsageLine(windowMetric)}
+            </span>
+          )
+        )
+      )}
+      {balance !== null && (
+        <span className="ws-footer-balance" data-testid="ws-balance">
+          {t("card.wsBalance", { balance })}
+        </span>
+      )}
+      {period !== null && (
+        <span className="ws-footer-period" data-testid="ws-period">
+          {t("card.wsPeriod", { period })}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** 异常卡长文案(§2.1): 与 head 短徽章不同 —— head = statusBadge(单字原因, e.g. "采集失败"),
  * 长文案 = 详细原因(对用户讲明白怎么了) —— 例如 auth_expired 长文案 = "登录态过期, 请重新授权"。
  * 两者并存: head 一瞥可见红/黄状态, 卡内长文案给完整修复指引(为什么 + 怎么办)。
@@ -553,7 +633,15 @@ export function ProviderCard({
           </span>
         )}
       </div>
-      {p.status === "ok" ? <Template p={p} /> : <AbnormalBody p={p} onRefresh={onRefresh} />}
+      {p.status === "ok" ? (
+        <>
+          <Template p={p} />
+          {/* t_e371caca U3: web_session 通道卡副行(卡面 ③): 余额 + 0/0 骨架降级(1965 裁定)。 */}
+          <MimoCardFooter p={p} />
+        </>
+      ) : (
+        <AbnormalBody p={p} onRefresh={onRefresh} />
+      )}
       {/* 异常卡形态分两态由 AbnormalBody 内部决定(有旧数据 → 正常模板 + 时效标注; 无旧数据 → 整卡文字),
           此处不再做条件分支(t_5d8c3c81 只读缓存语义: 失败时保留旧 metrics)。 */}
     </section>

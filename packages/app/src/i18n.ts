@@ -112,6 +112,11 @@ export const zh = {
     authCliMissingPathHintTitle: "检测到 npm 全局目录 {prefix} 不在 PATH",
     authCliMissingPathHintDesc: "包已安装但 app 找不到。请把 npm prefix 加入 PATH 后重启 app:",
     authCliMissingPathHintCmd: "$env:Path = \"{prefix};$env:Path\"",
+    /* t_e371caca U3: web_session 卡副行(D-058; 套餐名/expired 待 core 扩展字段, 位预留) */
+    wsBalance: "余额 {balance}",
+    wsPeriod: "重置 {period}",
+    wsSkeleton: "月度额度 —(明细端点暂不可用)",
+    wsSkeletonTitle: "tokenPlan/usage 端点 best-effort 失败, 月度额度暂缺(best-effort 不阻塞余额)",
   },
   ago: {
     now: "刚刚",
@@ -485,6 +490,10 @@ export const en: Dict = {
     authCliMissingPathHintTitle: "npm global prefix {prefix} is not in PATH",
     authCliMissingPathHintDesc: "The package is installed but the app can't find it. Add the npm prefix to PATH and restart the app:",
     authCliMissingPathHintCmd: "$env:Path = \"{prefix};$env:Path\"",
+    wsBalance: "Balance {balance}",
+    wsPeriod: "Resets {period}",
+    wsSkeleton: "Monthly quota — (detail endpoint unavailable)",
+    wsSkeletonTitle: "tokenPlan/usage endpoint failed (best-effort), monthly quota pending — balance unaffected",
   },
   ago: {
     now: "just now",
