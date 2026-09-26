@@ -301,6 +301,11 @@ export interface DraftInput {
   /** 钥匙串里 secret 字段的 key 名(即参数 key) */
   secretFields: string[];
   keyring: KeyringBackend;
+  /**
+   * t_e371caca U2: true = secret 值已在授权流(主进程)落 keyring, 保存跳过写入,
+   * 只建 CredentialRef 引用(web_session 一键授权形态; 明文不过 renderer)。
+   */
+  skipSecretWrite?: boolean;
 }
 
 /** 保存一个实例: secret 值写入钥匙串, 配置只存引用(§5.0.1, D-029) */
@@ -308,6 +313,8 @@ export async function saveInstance(draft: DraftInput): Promise<InstanceConfig> {
   const params: InstanceConfig["params"] = {};
   // D-043: 收集本次提交的 secret 明文值(按字段 key 排序拼接), 计算验指纹 —— 新实例入库即写指纹。
   // 指纹维度 = key 明文 + channel: 只对 secret 字段取指纹(非 secret 不参与判重)。
+  // t_e371caca: skipSecretWrite(一键授权)时明文不过 renderer → 用授权占位值参与指纹
+  // (判重粒度退化为「同 channel 已授权实例判重」, cookie 明文指纹由主进程域内一致性承担)。
   const secretPairs = draft.secretFields
     .map((k) => [k, draft.params[k]] as const)
     .filter(([, v]) => v !== undefined && v !== null && v !== "")
@@ -319,7 +326,9 @@ export async function saveInstance(draft: DraftInput): Promise<InstanceConfig> {
   for (const [k, v] of Object.entries(draft.params)) {
     if (draft.secretFields.includes(k)) {
       const ref = makeCredentialRef(draft.id, k);
-      await draft.keyring.set(KEYRING_SERVICE, ref.key!, String(v));
+      if (!draft.skipSecretWrite) {
+        await draft.keyring.set(KEYRING_SERVICE, ref.key!, String(v));
+      }
       params[k] = ref;
     } else {
       params[k] = v;

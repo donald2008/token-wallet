@@ -10,6 +10,7 @@ import type { ChannelDescriptor } from "@token-wallet/core/channels";
 import { defaultInstanceName, findKeyDuplicate, keyFingerprint, type InstanceConfig } from "../instances/schema";
 import { existingInstances, existingNames, getSharedKeyring, saveInstance } from "../instances/store";
 import { testConnection } from "../connection/testConnection";
+import { webSessionAuthStart } from "../ipc";
 import { t } from "../i18n";
 import type { TestConnectionResult } from "../connection/testConnection";
 import type { ProviderSnapshot } from "../types";
@@ -105,6 +106,40 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
 
   const [pending, setPending] = useState(false);
 
+  // ---- t_e371caca U2: web_session 通道一键授权形态(D-058) ----
+  // web_session 型表单 = 「授权登录」按钮 + 会话状态, 无 key 输入框(卡面 ②)。
+  // 授权发生在保存前(添加向导场景实例 id 未生成): 表单挂载即生成稳定 formInstId,
+  // 授权 cookie 落 keyring `${formInstId}:web_session`; 保存复用同 id(secretFields
+  // 含 web_session 时 saveInstance 跳过重复 keyring 写入——值已在, params 引用照建)。
+  const isWebSession = channel.auth?.kind === "web_session";
+  const [formInstId] = useState(() => `inst-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+  const [authStage, setAuthStage] = useState<"idle" | "authorizing" | "authorized" | "error">("idle");
+  const [authMsg, setAuthMsg] = useState("");
+  // 通道切换时重置授权态(与 params 重置同 effect, 见下)
+  useEffect(() => {
+    setAuthStage("idle");
+    setAuthMsg("");
+  }, [channel]);
+
+  const onWebSessionAuth = () => {
+    if (!isWebSession || !channel.auth) return;
+    setAuthStage("authorizing");
+    setAuthMsg("");
+    void webSessionAuthStart(formInstId, channel.auth, `${formInstId}:web_session`).then((res) => {
+      if (res.ok && res.saved) {
+        // 授权成功: params.web_session 置占位非空值(必填校验/指纹链路照走; cookie 明文只在 keyring)
+        setParams((prev) => ({ ...prev, web_session: "authorized" }));
+        setAuthStage("authorized");
+      } else if (res.cancelled) {
+        // 用户手动关窗 = 静默取消(卡面 ①: 不报错), 回 idle 可重试
+        setAuthStage("idle");
+      } else {
+        setAuthMsg(res.message ?? t("form.wsAuthFailed"));
+        setAuthStage("error");
+      }
+    });
+  };
+
   const onSaveClick = async () => {
     // 名称即时校验
     const err = name.trim() ? null : t("form.nameEmpty");
@@ -135,13 +170,17 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
     try {
       // 保存: secret 值写入钥匙串 + 配置入 store(D-029, §5.0.1)
       const saved = await saveInstance({
-        id: `inst-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        // t_e371caca U2: web_session 授权发生在保存前, keyring 条目已按 formInstId 落盘
+        // → 保存复用同 id(引用一致); 非 web_session 通道 id 生成逻辑不变
+        id: isWebSession ? formInstId : `inst-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         channel: channel.channel,
         name: name.trim(),
         poll_interval: pollInterval.trim() || undefined,
         params,
         secretFields,
         keyring: getSharedKeyring(),
+        // web_session: cookie 已在授权流落 keyring, 保存跳过重复写入(值不进 renderer 状态)
+        skipSecretWrite: isWebSession,
       });
       setSavedMsg(t("form.saved"));
       // t_d086543b: onSaved 携带新实例(App 用它做 order prepend → 新 provider 置顶)
@@ -162,6 +201,44 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
     >
       <h3 className="form-channel-title">{channel.display_name}</h3>
       <p className="hint">{channel.plan_type === "balance" ? t("planType.balance") : t("planType.window")} · {channel.adapter === "command" ? t("form.adapterCommand") : t("form.adapterHttp")}</p>
+
+      {/* t_e371caca U2: web_session 通道一键授权块(卡面 ②: 授权按钮 + 会话状态, 无 key 输入框)。
+          域锁/截 cookie/落盘全在主进程(D-058); 表单只呈状态。 */}
+      {isWebSession && channel.auth && (
+        <div className="command-help" data-testid="web-session-auth-block">
+          <span className="command-help-title">{t("form.wsAuthTitle")}</span>
+          <span className="command-help-text">{t("form.wsAuthHint", { domain: channel.auth.cookie_domain })}</span>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-testid="web-session-auth-btn"
+              disabled={authStage === "authorizing"}
+              onClick={onWebSessionAuth}
+            >
+              {authStage === "authorizing" ? t("form.wsAuthorizing") : t("form.wsAuthStart")}
+            </button>
+            <span
+              className={`hint ${authStage === "authorized" ? "text-ok" : authStage === "error" ? "text-error" : ""}`}
+              data-testid="web-session-auth-state"
+              data-state={authStage}
+            >
+              {authStage === "authorized"
+                ? t("form.wsAuthOk")
+                : authStage === "authorizing"
+                  ? t("form.wsAuthWaiting")
+                  : authStage === "error"
+                    ? authMsg || t("form.wsAuthFailed")
+                    : t("form.wsAuthIdle")}
+            </span>
+          </div>
+          {authStage === "error" && (
+            <button type="button" className="btn btn-sm" data-testid="web-session-auth-reset" onClick={() => setAuthStage("idle")}>
+              {t("card.authRetry")}
+            </button>
+          )}
+        </div>
+      )}
 
       {channel.adapter === "command" && channel.health_check?.setup_hint && (
         <div className="command-help" data-testid="command-help">
@@ -187,7 +264,10 @@ export function DynamicForm({ channel, onSaved, onBack }: Props) {
         {currentNameError && <span className="field-error" data-testid="name-error">{currentNameError}</span>}
       </label>
 
-      {channel.params_schema.map((f) => {
+      {channel.params_schema
+        // t_e371caca U2: web_session 通道无 key 输入框(卡面 ②)——凭据由一键授权流落 keyring
+        .filter((f) => !(isWebSession && f.type === "secret"))
+        .map((f) => {
         const value = params[f.key];
         // 密码框 + placeholder 占位(不回显已存密钥 §5.0)
         const placeholder = f.required && secretFields.includes(f.key) ? "••••••••" : undefined;
