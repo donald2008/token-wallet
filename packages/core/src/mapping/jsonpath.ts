@@ -33,7 +33,15 @@ export function evalJsonPathFirst(json: unknown, path: string): unknown {
 
 // ---- 管道过滤器白名单(§5.1: number/string/round/duration/iso_epoch) ----
 
-export type PipeFilter = "number" | "string" | "round" | "duration" | "iso_epoch" | "ms_epoch" | "invert_percent";
+export type PipeFilter =
+  | "number"
+  | "string"
+  | "round"
+  | "duration"
+  | "iso_epoch"
+  | "ms_epoch"
+  | "invert_percent"
+  | "scale_percent";
 
 /** ISO 8601(YYYY-MM-DDTHH:mm:ss[.fff…][Z|±HH[:]MM]) — 容忍任意毫秒小数精度与 Z/偏移时区 */
 const ISO_8601_RE =
@@ -92,6 +100,16 @@ const FILTERS: Record<PipeFilter, (v: unknown) => unknown> = {
     const n = Number(v);
     if (Number.isNaN(n)) throw new MappingError(`无法转 invert_percent: ${typeof v}`);
     return Math.max(0, Math.min(100, 100 - n));
+  },
+  /**
+   * 0-1 小数占比 → 百分数(×100): MiMo tokenPlan/usage 的 items[0].percent 实证为
+   * 0-1 小数(CodexBar percent*100, t_4ad1c22e)。不做区间收敛——越界(>1 或 <0)是
+   * 契约漂移信号, 让下游/断言显式暴露而非静默 clamp。
+   */
+  scale_percent: (v) => {
+    const n = Number(v);
+    if (Number.isNaN(n)) throw new MappingError(`无法转 scale_percent: ${typeof v}`);
+    return n * 100;
   },
 };
 

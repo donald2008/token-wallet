@@ -12,3 +12,4 @@ export * from "./opencode.js";
 export * from "./kimi.js";
 export * from "./minimax.js";
 export * from "./zai-coding.js";
+export * from "./mimo.js";

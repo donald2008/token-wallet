@@ -171,6 +171,41 @@ export const ZAI_CODING: ChannelDescriptor = {
   ],
 };
 
+/**
+ * 小米 MiMo Token Plan: web_session 第三凭据范式首实例(t_4ad1c22e, D-058)。
+ * 无 tp- key 查询端点(404 实锤), 用量在控制台域走小米账号 SSO 会话 cookie。
+ * auth 契约(cookie_domain/required_cookies/login_url)与三端点映射见 ./mimo.ts +
+ * ../web-session.ts。params_schema 只有凭据 ref(cookie 串落 store=safeStorage 与 key 同级)。
+ */
+export const MIMO_TOKEN_PLAN: ChannelDescriptor = {
+  platform: "mimo",
+  product: "token-plan",
+  channel: "mimo/token-plan",
+  display_name: "小米 MiMo Token Plan",
+  product_display_name: "Token Plan",
+  platform_display_name: "小米 MiMo",
+  plan_type: "window",
+  adapter: "http",
+  logo: "mimo",
+  // D-058: web_session 第三凭据范式声明(auth 契约在描述符上, 组合器消费)
+  auth: {
+    kind: "web_session",
+    cookie_domain: "platform.xiaomimimo.com",
+    required_cookies: ["api-platform_serviceToken", "userId"],
+    login_url: "https://account.xiaomi.com/",
+    header_name: "Cookie",
+  },
+  params_schema: [
+    {
+      key: "web_session",
+      label: "会话 Cookie",
+      type: "secret",
+      required: true,
+      help: "platform.xiaomimimo.com 登录后复制 Cookie(需含 api-platform_serviceToken 与 userId)",
+    },
+  ],
+};
+
 export const PRESET_CHANNELS: readonly ChannelDescriptor[] = [
   DEEPSEEK_BALANCE,
   OPENCODE_GO,
@@ -179,6 +214,7 @@ export const PRESET_CHANNELS: readonly ChannelDescriptor[] = [
   ALIYUN_BAILIAN_TOKEN_PLAN,
   VOLCENGINE_ARK_CODING_PLAN,
   ZAI_CODING,
+  MIMO_TOKEN_PLAN,
 ];
 
 /** 按全路径 "platform/product" 查预置通道(通道树/引擎/测试连接共用) */

@@ -95,8 +95,8 @@ describe("ChannelRegistry", () => {
     expect(reg.size).toBe(3);
   });
 
-it("预置通道含 deepseek/balance + opencode/go + kimi/coding + minimax/token-plan + aliyun-bailian/token-plan + volcengine-ark/coding-plan + zai/coding", () => {
-    expect(PRESET_CHANNELS).toHaveLength(7);
+  it("预置通道含 deepseek/balance + opencode/go + kimi/coding + minimax/token-plan + aliyun-bailian/token-plan + volcengine-ark/coding-plan + zai/coding + mimo/token-plan(t_4ad1c22e)", () => {
+    expect(PRESET_CHANNELS).toHaveLength(8);
     const d = DEEPSEEK_BALANCE;
     expect(d.channel).toBe("deepseek/balance");
     expect(d.plan_type).toBe("balance");

@@ -1,0 +1,38 @@
+{
+  "balance": {
+    "code": 0,
+    "message": "success",
+    "data": {
+      "balance": "25.51",
+      "currency": "CNY",
+      "cashBalance": "20.00",
+      "giftBalance": "5.51"
+    }
+  },
+  "balanceOptionalMissing": {
+    "code": 0,
+    "data": {
+      "balance": "25.51",
+      "currency": "CNY"
+    }
+  },
+  "tokenPlanDetail": {
+    "code": 0,
+    "data": {
+      "planCode": "Standard",
+      "currentPeriodEnd": "2026-10-31 23:59:59",
+      "expired": false
+    }
+  },
+  "tokenPlanUsage": {
+    "code": 0,
+    "data": {
+      "monthUsage": {
+        "percent": 0.32,
+        "items": [
+          { "name": "coding", "used": 3200000, "limit": 10000000, "percent": 0.32 }
+        ]
+      }
+    }
+  }
+}

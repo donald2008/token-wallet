@@ -29,6 +29,9 @@ export * from "./adapters.js";
 // 安全 JSONPath 映射 (§5.1)
 export * from "./mapping/jsonpath.js";
 
+// web_session 第三凭据范式(D-058): 组合适配器 + auth 契约工具
+export * from "./web-session.js";
+
 // 日志脱敏(D-029) + 余额速率计算(§2 ticker)
 export * from "./redact.js";
 export * from "./rate.js";
