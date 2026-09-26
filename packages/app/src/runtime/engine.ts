@@ -13,7 +13,7 @@
  */
 import { GenericHttpAdapter, type AdapterContext } from "@token-wallet/core/generic-http";
 import { CHANNEL_MAPPINGS, getPresetChannel, type ChannelDescriptor } from "@token-wallet/core/channels";
-import { mimoCompositeAdapter } from "@token-wallet/core/channels/mimo";
+import { compositeAdapterFor } from "@token-wallet/core/web-session";
 import { COMMAND_ADAPTERS } from "@token-wallet/core/channels/aliyun-bailian";
 import { Scheduler } from "@token-wallet/core/scheduler";
 import { dailyRateFromHistory } from "@token-wallet/core/rate";
@@ -165,8 +165,10 @@ export class RuntimeEngine {
       // 三端点组合器(WebSessionCompositeAdapter)替代单请求 GenericHttpAdapter;
       // fetchImpl 仍走主进程 http_get_json 桥(runtimeFetch), cookie 凭据仍 resolveCredential(keyring)。
       // 非 web_session 通道路径字节级不变(既有 api_key 通道零回归)。
+      // t_7672da28 U2: 工厂按 channel 查 spec(spec 从通道目录注册表取, 引擎侧零通道
+      // 专用代码——round-1 P2-2 收口); 未知/非 web_session 通道显式抛 CompositeAdapterError。
       const adapter = descriptor.auth?.kind === "web_session"
-        ? mimoCompositeAdapter(runtimeFetch)
+        ? compositeAdapterFor(inst.channel, runtimeFetch)
         : new GenericHttpAdapter(mapping, runtimeFetch);
 
       const coreInstance = {

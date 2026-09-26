@@ -14,7 +14,7 @@ import type { ProviderSnapshot } from "../types";
 import type { ChannelDescriptor } from "@token-wallet/core/channels";
 import { CHANNEL_MAPPINGS, getPresetChannel } from "@token-wallet/core/channels";
 import { GenericHttpAdapter } from "@token-wallet/core/generic-http";
-import { mimoCompositeAdapter } from "@token-wallet/core/channels/mimo";
+import { compositeAdapterFor } from "@token-wallet/core/web-session";
 import { commandRun, httpGetJson } from "../ipc";
 import { t } from "../i18n";
 
@@ -47,8 +47,9 @@ async function realHttpTest(
     return { ok: false, error: t("test.notWired", { channel: channel.channel }) };
   }
   const adapter = descriptor.auth?.kind === "web_session"
-    ? // t_e371caca: web_session 通道走组合器(与 engine 分流同契约, D-058)
-      mimoCompositeAdapter(testFetch)
+    ? // t_7672da28 U2: 通道通用组合器工厂(按 channel 查 spec, 引擎侧零通道专用代码,
+      // D-058; 未知/非 web_session 通道显式抛 CompositeAdapterError 不兜底)
+      compositeAdapterFor(channel.channel, testFetch)
     : new GenericHttpAdapter(mapping, testFetch);
   const instance = {
     id: "test-conn",

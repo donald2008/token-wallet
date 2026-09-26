@@ -448,8 +448,10 @@ function wsWindowUsageLine(m: Metric): string | null {
 }
 
 /**
- * web_session 卡副行(卡面 ③): 套餐名(契约字段未随快照下发, 真机 L4 对账后随 core
- * 扩展落地——本卡先落余额 + 重置时间, 套餐名/expired 位预留显式缺省)。
+ * web_session 卡副行(卡面 ③): 套餐名 + 余额 + 重置时间。
+ * 套餐元信息(t_7672da28 随快照下发): plan_code 缺席 = 不渲染该段(禁默认文案兜底);
+ * expired 判定必须 `expired === true`(false 是合法下发值, falsy 判断会把正常态判成过期)。
+ * expired 标记复用既有 text-warn 语义(禁新状态色, 卡面③)。
  * **0/0 骨架降级(comment 1965 裁定)**: monthly_credits used=0 && limit=0(usage 端点
  * best-effort 失败的骨架)→ 进度条区显「—」灰字, 不渲染假 0% 进度条。
  */
@@ -461,9 +463,33 @@ function MimoCardFooter({ p }: { p: ProviderSnapshot }) {
   const windowIsSkeleton =
     !!windowMetric && windowMetric.used === 0 && windowMetric.limit === 0;
   const period = windowMetric ? periodLine(windowMetric) : null;
-  if (balance === null && !windowIsSkeleton && period === null) return null;
+  // 套餐名: 字段不存在即不显示(comment 1995), 非 null 值才渲染
+  const plan =
+    windowMetric?.plan_code !== undefined && windowMetric.plan_code !== null
+      ? String(windowMetric.plan_code)
+      : null;
+  // 过期态: expired === true 才标记(false 合法下发, undefined=端点缺席)
+  const expired = windowMetric?.expired === true;
+  if (
+    balance === null &&
+    !windowIsSkeleton &&
+    period === null &&
+    plan === null &&
+    !expired
+  )
+    return null;
   return (
     <div className="ws-card-footer" data-testid="ws-card-footer">
+      {plan !== null && (
+        <span className="ws-footer-plan" data-testid="ws-plan">
+          {t("card.wsPlan", { plan })}
+        </span>
+      )}
+      {expired && (
+        <span className="ws-footer-expired text-warn" data-testid="ws-expired">
+          {t("card.wsExpired")}
+        </span>
+      )}
       {windowMetric && (
         windowIsSkeleton ? (
           <span className="ws-footer-skeleton text-unknown" data-testid="ws-window-skeleton" title={t("card.wsSkeletonTitle")}>

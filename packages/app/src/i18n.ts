@@ -116,6 +116,9 @@ export const zh = {
     /* t_e371caca U3: web_session 卡副行(D-058; 套餐名/expired 待 core 扩展字段, 位预留) */
     wsBalance: "余额 {balance}",
     wsPeriod: "重置 {period}",
+    /* t_7672da28 round-3: 套餐元信息副行(plan_code 随快照下发; 缺席不渲染) */
+    wsPlan: "套餐 {plan}",
+    wsExpired: "套餐已到期",
     wsSkeleton: "月度额度 —(明细端点暂不可用)",
     wsSkeletonTitle: "tokenPlan/usage 端点 best-effort 失败, 月度额度暂缺(best-effort 不阻塞余额)",
   },
@@ -494,6 +497,8 @@ export const en: Dict = {
     authCliMissingPathHintCmd: "$env:Path = \"{prefix};$env:Path\"",
     wsBalance: "Balance {balance}",
     wsPeriod: "Resets {period}",
+    wsPlan: "Plan {plan}",
+    wsExpired: "Plan expired",
     wsSkeleton: "Monthly quota — (detail endpoint unavailable)",
     wsSkeletonTitle: "tokenPlan/usage endpoint failed (best-effort), monthly quota pending — balance unaffected",
   },
