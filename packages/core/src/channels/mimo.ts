@@ -90,15 +90,16 @@ const MIMO_TOKEN_PLAN_DETAIL_MAPPING = mimoEndpointMapping(`${MIMO_BASE}/tokenPl
   },
 ]);
 
-/** GET /tokenPlan/usage — monthly_credits 真值(items[0]; percent 是 0-1 小数) */
+/** GET /tokenPlan/usage — monthly_credits 真值(items[0].used/limit, 卡面契约原样) */
 const MIMO_TOKEN_PLAN_USAGE_MAPPING = mimoEndpointMapping(`${MIMO_BASE}/tokenPlan/usage`, [
   {
     key: "monthly_credits",
     kind: "window",
     unit: "credits",
-    // items[0].percent 是 0-1 小数(CodexBar percent*100 实证)→ scale_percent ×100
-    used: { path: "$.data.monthUsage.items[0].percent", pipes: ["number", "scale_percent"] },
-    limit: { const: 100 },
+    // 卡面契约: used=items[0].used / limit=items[0].limit(int 计数, 非百分比)
+    // (round-1 P2-1: percent×100/const 100 形态偏离契约已废弃)
+    used: { path: "$.data.monthUsage.items[0].used", pipes: ["number"] },
+    limit: { path: "$.data.monthUsage.items[0].limit", pipes: ["number"] },
   },
 ]);
 
@@ -114,7 +115,7 @@ export const MIMO_WEB_SESSION_SPEC: WebSessionChannelSpec = {
   ],
   primary: "balance",
   patches: [
-    // monthly_credits.used = usage 端点 monthly_credits.used(0-1→×100 已在管道完成)
+    // monthly_credits.used/limit = usage 端点 items[0] 计数(卡面契约, int credits)
     { key: "monthly_credits", field: "used", endpoint: "tokenPlan/usage", sourceKey: "monthly_credits", sourceField: "used" },
     { key: "monthly_credits", field: "limit", endpoint: "tokenPlan/usage", sourceKey: "monthly_credits", sourceField: "limit" },
     // reset_at = detail 端点 currentPeriodEnd(UTC → unix 秒已在 iso_epoch 完成)

@@ -55,7 +55,12 @@ export interface GenericHttpMapping {
   /** 非 2xx 时判定 auth_expired 的状态码(默认 [401, 403]) */
   auth_expired_status?: number[];
   /**
-   * 业务码判态(HTTP 恒 2xx、auth 状态在响应体业务码的通道, 如 zai:\n * HTTP 恒 200, body.code=401 key 坏 / 1001 缺头)。\n * 解析响应体 `$.code`(可指定 path), 命中 auth_expired → auth_expired + setup_hint;\n * 命中 ok → 正常采集; 其余 → error。与 auth_expired_status 互斥(HTTP 判不了时才用)。\n */
+   * 业务码判态(HTTP 恒 2xx、auth 状态在响应体业务码的通道, 如 zai: HTTP 恒 200,
+   * body.code=401 key 坏 / 1001 缺头)。解析响应体 `$.code`(可指定 path),
+   * 命中 auth_expired → auth_expired + setup_hint; 命中 ok → 正常采集; 其余 → error。
+   * 可与 auth_expired_status 组合(HTTP 层先行, body 层兜底——mimo 双声明即此形态:
+   * 3xx/401/403 HTTP 判, 200+code401 body 判)。
+   */
   body_code?: {
     /** 业务码 JSONPath, 默认 $.code */
     path?: string;
@@ -116,6 +121,34 @@ function fieldValue(json: unknown, fm: FieldMapping): unknown {
 }
 
 /**
+ * 映射是否声明了 3xx 判态(web_session 会话失效形态)。声明了 → fetch 必须
+ * redirect:"manual"(默认 follow 会把登录重定向吞成 200/404, 3xx 判态不可达)。
+ * 未声明 → undefined(继承运行时默认 follow), 既有通道行为字节级不变。
+ */
+export function wantsRedirectStatus(codes: readonly number[] | undefined): boolean {
+  return codes?.some((c) => c >= 300 && c < 400) ?? false;
+}
+
+/**
+ * undici/浏览器 redirect:"manual" 下, 跨源重定向返回 opaqueredirect
+ * (status=0, type="opaqueredirect")。用映射声明的 3xx 判态码回填可判读形态:
+ * status=声明的首个 3xx 码(redirectAware 按正则归类, 具体码值不影响判态)。
+ * 同源(如 node 测试 server)重定向不受影响——status 已是真实 3xx。
+ */
+function resolveOpaqueRedirect(
+  resp: Response,
+  codes: readonly number[] | undefined,
+): Response {
+  if (resp.status !== 0 || resp.type !== "opaqueredirect" || !wantsRedirectStatus(codes)) {
+    return resp;
+  }
+  const redirectCode = codes!.find((c) => c >= 300 && c < 400)!;
+  const headers = new Headers();
+  headers.set("location", "opaqueredirect");
+  return new Response(null, { status: redirectCode, headers });
+}
+
+/**
  * 声明式 HTTP 适配器。只做"一次请求 + 静态映射"(§5.1 能力边界)。
  *
  * 安全: JSONPath 经 mapping/jsonpath.ts 受限求值, 无 eval。
@@ -159,6 +192,11 @@ export class GenericHttpAdapter {
       resp = await this.fetchImpl(this.mapping.url, {
         method: this.mapping.method ?? "GET",
         headers,
+        // D-058: 声明了 3xx 判态(auth_expired_status 含 3xx)的映射(如 web_session
+        // 会话失效)必须禁默认 follow——follow 后上游 302 会变成 200(登录页 HTML)
+        // 或 404, redirectAware 永不可达。仅条件启用: 既有通道(未声明 3xx)行为不变,
+        // 且 manual 模式的 opaqueredirect(status=0) 需下方兜底回填真实 3xx 形态。
+        redirect: wantsRedirectStatus(this.mapping.auth_expired_status) ? "manual" : undefined,
         signal: ctx.signal,
       });
     } catch (err) {
@@ -171,10 +209,11 @@ export class GenericHttpAdapter {
     }
 
     const authCodes = this.mapping.auth_expired_status ?? [401, 403];
-    if (authCodes.includes(resp.status)) {
-      return { ...base, status: "auth_expired", metrics: [] };
+    const effectiveResp = resolveOpaqueRedirect(resp, this.mapping.auth_expired_status);
+    if (authCodes.includes(effectiveResp.status)) {
+      return { ...base, status: "auth_expired", metrics: [], setup_hint: this.mapping.setup_hint };
     }
-    if (!resp.ok) {
+    if (!effectiveResp.ok) {
       return {
         ...base,
         status: "error",

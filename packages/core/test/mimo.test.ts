@@ -3,14 +3,16 @@
  *
  * ⚠️ 契约为 CodexBar 二手实证(未真 cookie 实测), fixture 全 mock(安全纪律:
  * cookie 值禁真值, fixture/断言只用形态占位串)。覆盖:
- * - 正常态: 三端点并发 → balance + monthly_credits(used ← usage ×100, reset_at ← detail UTC)
+ * - 正常态: 三端点并发 → balance + monthly_credits(used/limit ← usage items[0] 计数,
+ *   reset_at ← detail UTC); 请求头契约 + redirect:"manual" 逐项断言
  * - auth_expired 三形态: body code 401 / HTTP 401 / HTTP 3xx(登录重定向)
  * - balance 可选项: 缺 cashBalance/giftBalance → 指标不塌(可选项缺省)
- * - percent 0-1 换算(scale_percent) + UTC 空格时间解析(iso_epoch)
+ * - percent 0-1 换算管道(scale_percent, 通用管道能力单测) + UTC 空格时间解析(iso_epoch)
  * - 必需 cookie 缺失 → auth_expired; 凭据解析失败 → auth_expired
  * - 域护栏: 端点跨域 → WebSessionDomainError
  * - best-effort: 辅端点失败 → warn alert 不塌主数据
  * - 注册完整性: mimo/token-plan 在 PRESET_CHANNELS + CHANNEL_MAPPINGS + auth 契约
+ * - 真实传输层集成(node:http 真 302, 非 mock fetch): redirect:"manual" 判态可达
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
@@ -21,6 +23,7 @@ import {
   WebSessionDomainError,
   isRedirectStatus,
   validateCookieNames,
+  type WebSessionChannelSpec,
 } from "../src/web-session.js";
 import type { AdapterContext, InstanceConfig } from "../src/generic-http.js";
 import { MIMO_TOKEN_PLAN } from "../src/channels/presets.js";
@@ -55,17 +58,17 @@ function makeCtx(cookie: string = MOCK_COOKIE, failResolve = false): AdapterCont
   };
 }
 
-/** 按端点 URL 路由响应的 fetch mock: 逐端点可注入 {status, body} */
+/** 按端点 URL 路由响应的 fetch mock: 逐端点可注入 {status, body}; 记录 init(redirect 判态断言用) */
 function makeFetch(
   perEndpoint: Record<string, { status: number; body: unknown }>,
-  seenHeaders: Record<string, string>[] = [],
+  seen: { headers: Record<string, string>; redirect?: string }[] = [],
 ) {
-  return async (input: string | URL, init?: { headers?: Record<string, string> }): Promise<Response> => {
+  return async (input: string | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === "string" ? input : input.toString();
     const path = url.replace("https://platform.xiaomimimo.com/api/v1", "");
     const spec = perEndpoint[path];
     if (!spec) throw new Error(`mock 未覆盖端点: ${path}`);
-    seenHeaders.push({ ...(init?.headers ?? {}) });
+    seen.push({ headers: { ...(init?.headers as Record<string, string>) }, redirect: init?.redirect });
     return {
       status: spec.status,
       ok: spec.status >= 200 && spec.status < 300,
@@ -81,21 +84,22 @@ const OK_RESPONSES = {
 };
 
 describe("mimo/token-plan web_session golden(mock fixtures)", () => {
-  it("正常态: 三端点并发 → balance + monthly_credits 聚合(used ×100, reset_at UTC)", async () => {
-    const seen: Record<string, string>[] = [];
+  it("正常态: 三端点并发 → balance + monthly_credits 聚合(items[0] 计数, reset_at UTC)", async () => {
+    const seen: { headers: Record<string, string>; redirect?: string }[] = [];
     const adapter = mimoCompositeAdapter(makeFetch(OK_RESPONSES, seen) as unknown as typeof fetch);
     const snap = await adapter.fetchSnapshot(MIMO_TOKEN_PLAN, INSTANCE, makeCtx());
     expect(snap.status).toBe("ok");
-    // 请求头契约: Cookie 注入 + 公共头写死
+    // 请求头契约: Cookie 注入 + 公共头写死 + redirect:"manual"(3xx 判态可达, P1-1)
     expect(seen.length).toBe(3); // 三端点各一请求
     for (const h of seen) {
-      expect(h["Cookie"]).toBe(MOCK_COOKIE);
-      expect(h["x-timeZone"]).toBe("UTC+01:00");
-      expect(h["Origin"]).toBe("https://platform.xiaomimimo.com");
-      expect(h["Referer"]).toBe("https://platform.xiaomimimo.com/#/console/balance");
-      expect(h["User-Agent"]).toContain("Chrome/143");
-      expect(h["Accept"]).toBe("application/json, text/plain, */*");
-      expect(h["Accept-Language"]).toBe("en-US,en;q=0.9");
+      expect(h.headers["Cookie"]).toBe(MOCK_COOKIE);
+      expect(h.headers["x-timeZone"]).toBe("UTC+01:00");
+      expect(h.headers["Origin"]).toBe("https://platform.xiaomimimo.com");
+      expect(h.headers["Referer"]).toBe("https://platform.xiaomimimo.com/#/console/balance");
+      expect(h.headers["User-Agent"]).toContain("Chrome/143");
+      expect(h.headers["Accept"]).toBe("application/json, text/plain, */*");
+      expect(h.headers["Accept-Language"]).toBe("en-US,en;q=0.9");
+      expect(h.redirect).toBe("manual");
     }
     const byKey = Object.fromEntries(snap.metrics.map((m) => [m.key, m]));
     // balance: 字符串金额 → number
@@ -103,9 +107,9 @@ describe("mimo/token-plan web_session golden(mock fixtures)", () => {
     expect(byKey["balance"]!.currency).toBe("CNY");
     expect(byKey["balance"]!.granted).toBe(5.51);
     expect(byKey["balance"]!.topped_up).toBe(20.0);
-    // monthly_credits: used = 0.32 ×100 = 32, limit 100(usage 端点 patches 覆写)
-    expect(byKey["monthly_credits"]!.used).toBe(32);
-    expect(byKey["monthly_credits"]!.limit).toBe(100);
+    // monthly_credits: used/limit = usage 端点 items[0] 计数(卡面契约, int credits)
+    expect(byKey["monthly_credits"]!.used).toBe(3_200_000);
+    expect(byKey["monthly_credits"]!.limit).toBe(10_000_000);
     expect(byKey["monthly_credits"]!.unit).toBe("credits");
     // reset_at: "2026-10-31 23:59:59" UTC(空格分隔)→ unix 秒
     // 现算真值: timegm(2026-10-31 23:59:59 UTC) = 1793491199
@@ -167,12 +171,12 @@ describe("mimo/token-plan web_session golden(mock fixtures)", () => {
     expect(balance.currency).toBe("CNY");
     expect(balance.granted).toBeUndefined();
     expect(balance.topped_up).toBeUndefined();
-    // monthly_credits 不受影响(独立端点)
+    // monthly_credits 不受影响(独立端点); used = items[0].used 计数
     const credits = snap.metrics.find((m) => m.key === "monthly_credits")!;
-    expect(credits.used).toBe(32);
+    expect(credits.used).toBe(3_200_000);
   });
 
-  it("percent 0-1 换算边界: 0→0, 1→100, 0.075→7.5(scale_percent ×100)", async () => {
+  it("管道能力: scale_percent 0-1 换算边界 0→0, 1→100, 0.075→7.5(通用管道单测, 通道映射未消费)", async () => {
     const { applyPipe } = await import("../src/mapping/jsonpath.js");
     expect(applyPipe(0, ["number", "scale_percent"])).toBe(0);
     expect(applyPipe(1, ["number", "scale_percent"])).toBe(100);
@@ -267,5 +271,114 @@ describe("mimo/token-plan web_session golden(mock fixtures)", () => {
     for (const src of [mimoSrc, fixtureSrc]) {
       expect(src).not.toMatch(/["'=][A-Za-z0-9]{64,}["';]/);
     }
+  });
+});
+
+describe("mimo/token-plan 真实传输层集成(node:http, 非 mock fetch — round-1 P1-1)", () => {
+  // mock Response 无重定向语义, 形态③必须用真 server 锁定 redirect:"manual" 判态
+  it("真实 302(默认会 follow 到 404)→ redirect:manual 判 auth_expired, 非跟随", async () => {
+    const { createServer } = await import("node:http");
+    const server = createServer((_req, res) => {
+      res.writeHead(302, { Location: "/login" });
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const port = (server.address() as { port: number }).port;
+      const base = `http://127.0.0.1:${port}/api/v1`;
+      const spec: WebSessionChannelSpec = {
+        endpoints: [
+          { name: "balance", mapping: { url: `${base}/balance`, metrics: [], auth_expired_status: [302, 401, 403] } },
+          { name: "detail", mapping: { url: `${base}/detail`, metrics: [], auth_expired_status: [302, 401, 403] } },
+        ],
+        primary: "balance",
+        patches: [],
+        setup_hint: "<mock-setup-hint>",
+      };
+      const adapter = new WebSessionCompositeAdapter(spec);
+      const snap = await adapter.fetchSnapshot(
+        MIMO_TOKEN_PLAN,
+        INSTANCE,
+        makeCtx("api-platform_serviceToken=<mock-token>; userId=<mock-user-id>"),
+      );
+      // 回归对照(review 复现形态): 无 manual 时 follow 到 /login → 404 → status=error
+      expect(snap.status).toBe("auth_expired");
+      expect(snap.setup_hint).toBe("<mock-setup-hint>");
+      expect(snap.metrics).toEqual([]);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
+    }
+  });
+
+  it("undici redirect:manual 跨源 opaqueredirect 兜底 → auth_expired(status=0 回填 3xx)", async () => {
+    const { createServer } = await import("node:http");
+    const server = createServer((_req, res) => {
+      // 端口 9 = discard 协议端口, undici 解析失败 → 构造合法 302 语义由 manual 保留
+      res.writeHead(302, { Location: "http://127.0.0.1:9/login" });
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const port = (server.address() as { port: number }).port;
+      const base = `http://127.0.0.1:${port}/api/v1`;
+      // 同源 http server 的跨端口重定向 = 跨源 → manual 下返回 opaqueredirect(status=0)
+      const spec: WebSessionChannelSpec = {
+        endpoints: [
+          { name: "balance", mapping: { url: `${base}/balance`, metrics: [], auth_expired_status: [302, 401, 403] } },
+          { name: "detail", mapping: { url: `${base}/detail`, metrics: [], auth_expired_status: [302, 401, 403] } },
+        ],
+        primary: "balance",
+        patches: [],
+        setup_hint: "<mock-setup-hint>",
+      };
+      const adapter = new WebSessionCompositeAdapter(spec);
+      const snap = await adapter.fetchSnapshot(
+        MIMO_TOKEN_PLAN,
+        INSTANCE,
+        makeCtx("api-platform_serviceToken=<mock-token>; userId=<mock-user-id>"),
+      );
+      expect(snap.status).toBe("auth_expired");
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
+    }
+  });
+
+  it("redirect 语义对照: 未声明 3xx 判态的通道 fetch 无 manual(既有行为零回归); 已声明 → manual", async () => {
+    const { wantsRedirectStatus } = await import("../src/generic-http.js");
+    expect(wantsRedirectStatus([401, 403])).toBe(false); // 既有通道(deepseek/kimi/...)
+    expect(wantsRedirectStatus(undefined)).toBe(false);
+    expect(wantsRedirectStatus([301, 302, 303, 307, 308, 401, 403])).toBe(true); // mimo
+
+    // 行为对照: 既有形态映射 mock fetch 收到的 init.redirect 必须为 undefined
+    const seen: { redirect?: string }[] = [];
+    const fetchMock = async (_input: string | URL, init?: RequestInit): Promise<Response> => {
+      seen.push({ redirect: init?.redirect });
+      return {
+        status: 200,
+        ok: true,
+        json: async () => ({ data: { used: 1, limit: 10 } }),
+      } as unknown as Response;
+    };
+    const { GenericHttpAdapter } = await import("../src/generic-http.js");
+    const legacyMapping = {
+      url: "https://api.example.com/v1/usage",
+      metrics: [
+        {
+          key: "requests",
+          kind: "window" as const,
+          unit: "requests" as const,
+          used: { path: "$.data.used", pipes: ["number" as const] },
+          limit: { path: "$.data.limit", pipes: ["number" as const] },
+        },
+      ],
+    };
+    const adapter = new GenericHttpAdapter(legacyMapping, fetchMock as unknown as typeof fetch);
+    const desc = { ...MIMO_TOKEN_PLAN, adapter: "http" as const };
+    await adapter.fetchSnapshot(desc, INSTANCE, makeCtx());
+    expect(seen[0]!.redirect).toBeUndefined();
   });
 });
