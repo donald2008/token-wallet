@@ -114,6 +114,51 @@ describe("mimo/token-plan web_session golden(mock fixtures)", () => {
     // reset_at: "2026-10-31 23:59:59" UTC(空格分隔)→ unix 秒
     // 现算真值: timegm(2026-10-31 23:59:59 UTC) = 1793491199
     expect(byKey["monthly_credits"]!.reset_at).toBe(1_793_491_199);
+    // 套餐元信息(t_7672da28): plan_code/expired 随 patches 从 detail 端点下发
+    expect(byKey["monthly_credits"]!.plan_code).toBe("Standard");
+    expect(byKey["monthly_credits"]!.expired).toBe(false);
+  });
+
+  it("套餐元信息: detail 缺 planCode/expired → 两字段缺席(undefined), 不落假值", async () => {
+    // fixture 派生: 删 planCode/expired 模拟上游缺字段(缺席 ≠ 默认值, 0/0 骨架教训同源)
+    const detailMissing = JSON.parse(JSON.stringify(FIXTURES.tokenPlanDetail)) as {
+      data: Record<string, unknown>;
+    };
+    delete detailMissing.data.planCode;
+    delete detailMissing.data.expired;
+    const adapter = mimoCompositeAdapter(
+      makeFetch({
+        "/balance": { status: 200, body: FIXTURES.balance },
+        "/tokenPlan/detail": { status: 200, body: detailMissing },
+        "/tokenPlan/usage": { status: 200, body: FIXTURES.tokenPlanUsage },
+      }) as unknown as typeof fetch,
+    );
+    const snap = await adapter.fetchSnapshot(MIMO_TOKEN_PLAN, INSTANCE, makeCtx());
+    expect(snap.status).toBe("ok");
+    const credits = snap.metrics.find((m) => m.key === "monthly_credits")!;
+    expect(credits.used).toBe(3_200_000); // patches 主链路不受影响(机制扩展零回归)
+    expect(credits.reset_at).toBe(1_793_491_199);
+    expect(credits.plan_code).toBeUndefined();
+    expect(credits.expired).toBeUndefined();
+  });
+
+  it("套餐元信息: expired 非 boolean(如字符串) → 收窄为缺席, 禁假值兜底", async () => {
+    const detailStringExpired = JSON.parse(JSON.stringify(FIXTURES.tokenPlanDetail)) as {
+      data: Record<string, unknown>;
+    };
+    detailStringExpired.data.expired = "false"; // 上游漂移成字符串 → 不收窄, 缺席
+    const adapter = mimoCompositeAdapter(
+      makeFetch({
+        "/balance": { status: 200, body: FIXTURES.balance },
+        "/tokenPlan/detail": { status: 200, body: detailStringExpired },
+        "/tokenPlan/usage": { status: 200, body: FIXTURES.tokenPlanUsage },
+      }) as unknown as typeof fetch,
+    );
+    const snap = await adapter.fetchSnapshot(MIMO_TOKEN_PLAN, INSTANCE, makeCtx());
+    expect(snap.status).toBe("ok");
+    const credits = snap.metrics.find((m) => m.key === "monthly_credits")!;
+    expect(credits.plan_code).toBe("Standard"); // plan_code 不受影响
+    expect(credits.expired).toBeUndefined();
   });
 
   it("auth_expired 形态①: body code 401(HTTP 200 业务码判态)", async () => {

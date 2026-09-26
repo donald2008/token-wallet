@@ -56,6 +56,15 @@ export const MetricSchema = z.object({
    * 由宿主从历史快照计算附着(D-030 rate.ts); 非适配器直接产出。
    */
   daily_rate: z.number().finite().nonnegative().optional(),
+  /**
+   * 套餐元信息两字段(t_7672da28, 卡面③副行数据源):
+   * plan_code = 该窗口所属套餐的标识(如 MiMo planCode "Standard");
+   * expired = 到期标记(true=已过期)。通道可选声明, 缺席 = 字段不出现在快照
+   * (禁 const 假值兜底: 缺席 ≠ 默认值, 0/0 骨架教训同源)。
+   * 禁新增快照级顶层字段/metric kind/状态色(卡面③复用既有三态/异常语义)。
+   */
+  plan_code: z.string().optional(),
+  expired: z.boolean().optional(),
 });
 export type Metric = z.infer<typeof MetricSchema>;
 

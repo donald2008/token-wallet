@@ -40,6 +40,10 @@
       "types": "./dist/channels/mimo.d.ts",
       "import": "./dist/channels/mimo.js"
     },
+    "./web-session": {
+      "types": "./dist/channels/web-session-specs.d.ts",
+      "import": "./dist/channels/web-session-specs.js"
+    },
     "./mapping/jsonpath": {
       "types": "./dist/mapping/jsonpath.d.ts",
       "import": "./dist/mapping/jsonpath.js"

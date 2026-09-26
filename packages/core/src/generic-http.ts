@@ -44,6 +44,12 @@ export interface MetricMapping {
   granted?: FieldMapping;
   /** 余额制: 充值余额拆分 */
   topped_up?: FieldMapping;
+  /**
+   * 套餐元信息(t_7672da28): 窗口所属套餐标识 / 到期标记。
+   * 可选声明; 取不到 = 缺席(undefined), 禁 const 假值兜底。
+   */
+  plan_code?: FieldMapping;
+  expired?: FieldMapping;
 }
 
 /** GenericHttpAdapter 的通道声明(内置在通道目录, 用户不可见) */
@@ -313,6 +319,14 @@ export class GenericHttpAdapter {
         if (granted !== undefined) metric.granted = granted;
         const topped_up = optional<number>(mm.topped_up);
         if (topped_up !== undefined) metric.topped_up = topped_up;
+        // 套餐元信息(t_7672da28): plan_code 走 string 管道; expired 无 boolean 管道,
+        // 直取原始值后按 boolean 收窄(非 boolean 值 = 缺席, 不落假值)。
+        const plan_code = optional<string>(mm.plan_code);
+        if (plan_code !== undefined) metric.plan_code = plan_code;
+        if (mm.expired) {
+          const expiredRaw = fieldValue(json, mm.expired);
+          if (typeof expiredRaw === "boolean") metric.expired = expiredRaw;
+        }
         metrics.push(metric as ProviderSnapshot["metrics"][number]);
       } catch (err) {
         skipped.push(`${mm.key}: ${err instanceof Error ? err.message : String(err)}`);

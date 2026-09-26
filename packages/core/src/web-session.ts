@@ -32,7 +32,17 @@ export interface WebSessionEndpoint {
 }
 
 /** metric 字段名(patches 拷贝的源/目标字段域) */
-export type PatchableField = "used" | "limit" | "reset_at" | "remaining" | "currency" | "granted" | "topped_up";
+export type PatchableField =
+  | "used"
+  | "limit"
+  | "reset_at"
+  | "remaining"
+  | "currency"
+  | "granted"
+  | "topped_up"
+  // 套餐元信息(t_7672da28): 沿用既有 patches 单一覆写机制, 禁另起聚合通道
+  | "plan_code"
+  | "expired";
 
 /**
  * 跨端点字段覆写声明(通吃任意通道, 无通道专用代码):

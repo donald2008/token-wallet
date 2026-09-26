@@ -87,6 +87,10 @@ const MIMO_TOKEN_PLAN_DETAIL_MAPPING = mimoEndpointMapping(`${MIMO_BASE}/tokenPl
     limit: { const: 0 },
     // "yyyy-MM-dd HH:mm:ss"(UTC, 空格分隔)—— iso_epoch 管道正则容忍 `[T ]` 分隔
     reset_at: { path: "$.data.currentPeriodEnd", pipes: ["iso_epoch"] },
+    // 套餐元信息(t_7672da28, 卡面③副行数据源): 取不到 = 缺席, 禁 const 假值兜底
+    plan_code: { path: "$.data.planCode", pipes: ["string"] },
+    // expired 无 boolean 管道: 直取原始值后在 GenericHttpAdapter 内按 boolean 收窄
+    expired: { path: "$.data.expired" },
   },
 ]);
 
@@ -120,6 +124,9 @@ export const MIMO_WEB_SESSION_SPEC: WebSessionChannelSpec = {
     { key: "monthly_credits", field: "limit", endpoint: "tokenPlan/usage", sourceKey: "monthly_credits", sourceField: "limit" },
     // reset_at = detail 端点 currentPeriodEnd(UTC → unix 秒已在 iso_epoch 完成)
     { key: "monthly_credits", field: "reset_at", endpoint: "tokenPlan/detail", sourceKey: "monthly_credits", sourceField: "reset_at" },
+    // 套餐元信息(t_7672da28): detail 端点 planCode/expired 同源直拷(单一 patches 机制)
+    { key: "monthly_credits", field: "plan_code", endpoint: "tokenPlan/detail", sourceKey: "monthly_credits", sourceField: "plan_code" },
+    { key: "monthly_credits", field: "expired", endpoint: "tokenPlan/detail", sourceKey: "monthly_credits", sourceField: "expired" },
   ],
   setup_hint: "登录会话已失效 — 请重新登录 platform.xiaomimimo.com 并更新会话 Cookie",
 };
