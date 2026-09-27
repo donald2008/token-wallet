@@ -21,9 +21,11 @@ import {
   mcpGenKey,
   mcpGetAutostart,
   mcpGetConfig,
+  mcpGetStopOnQuit,
   mcpProbe,
   mcpRestart,
   mcpSetAutostart,
+  mcpSetStopOnQuit,
   mcpStart,
   mcpStop,
   type McpConfigView,
@@ -47,7 +49,9 @@ export function McpServicePanel(): ReactNode {
   const [status, setStatus] = useState<Status>("loading");
   const [config, setConfig] = useState<McpConfigView | null>(null);
   const [autostart, setAutostart] = useState(false);
-  const [busy, setBusy] = useState<"start" | "stop" | "genKey" | "autostart" | null>(null);
+  // t_d59a9ad8: 退出侧启停设置(与 mcpAutostart 正交)
+  const [stopOnQuit, setStopOnQuit] = useState(false);
+  const [busy, setBusy] = useState<"start" | "stop" | "genKey" | "autostart" | "stopOnQuit" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   // OB-03: 引导链接复制成功的瞬态反馈(与 key 复制同款 1.5s)
@@ -67,10 +71,12 @@ export function McpServicePanel(): ReactNode {
   const probe = useCallback(async () => {
     // ⚠️ 不要无条件 setError(null): 操作流的错误(start/stop/genKey 失败)会被下次 probe 抹掉
     // 只在用户主动重试时(probe 不在错误恢复路径)清空; 此处保留 error, 由操作路径自己清
-    const [r, c, a] = await Promise.all([mcpProbe(), mcpGetConfig(), mcpGetAutostart()]);
+    const [r, c, a, sq] = await Promise.all([mcpProbe(), mcpGetConfig(), mcpGetAutostart(), mcpGetStopOnQuit()]);
     // OB-03: 桥/降级路径可能返 null(config 缺失) — probe 不得因此崩, 复制钮已按 !config 守卫
     setConfig(c ?? null);
     setAutostart(a.mcpAutostart);
+    // t_d59a9ad8: 退出侧开关状态(缺省 false = 退出保持 daemon 运行)
+    setStopOnQuit(sq.stopOnQuit);
     // t_1b396e2f: get_config 已并入 build_id 比对 — daemon 陈旧(含 daemon 侧无字段而本机 exe 有)
     // 或因 restart 收敛后单点复查结果不一致时更新
     if (c?.daemonVersion?.stale) {
@@ -150,6 +156,19 @@ export function McpServicePanel(): ReactNode {
     try {
       const r = await mcpSetAutostart(next);
       setAutostart(r.mcpAutostart);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // t_d59a9ad8: 退出侧开关(与 mcpAutostart 正交, 无 OS 联动)
+  const onToggleStopOnQuit = async (next: boolean) => {
+    if (busy) return;
+    setBusy("stopOnQuit");
+    setError(null);
+    try {
+      const r = await mcpSetStopOnQuit(next);
+      setStopOnQuit(r.stopOnQuit);
     } finally {
       setBusy(null);
     }
@@ -323,6 +342,21 @@ export function McpServicePanel(): ReactNode {
           <span>{t("set.mcpAutostartLabel")}</span>
         </label>
         <p className="hint">{t("set.mcpAutostartHint")}</p>
+      </div>
+
+      {/* t_d59a9ad8: 退出侧启停开关(与开机自启正交) */}
+      <div className="mcp-row mcp-stop-on-quit-row">
+        <label className="check-row">
+          <input
+            type="checkbox"
+            data-testid="mcp-stop-on-quit"
+            checked={stopOnQuit}
+            disabled={busy !== null}
+            onChange={(e) => void onToggleStopOnQuit(e.currentTarget.checked)}
+          />
+          <span>{t("set.mcpStopOnQuitLabel")}</span>
+        </label>
+        <p className="hint">{t("set.mcpStopOnQuitHint")}</p>
       </div>
 
       <dl className="mcp-info">

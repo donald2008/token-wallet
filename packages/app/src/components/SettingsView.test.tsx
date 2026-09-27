@@ -31,6 +31,8 @@ const ipcMocks = vi.hoisted(() => ({
   mcpGenKey: vi.fn(),
   mcpGetAutostart: vi.fn(),
   mcpSetAutostart: vi.fn(),
+  mcpGetStopOnQuit: vi.fn(),
+  mcpSetStopOnQuit: vi.fn(),
   maskMcpKey: (key: string): string => {
     if (key.length <= 12) return "•".repeat(key.length);
     return `${key.slice(0, 4)}-••••-••••-••••-${key.slice(-4)}`;
@@ -76,6 +78,8 @@ beforeEach(() => {
     installed: true,
   });
   ipcMocks.mcpGetAutostart.mockResolvedValue({ mcpAutostart: true, osAutostart: true });
+  ipcMocks.mcpGetStopOnQuit.mockResolvedValue({ stopOnQuit: false });
+  ipcMocks.mcpSetStopOnQuit.mockImplementation(async (enabled: boolean) => ({ stopOnQuit: enabled }));
 });
 
 afterEach(() => {
@@ -463,6 +467,8 @@ describe("MCP 服务区块(D-055 / t_4bd214de)", () => {
     expect(panel?.querySelector('[data-testid="mcp-start"]')).toBeTruthy();
     expect(panel?.querySelector('[data-testid="mcp-stop"]')).toBeTruthy();
     expect(panel?.querySelector('[data-testid="mcp-autostart"]')).toBeTruthy();
+    // t_d59a9ad8: 退出侧开关与自启开关并存
+    expect(panel?.querySelector('[data-testid="mcp-stop-on-quit"]')).toBeTruthy();
     expect(panel?.querySelector('[data-testid="mcp-endpoint"]')).toBeTruthy();
     expect(panel?.querySelector('[data-testid="mcp-key-masked"]')).toBeTruthy();
     // OB-03: 引导入口语义 = 复制引导链接(操作行 + endpoint 行旁各一枚)

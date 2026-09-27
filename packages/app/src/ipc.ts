@@ -658,6 +658,21 @@ export async function mcpSetAutostart(enabled: boolean): Promise<McpAutostartVie
   return viaHost ?? { mcpAutostart: enabled, osAutostart: false };
 }
 
+/** 退出侧启停设置(t_d59a9ad8): app 退出时是否停止 MCP daemon(默认 false = 保持运行) */
+export interface McpStopOnQuitView {
+  stopOnQuit: boolean;
+}
+
+export async function mcpGetStopOnQuit(): Promise<McpStopOnQuitView> {
+  const viaHost = await hostInvoke<McpStopOnQuitView>("mcp_get_stop_on_quit");
+  return viaHost ?? { stopOnQuit: false };
+}
+
+export async function mcpSetStopOnQuit(enabled: boolean): Promise<McpStopOnQuitView> {
+  const viaHost = await hostInvoke<McpStopOnQuitView>("mcp_set_stop_on_quit", { enabled });
+  return viaHost ?? { stopOnQuit: enabled };
+}
+
 /** 拉取 daemon GET /guide, daemon 未跑 → 空 agents + reason */
 export interface McpAgentStep {
   id: string;

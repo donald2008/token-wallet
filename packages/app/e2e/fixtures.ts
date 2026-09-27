@@ -231,6 +231,26 @@ export const ipcMocks: Record<string, IpcHandler> = {
     }
     return { mcpAutostart: enabled, osAutostart: enabled };
   },
+  // ---- t_d59a9ad8: 退出侧启停设置 mock(读 localStorage token-wallet.mock.mcp.stopOnQuit) ----
+  mcp_get_stop_on_quit: () => {
+    let stopOnQuit = false;
+    try {
+      const raw = localStorage.getItem("token-wallet.mock.mcp.stopOnQuit");
+      if (raw !== null) stopOnQuit = JSON.parse(raw) === true;
+    } catch {
+      /* ignore */
+    }
+    return { stopOnQuit };
+  },
+  mcp_set_stop_on_quit: (args?: { enabled?: boolean }) => {
+    const enabled = Boolean(args?.enabled);
+    try {
+      localStorage.setItem("token-wallet.mock.mcp.stopOnQuit", JSON.stringify(enabled));
+    } catch {
+      /* ignore */
+    }
+    return { stopOnQuit: enabled };
+  },
   // ---- t_9255cb63: MCP daemon 读数据桥 2 通道 mock ----
   // 读 localStorage token-wallet.mock.mcp.usage(由 seedAgentUsage 注入),
   // 缺省 {ok:false, reason:"unreachable"} — 浏览器 dev 模式无 daemon 时降级显式空态。

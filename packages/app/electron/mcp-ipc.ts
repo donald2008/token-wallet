@@ -54,6 +54,7 @@ import {
 import { connectHost, displayHost } from "./mcp-address";
 import { loadMcpEnv, regenerateKey } from "./mcp-env";
 import { readMcpAutostart, resolveOsAutostart, writeMcpAutostart } from "./mcp-autostart";
+import { readMcpStopOnAppQuit, shouldStopDaemonOnAppQuit, writeMcpStopOnAppQuit } from "./mcp-stop-on-quit";
 import type { StoragePaths } from "./paths";
 
 /** electron app 的最小接口注入(单测可用 mock 替代) */
@@ -311,6 +312,20 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
     const mcp = readMcpAutostart(deps.settingsFilePathFn());
     const appActual = safeGetLoginItem(app);
     return { mcpAutostart: mcp, osAutostart: resolveOsAutostart(mcp, appActual) };
+  });
+
+  // ---- 通道: mcp_get_stop_on_quit(t_d59a9ad8, 退出侧启停设置) ----
+  // 与 mcpAutostart 正交(开启侧 vs 退出侧), 默认 false = 退出保持 daemon 运行(D-055 系设计)
+  ipcMain.handle("mcp_get_stop_on_quit", async () => {
+    const enabled = readMcpStopOnAppQuit(deps.settingsFilePathFn());
+    return { stopOnQuit: enabled, effective: shouldStopDaemonOnAppQuit(enabled) };
+  });
+
+  // ---- 通道: mcp_set_stop_on_quit(t_d59a9ad8) ----
+  ipcMain.handle("mcp_set_stop_on_quit", async (_event, payload: { enabled?: boolean }) => {
+    const enabled = Boolean(payload?.enabled);
+    writeMcpStopOnAppQuit(deps.settingsFilePathFn(), enabled);
+    return { stopOnQuit: enabled };
   });
 
   // ---- 通道: mcp_get_guide ----

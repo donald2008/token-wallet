@@ -193,6 +193,49 @@ test.describe("MCP 引导链路 UI(9/24 修订)", () => {
     expect(clip).toBe("http://127.0.0.1:9131/mcp");
   });
 
+  test("退出侧开关(t_d59a9ad8): 缺省不勾选 → 勾选 → mcp_set_stop_on_quit(true) 落盘回读", async ({ page }) => {
+    await page.goto("/");
+    await seedMcpState(page, { installed: true, alive: true });
+    await page.reload();
+    await page.getByTestId("settings-btn").click();
+    const panel = page.getByTestId("mcp-panel");
+    const toggle = panel.getByTestId("mcp-stop-on-quit");
+    // 缺省 false = 退出保持 daemon 运行(D-059)
+    await expect(toggle).not.toBeChecked();
+    // 说明小字: 保持运行可让 agent 上报在 app 关闭期间持续
+    await expect(panel.locator(".mcp-stop-on-quit-row .hint")).toContainText("agent 上报在 app 关闭期间可持续");
+    await toggle.click();
+    await expect(toggle).toBeChecked();
+    // reload 后 mock 桥从 localStorage 回读 → 落盘语义验证
+    await page.reload();
+    await page.getByTestId("settings-btn").click();
+    await expect(panel.getByTestId("mcp-stop-on-quit")).toBeChecked();
+  });
+
+  test("退出侧开关: 双开关并存不错位(autostart 与 stop-on-quit 垂直排布零重叠)", async ({ page }) => {
+    await page.goto("/");
+    await seedMcpState(page, { installed: true, alive: true });
+    await page.reload();
+    await page.getByTestId("settings-btn").click();
+    const panel = page.getByTestId("mcp-panel");
+    const auto = panel.getByTestId("mcp-autostart");
+    const stop = panel.getByTestId("mcp-stop-on-quit");
+    await expect(auto).toBeVisible();
+    await expect(stop).toBeVisible();
+    // 几何: 两个开关行无重叠(quantified DOM 探针, 非 vision)
+    const boxes = await page.evaluate(() => {
+      const rect = (tid: string) => {
+        const el = document.querySelector(`[data-testid="${tid}"]`);
+        return el ? el.getBoundingClientRect() : null;
+      };
+      return { auto: rect("mcp-autostart"), stop: rect("mcp-stop-on-quit") };
+    });
+    expect(boxes.auto).toBeTruthy();
+    expect(boxes.stop).toBeTruthy();
+    // stop 行 top 不早于 autostart 行 bottom(垂直排布, 不错位不叠压)
+    expect(boxes.stop!.y).toBeGreaterThanOrEqual(boxes.auto!.y + boxes.auto!.height - 1);
+  });
+
   test("主钮复制 guide → toast 行出现并说明下一步", async ({ page, context }) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.goto("/");

@@ -24,6 +24,8 @@ const ipcMocks = vi.hoisted(() => ({
   mcpGenKey: vi.fn(),
   mcpGetAutostart: vi.fn(),
   mcpSetAutostart: vi.fn(),
+  mcpGetStopOnQuit: vi.fn(),
+  mcpSetStopOnQuit: vi.fn(),
   mcpRestart: vi.fn(),
   maskMcpKey: (key: string): string => {
     if (key.length <= 12) return "•".repeat(key.length);
@@ -62,6 +64,8 @@ beforeEach(() => {
     installed: true,
   });
   ipcMocks.mcpGetAutostart.mockResolvedValue({ mcpAutostart: true, osAutostart: true });
+  ipcMocks.mcpGetStopOnQuit.mockResolvedValue({ stopOnQuit: false });
+  ipcMocks.mcpSetStopOnQuit.mockImplementation(async (enabled: boolean) => ({ stopOnQuit: enabled }));
   ipcMocks.mcpStart.mockResolvedValue({ started: true, pid: 12345 });
   ipcMocks.mcpStop.mockResolvedValue({ stopped: true });
   ipcMocks.mcpGenKey.mockResolvedValue({
@@ -347,6 +351,71 @@ describe("McpServicePanel: autostart toggle", () => {
       for (let i = 0; i < 5; i++) await Promise.resolve();
     });
     expect(ipcMocks.mcpSetAutostart).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("McpServicePanel: 退出侧启停开关(t_d59a9ad8)", () => {
+  it("渲染: 开关可见 + 缺省 false(退出保持 daemon 运行) + 说明小字在场", async () => {
+    ipcMocks.mcpGetStopOnQuit.mockResolvedValue({ stopOnQuit: false });
+    setLang("zh");
+    await render();
+    const toggle = container.querySelector('[data-testid="mcp-stop-on-quit"]') as HTMLInputElement;
+    expect(toggle).toBeTruthy();
+    expect(toggle.checked).toBe(false);
+    // 双开关并存: autostart 与 stop-on-quit 同时在场
+    expect(container.querySelector('[data-testid="mcp-autostart"]')).toBeTruthy();
+    // 说明小字(卡体要求: 保持运行可让 agent 上报在 app 关闭期间持续)
+    expect(container.textContent).toContain("agent 上报在 app 关闭期间可持续");
+  });
+
+  it("渲染: stopOnQuit=true → 勾选态", async () => {
+    ipcMocks.mcpGetStopOnQuit.mockResolvedValue({ stopOnQuit: true });
+    await render();
+    const toggle = container.querySelector('[data-testid="mcp-stop-on-quit"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+  });
+
+  it("切换落盘: 点击 → mcpSetStopOnQuit(true) → 回读新值", async () => {
+    await render();
+    const toggle = container.querySelector('[data-testid="mcp-stop-on-quit"]') as HTMLInputElement;
+    await act(async () => {
+      fireClick(toggle);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    expect(ipcMocks.mcpSetStopOnQuit).toHaveBeenCalledWith(true);
+    expect(toggle.checked).toBe(true);
+  });
+
+  it("与 mcpAutostart 正交: 切换退出侧不触发 mcpSetAutostart", async () => {
+    await render();
+    const toggle = container.querySelector('[data-testid="mcp-stop-on-quit"]') as HTMLInputElement;
+    await act(async () => {
+      fireClick(toggle);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    expect(ipcMocks.mcpSetAutostart).not.toHaveBeenCalled();
+  });
+
+  it("busy 时禁用(busy 集合含 stopOnQuit)", async () => {
+    // probe 挂起 → 组件 busy? 不, busy 只在操作中。直接用 autostart busy 路径验证互斥:
+    // 简化: 验证 disabled 属性跟随 busy —— mcpSetAutostart 挂起时点击 autostart 进入 busy,
+    // 此时 stop-on-quit 同样 disabled
+    let release: (v: unknown) => void = () => {};
+    ipcMocks.mcpSetAutostart.mockImplementationOnce(
+      () => new Promise((resolve) => { release = (v: unknown) => resolve(v); }),
+    );
+    await render();
+    const autostart = container.querySelector('[data-testid="mcp-autostart"]') as HTMLInputElement;
+    await act(async () => {
+      fireClick(autostart);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    const toggle = container.querySelector('[data-testid="mcp-stop-on-quit"]') as HTMLInputElement;
+    expect(toggle.disabled).toBe(true);
+    await act(async () => {
+      release({ mcpAutostart: false, osAutostart: false });
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
   });
 });
 

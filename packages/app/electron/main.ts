@@ -44,7 +44,10 @@ import {
 } from "./auth-session";
 import { authDefFor } from "./auth-defs";
 import { AppUpdaterController } from "./updater";
-import { registerMcpIpc } from "./mcp-ipc";
+import { registerMcpIpc, defaultHttpShim } from "./mcp-ipc";
+import { defaultDiscoveryShim, defaultSpawnShim } from "./mcp-daemon";
+import { readMcpStopOnAppQuit, shouldStopDaemonOnAppQuit } from "./mcp-stop-on-quit";
+import { stopDaemonOnAppQuit } from "./mcp-quit-orchestrator";
 import {
   cancelWebSessionAuth,
   startWebSessionAuth,
@@ -676,9 +679,34 @@ if (!gotLock) {
   app.on("window-all-closed", () => {
     // 托盘常驻: 窗口全关不退出(退出走托盘菜单)
   });
-  app.on("will-quit", () => {
-    abortAllAuthSessions(); // 授权会话残留子进程清理(t_fb8c44d8)
-    abortAllWebSessionAuths(); // web_session 授权窗残留清理(t_e371caca)
-    closeAll(); // sqlite 连接统一关闭(见 sqlite.ts), 失败不阻断退出
+  app.on("will-quit", (event) => {
+    // t_d59a9ad8: 退出侧 daemon 停止 — 读 mcpStopOnAppQuit(默认 false = 孤儿存活, D-055 系设计),
+    // true 时 ≤3s 停 daemon(pid 快路径 + 端口反查兜底复用既有 stop 流程), 超时/失败静默放行退出。
+    // preventDefault + async 编排 + app.exit(): will-quit 处理器内不可依赖同步完成,
+    // 又不能让窗口/IPC 先死 —— 用 preventDefault 挂起退出, 编排完成后 app.exit() 重入。
+    const shouldStop = readMcpStopOnAppQuit(settingsFilePath());
+    if (!shouldStopDaemonOnAppQuit(shouldStop)) {
+      abortAllAuthSessions(); // 授权会话残留子进程清理(t_fb8c44d8)
+      abortAllWebSessionAuths(); // web_session 授权窗残留清理(t_e371caca)
+      closeAll(); // sqlite 连接统一关闭(见 sqlite.ts), 失败不阻断退出
+      return;
+    }
+    event.preventDefault();
+    const quitNow = () => {
+      abortAllAuthSessions();
+      abortAllWebSessionAuths();
+      closeAll();
+      app.exit(0);
+    };
+    void stopDaemonOnAppQuit({
+      spawn: defaultSpawnShim(),
+      http: defaultHttpShim(),
+      discovery: defaultDiscoveryShim(),
+      platform: process.platform,
+      configDir: () => storagePaths().configDir,
+    }).then((r) => {
+      console.log(`[will-quit] mcp stop-on-quit result: stopped=${r.stopped} reason=${r.reason ?? "-"}`);
+      quitNow();
+    });
   });
 }
