@@ -368,3 +368,76 @@ describe("startWebSessionAuth(授权流全链路)", () => {
     );
   });
 });
+
+/**
+ * t_bc344087 ①: 首探前置 —— 有现成 cookie 就不开窗。
+ * 真机反馈(用户 9/27): defaultSession 持久化后已登录用户点「重新授权」必命中现成 cookie,
+ * 原实现先 createWindow/showWindow 再同步首探 → 窗口必闪一次才被成功出口关掉。
+ */
+describe("t_bc344087 ① 首探前置(有现成 cookie 不开窗)", () => {
+  it("现成 cookie 命中 → 零窗口 + 直接成功出口(createWindow/destroy 未调用)", async () => {
+    const h = makeHarness();
+    h.session.setCookie("api-platform_serviceToken", "<mock-token>");
+    h.session.setCookie("userId", "<mock-user-id>");
+    const p = startWebSessionAuth(h.shims, {
+      instanceId: "inst-pre-1",
+      auth: MIMO_AUTH,
+      saveSecret: (svc, key, value) => {
+        h.saved.set(`${svc}:${key}`, value);
+        return Promise.resolve();
+      },
+      secretKey: "inst-pre-1:web_session",
+      pollMs: 10,
+    });
+    const res = await p;
+    expect(res).toEqual({ ok: true, saved: true });
+    expect(h.createdUrls).toEqual([]); // 不开授权窗
+    expect(h.win.win.destroy).not.toHaveBeenCalled();
+    expect(h.saved.get("token-wallet:inst-pre-1:web_session")).toBe(
+      "api-platform_serviceToken=<mock-token>; userId=<mock-user-id>",
+    );
+    expect(webSessionAuthCount()).toBe(0);
+  });
+
+  it("现成 cookie 但落盘失败 → 显式错误出口(仍不开窗)", async () => {
+    const h = makeHarness();
+    h.session.setCookie("api-platform_serviceToken", "<mock-token>");
+    h.session.setCookie("userId", "<mock-user-id>");
+    const p = startWebSessionAuth(h.shims, {
+      instanceId: "inst-pre-2",
+      auth: MIMO_AUTH,
+      saveSecret: () => Promise.reject(new Error("safeStorage 不可用")),
+      secretKey: "inst-pre-2:web_session",
+      pollMs: 10,
+    });
+    const res = await p;
+    expect(res.ok).toBe(false);
+    expect(res.saved).toBe(false);
+    expect(res.message).toContain("落盘失败");
+    expect(h.createdUrls).toEqual([]);
+  });
+
+  it("未命中 → 照旧开窗轮询(既有路径), cookie 落地即成功出口", async () => {
+    const h = makeHarness();
+    const p = startWebSessionAuth(h.shims, {
+      instanceId: "inst-pre-3",
+      auth: MIMO_AUTH,
+      saveSecret: (svc, key, value) => {
+        h.saved.set(`${svc}:${key}`, value);
+        return Promise.resolve();
+      },
+      secretKey: "inst-pre-3:web_session",
+      pollMs: 10,
+    });
+    // 首探未命中 → 才开窗(既有行为)
+    expect(h.createdUrls).toEqual([MIMO_AUTH.login_url]);
+    await vi.advanceTimersByTimeAsync(15);
+    expect(h.saved.size).toBe(0);
+    h.session.setCookie("api-platform_serviceToken", "<mock-token>");
+    h.session.setCookie("userId", "<mock-user-id>");
+    await vi.advanceTimersByTimeAsync(15);
+    const res = await p;
+    expect(res).toEqual({ ok: true, saved: true });
+    expect(h.win.win.destroy).toHaveBeenCalled();
+  });
+});

@@ -3,8 +3,9 @@
  *
  * 与 command_auth(auth-session.ts)同哲学: 用户零命令行、零抄串。
  * 交互流(卡面 ①):
- *   1. web_session_auth_start(instanceId, auth) → 主进程开**独立 BrowserWindow**
- *      加载 login_url(未登录会被小米 SSO 接管至 account.xiaomi.com)
+ *   1. **首探前置(t_bc344087)**: 先读目标域 session cookie —— 现成登录态命中 → 直接落盘
+ *      + 成功出口, **不创建窗口**(defaultSession 持久化后已登录用户点重新授权必命中, 常态);
+ *      未命中才开**独立 BrowserWindow** 加载 login_url(未登录会被小米 SSO 接管至 account.xiaomi.com)
  *   2. 轮询 session.cookies: cookie_query_domains(缺省=[cookie_domain])各域并集中
  *      required_cookies 全部出现 → known_cookies(缺省=required)分层拼装
  *      `name=value; …`(required 按声明序, known 有则带) → keyring blob 加密落盘
@@ -199,10 +200,6 @@ async function runAuthFlow(shims: WebSessionAuthShims, opts: StartOptions): Prom
     });
 
     // ---- 开授权窗(独立 BrowserWindow; closed = 用户手动关窗 = 静默取消) ----
-    win = shims.createWindow(auth.login_url);
-    win.on("closed", abort);
-    shims.showWindow(win);
-
     const session = shims.getSession();
     // 就绪检测查询域(L4 缺陷#2): Electron domain 过滤器不匹配父域 cookie, 声明了
     // cookie_query_domains(如 mimo 父域 .xiaomimimo.com)时逐域取并集; 按声明序去重
@@ -225,11 +222,8 @@ async function runAuthFlow(shims: WebSessionAuthShims, opts: StartOptions): Prom
       }
     };
 
-    const attempt = (): void => {
-      if (settled) return;
-      const cookie = buildCookieString(readTargetCookies(), auth.required_cookies, auth.known_cookies);
-      if (cookie === null) return; // 未就绪(静默续轮询; 值不落日志)
-      // 就绪 → 落 keyring(safeStorage 与 api_key 同级) → 关窗 → 成功出口
+    /** 就绪 → 落 keyring(safeStorage 与 api_key 同级) → 成功出口 / 落盘失败出口(不含 cookie 值) */
+    const saveAuthorized = (cookie: string): void => {
       void opts
         .saveSecret("token-wallet", opts.secretKey, cookie)
         .then(() => finish({ ok: true, saved: true }))
@@ -243,8 +237,30 @@ async function runAuthFlow(shims: WebSessionAuthShims, opts: StartOptions): Prom
         });
     };
 
+    const attempt = (): void => {
+      if (settled) return;
+      const cookie = buildCookieString(readTargetCookies(), auth.required_cookies, auth.known_cookies);
+      if (cookie === null) return; // 未就绪(静默续轮询; 值不落日志)
+      saveAuthorized(cookie);
+    };
+
+    // ---- t_bc344087 ① 首探前置: 有现成 cookie 就不开窗 ----
+    // 真机反馈(用户 9/27): 「每次点重新授权都弹出页面显示已登录」——defaultSession 持久化后
+    // 已登录用户首探必命中, 原实现先开窗再首探 → 窗口必闪一次。命中 → 直接落盘 + 成功出口,
+    // 全程不创建窗口; 未命中才走下面的开窗轮询(既有路径不动)。
+    const readyCookie = buildCookieString(readTargetCookies(), auth.required_cookies, auth.known_cookies);
+    if (readyCookie !== null) {
+      saveAuthorized(readyCookie);
+      return;
+    }
+
+    // ---- 未命中: 开授权窗(独立 BrowserWindow; closed = 用户手动关窗 = 静默取消) ----
+    win = shims.createWindow(auth.login_url);
+    win.on("closed", abort);
+    shims.showWindow(win);
+
     pollTimer = setInterval(attempt, pollMs);
-    // 先同步探一次(授权窗打开前可能已有合法会话 cookie —— 理论上不该发生, 探测无害)
+    // 开窗后立即探一次(既有逻辑: 开窗瞬间 cookie 可能已就绪, 不必等首个 poll 周期)
     attempt();
     timeoutTimer = setTimeout(() => {
       if (settled) return;
