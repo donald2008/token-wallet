@@ -79,6 +79,33 @@ async function resolveCredential(ref: unknown): Promise<string> {
 }
 
 /**
+ * t_bc344087 ②: web_session 通道凭据引用是否可用。
+ * web_session 的凭据 = **授权产物**(授权流把 cookie 串写进 keyring, key = `<实例id>:web_session`),
+ * 实例配置只留 CredentialRef。引用缺失/非法(存量旧配置 / 手改配置)语义 = 「还没授权」而非
+ * 配置错误 → 归 auth_expired 走 WebSessionReauthGate「重新授权」引导, 用户点一次即可自助恢复。
+ * 其它通道(api_key 缺失 = 真配置错误)一律保持 credInvalid 报错语义不变。
+ */
+function webSessionCredRefPresent(inst: InstanceConfig): boolean {
+  const ref = inst.params.web_session as CredentialRef | undefined;
+  return !!ref && typeof ref === "object" && typeof ref.key === "string" && ref.key.length > 0;
+}
+
+/**
+ * t_bc344087 ②: web_session 卡授权态快照归一 —— auth_expired 只留用户可行动信息。
+ * 内部诊断串(「凭据引用非法」/「钥匙串条目不存在: x」/「http 401」)不进用户可见面:
+ * web_session 卡所有会话类失败的出口都是同一个动作(点「重新授权」), 卡上 setup_hint +
+ * 授权钮已给全(用户 9/27 真机反馈: 卡片裸报「凭据引用非法」)。
+ * setup_hint 兜底 = 通用引导语 —— ProviderCard 渲染重授权钮的条件正是
+ * `status=auth_expired && setup_hint 非空`, 兜底保证授权出口不因通道映射缺声明而消失。
+ */
+function webSessionAuthCardSnapshot(snap: ProviderSnapshot): ProviderSnapshot {
+  if (snap.status !== "auth_expired") return snap;
+  const hint = snap.setup_hint?.trim() ? snap.setup_hint : t("engine.webSessionNotAuthorized");
+  if (!snap.error_message && hint === snap.setup_hint) return snap;
+  return { ...snap, setup_hint: hint, error_message: undefined };
+}
+
+/**
  * P0-8: 未接入通道的显式快照 — 不允许静默跳过(无快照=面板永远空态的实锤 bug)。
  * 面板据此渲染"该通道暂未接入"灰卡(status=unsupported, §2.1 整卡文字不显示假数据)。
  * 长期方案按注册表收敛(P2 多通道适配器), 本卡只保证"不静默"。
@@ -167,7 +194,8 @@ export class RuntimeEngine {
       // 非 web_session 通道路径字节级不变(既有 api_key 通道零回归)。
       // t_7672da28 U2: 工厂按 channel 查 spec(spec 从通道目录注册表取, 引擎侧零通道
       // 专用代码——round-1 P2-2 收口); 未知/非 web_session 通道显式抛 CompositeAdapterError。
-      const adapter = descriptor.auth?.kind === "web_session"
+      const isWebSession = descriptor.auth?.kind === "web_session";
+      const adapter = isWebSession
         ? compositeAdapterFor(inst.channel, runtimeFetch)
         : new GenericHttpAdapter(mapping, runtimeFetch);
 
@@ -187,6 +215,12 @@ export class RuntimeEngine {
         // 若未来实测到同 channel 多 http 实例撞锁, 此处契约已就位, 无需再改。
         channel: inst.channel,
         fetch: async (ctx) => {
+          // t_bc344087 ②: web_session 凭据 = 授权产物 —— 引用缺失/非法 = 「还没授权」(非配置错误),
+          // 直接归授权引导快照(不调适配器: 内部诊断串不上卡); 点「重新授权」落盘后即采, 存量
+          // 旧配置实例不再永久卡在通用错误卡。其它通道行为不变(下面 catch 仍走 credInvalid 语义)。
+          if (isWebSession && !webSessionCredRefPresent(inst)) {
+            return RuntimeEngine.webSessionUnauthorizedSnapshot(inst, descriptor);
+          }
           const adapterCtx: AdapterContext = {
             signal: ctx.signal,
             timeoutMs: ctx.timeoutMs,
@@ -195,7 +229,9 @@ export class RuntimeEngine {
           };
           // t_5b52b633 兜底: 凭据解析/适配器意外抛错 → 显式 error 快照(不静默蒸发)
           try {
-            return await adapter.fetchSnapshot(descriptor, coreInstance, adapterCtx);
+            const snap = await adapter.fetchSnapshot(descriptor, coreInstance, adapterCtx);
+            // t_bc344087 ②: web_session 卡的会话类失败只露授权引导(内部诊断串不进用户可见面)
+            return isWebSession ? webSessionAuthCardSnapshot(snap) : snap;
           } catch (err) {
             return RuntimeEngine.errorSnapshot(inst, descriptor.plan_type, err, descriptor.logo);
           }
@@ -227,6 +263,30 @@ export class RuntimeEngine {
       alerts: [{ level: "critical", message, code: "adapter_threw" }],
       error_message: message,
       logo,
+    };
+  }
+
+  /**
+   * t_bc344087 ②: web_session 缺凭据引用(存量旧配置/手改配置) → 授权引导快照。
+   * 语义 = 「尚未授权」而非配置错误: 状态归 auth_expired(黄灯「待授权」) + setup_hint 引导,
+   * ProviderCard 据此渲染 WebSessionReauthGate 的「重新授权」钮(用户点授权 → 落盘 → 即采)。
+   * 不落 credInvalid 类内部串: 用户可见面只留可行动信息。
+   */
+  private static webSessionUnauthorizedSnapshot(
+    inst: InstanceConfig,
+    descriptor: ChannelDescriptor,
+  ): ProviderSnapshot {
+    const hint = t("engine.webSessionNotAuthorized");
+    return {
+      provider_id: inst.id,
+      display_name: inst.name,
+      plan_type: descriptor.plan_type,
+      fetched_at: Math.floor(Date.now() / 1000),
+      status: "auth_expired",
+      metrics: [],
+      alerts: [{ level: "warn", message: hint, code: "web_session_not_authorized" }],
+      setup_hint: hint,
+      logo: descriptor.logo,
     };
   }
 

@@ -789,3 +789,71 @@ describe("t_5d8c3c81: 采集失败只读缓存(失败保留旧 metrics + 不落�
     engine.stop();
   });
 });
+
+/**
+ * t_bc344087 ②: web_session 缺凭据归 auth_expired 授权引导(禁裸报内部错误串)。
+ *
+ * 修复前基线(本机实测): web_session 实例 ref 缺失时 core 组合器已归 auth_expired + setup_hint,
+ * 但快照 error_message 仍是内部串「凭据引用非法」; 钥匙串条目缺失时是「钥匙串条目不存在: x」——
+ * 卡片把这两个内部串当正文显示(用户 9/27 真机反馈「裸报凭据引用非法」)。
+ * 本卡要求: web_session 卡的凭据类失败一律 auth_expired + setup_hint 引导
+ * (复用 WebSessionReauthGate「重新授权」出口), 内部串不上卡; 其它通道 credInvalid 语义不变。
+ */
+describe("t_bc344087: web_session 缺凭据 → auth_expired 授权引导(非配置错误)", () => {
+  const wsInstance = (id: string, params: InstanceConfig["params"]): InstanceConfig => ({
+    id,
+    channel: "mimo/token-plan",
+    name: `MiMo Token Plan ${id}`,
+    params,
+  });
+
+  async function waitSnapshot(engine: RuntimeEngine, id: string, timeoutMs = 2_000): Promise<ProviderSnapshot> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const found = engine.snapshots.find((s) => s.provider_id === id);
+      if (found) return found;
+      if (Date.now() > deadline) throw new Error(`等待快照超时: ${id}`);
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  }
+
+  it("ref 缺失 → auth_expired + setup_hint 引导, 全快照不含「凭据引用非法」", async () => {
+    const engine = new RuntimeEngine([wsInstance("ws-missing-ref", {})], fakeStorage);
+    engine.subscribe(() => {});
+    engine.start();
+    const snap = await waitSnapshot(engine, "ws-missing-ref");
+    expect(snap.status).toBe("auth_expired");
+    // 授权引导出口 = setup_hint 非空(WebSessionReauthGate 渲染条件) + 灯位语义
+    expect(snap.setup_hint ?? "").not.toBe("");
+    // 内部错误串不上卡(用户可见面只有引导)
+    expect(JSON.stringify(snap)).not.toContain("凭据引用非法");
+    engine.stop();
+  });
+
+  it("ref 有效但钥匙串条目缺失(存量脏实例) → auth_expired 引导, 内部串不上卡", async () => {
+    const engine = new RuntimeEngine(
+      [wsInstance("ws-no-secret", { web_session: { source: "store", key: "ws-no-secret:web_session" } })],
+      fakeStorage,
+    );
+    engine.subscribe(() => {});
+    engine.start();
+    const snap = await waitSnapshot(engine, "ws-no-secret");
+    expect(snap.status).toBe("auth_expired");
+    expect(snap.setup_hint ?? "").not.toBe("");
+    expect(JSON.stringify(snap)).not.toContain("钥匙串条目不存在");
+    engine.stop();
+  });
+
+  it("非 web_session 通道(api_key)缺 ref → 仍 error + credInvalid 语义不回归", async () => {
+    const engine = new RuntimeEngine(
+      [{ id: "api-missing-ref", channel: "deepseek/balance", name: "DeepSeek #1", params: {} }],
+      fakeStorage,
+    );
+    engine.subscribe(() => {});
+    engine.start();
+    const snap = await waitSnapshot(engine, "api-missing-ref");
+    expect(snap.status).toBe("error");
+    expect(snap.error_message).toContain("凭据引用非法");
+    engine.stop();
+  });
+});

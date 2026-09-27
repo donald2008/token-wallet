@@ -297,6 +297,7 @@ export const zh = {
   },
   engine: {
     credInvalid: "凭据引用非法",
+    webSessionNotAuthorized: "尚未授权 — 点「重新授权」获取平台会话(浏览器已登录会话会被直接复用, 不弹窗)",
     keyringMissing: "钥匙串条目不存在: {key}",
     envMissing: "环境变量未设置: {name}",
     credSourceUnsupported: "凭据源暂不支持: {source}",
@@ -676,6 +677,7 @@ export const en: Dict = {
   },
   engine: {
     credInvalid: "Invalid credential reference",
+    webSessionNotAuthorized: "Not authorized yet — click “Re-authorize” to capture the platform session (an existing browser login is reused, no popup)",
     keyringMissing: "Keychain entry not found: {key}",
     envMissing: "Environment variable not set: {name}",
     credSourceUnsupported: "Credential source not supported: {source}",
