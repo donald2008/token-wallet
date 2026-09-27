@@ -15,6 +15,8 @@
  * - 版本要求不硬编码: Node 下限读 package.json engines.node, pnpm 版本读 packageManager
  * - 幂等: 重复运行安全; 依赖已就绪时跳过安装
  * - D-034 后无原生模块 → 不需要任何 rebuild 步骤; 若检测到 better-sqlite3 残留会提示清理
+ * - 产物新鲜度: core dist / MCP daemon 构建产物落后于 git HEAD 时启动前自动重建
+ *   (marker 对比, 禁 mtime; TW_SKIP_CORE_BUILD=1 / TW_SKIP_DAEMON_BUILD=1 豁免)
  */
 import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -27,6 +29,10 @@ const argv = new Set(process.argv.slice(2));
 const CHECK_ONLY = argv.has("--check");
 const WEB_MODE = argv.has("--web");
 const FORCE_INSTALL = argv.has("--force");
+
+// core dist 新鲜度判定路径(5.5 段实现; --check 块在 5.5 之前执行, 常量必须在此声明)
+const coreDistDir = path.join(ROOT, "packages", "core", "dist");
+const coreMarkerPath = path.join(coreDistDir, ".tw-build-id");
 
 // ---- 输出 ----------------------------------------------------------------
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -152,7 +158,20 @@ if (needInstall) {
 }
 
 if (CHECK_ONLY && !WEB_MODE) {
-  // --check 也报告 daemon 新鲜度(只报告不构建 — CI/首次准备场景需要知道会不会卡构建)
+  // --check 也报告产物新鲜度(只报告不构建 — CI/首次准备场景需要知道会不会卡构建)
+  info("检查 core dist 产物新鲜度");
+  const cs = coreStaleness();
+  if (!cs.stale) {
+    ok(cs.reason === "fresh" ? `core dist 与当前代码一致(${cs.builtHash})` : "git 不可用, 跳过新鲜度判定");
+  } else {
+    const why =
+      cs.reason === "missing"
+        ? "产物不存在(起壳时将自动构建)"
+        : cs.reason === "no_marker"
+          ? "产物无构建标记(起壳时将自动重建)"
+          : `产物构建于 ${cs.builtHash} ≠ 当前 ${cs.headHash}(起壳时将自动重建)`;
+    console.log(`    ${yellow("!")} core dist 陈旧 — ${why}`);
+  }
   info("检查 MCP daemon 产物新鲜度");
   const st = daemonStaleness();
   if (!st.stale) {
@@ -165,7 +184,80 @@ if (CHECK_ONLY && !WEB_MODE) {
   process.exit(0);
 }
 
-// ---- 5.5 MCP daemon 产物新鲜度(9/24 老大提议: 「启动前重新构建 mcp 服务(如果需要的话)」) ----
+// ---- 5.5 core dist 产物新鲜度(t_4106ff2e: 9/27 真机第三实例) -----------------
+// 问题背景: app/mcp-server 经 exports 解析 packages/core/dist/*.js, dist 不进 git —
+// git pull 前进后 dist 不跟着变 → 用户真机踩实锤(pull 了 login_url 修复源码, app 读旧
+// dist, 授权窗仍开旧地址); CI 全新 checkout 同款坑(skill 已记档)。pnpm run dev 不 build core。
+// 新鲜度判定: 读 dist/.tw-build-id marker 的 <git短hash> 段 vs 当前 HEAD 短hash —
+//   一致 → 新鲜跳过(日常启动零等待); 不一致/缺失/解析失败 → 陈旧, 现场重建。
+//   禁 mtime 对比(git checkout 会把 mtime 刷成 checkout 时刻, 旧产物反而显"新")。
+// marker 注入: packages/core build 脚本构建完成后写(stamp-build-id.mjs), 不依赖调用方。
+// 豁免: TW_SKIP_CORE_BUILD=1(与 TW_SKIP_DAEMON_BUILD 同款约定)。
+// --check: 只报告不构建; --web 模式同样生效(vite dev:web 也解析 core dist)。
+// (coreDistDir/coreMarkerPath 声明在文件头, --check 块先行消费)
+
+function readCoreGitHash() {
+  try {
+    const text = fs.readFileSync(coreMarkerPath, "utf8");
+    const m = text.match(/TW_CORE_BUILD_ID=([0-9a-f]+)-/);
+    return m ? m[1] : null;
+  } catch {
+    return null; // 文件不存在/不可读 → 无 marker
+  }
+}
+
+function coreStaleness() {
+  const entry = path.join(coreDistDir, "index.js");
+  if (!fs.existsSync(entry)) return { stale: true, reason: "missing" };
+  const builtHash = readCoreGitHash();
+  if (!builtHash) return { stale: true, reason: "no_marker" };
+  let headHash = null;
+  try {
+    headHash = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: ROOT, encoding: "utf8" }).stdout.trim();
+  } catch { /* git 不可用 → 视为无法判定 */ }
+  if (!headHash) return { stale: false, reason: "no_git" }; // 无法判定时不折腾(保守跳过)
+  return { stale: builtHash !== headHash, reason: builtHash !== headHash ? "stale_hash" : "fresh", builtHash, headHash };
+}
+
+function buildCore() {
+  console.log(dim(`    ${pmName} -C packages/core build…`));
+  if (run(pmName, ["-C", path.join("packages", "core"), "build"]).code !== 0) return false;
+  // 复验 marker 在位(构建脚本自带注入, 缺失 = 脚本被改动, 显式报错不静默)
+  return fs.existsSync(coreMarkerPath);
+}
+
+if (process.env.TW_SKIP_CORE_BUILD !== "1") {
+  info("检查 core dist 产物新鲜度");
+  const cs = coreStaleness();
+  if (!cs.stale) {
+    ok(cs.reason === "fresh" ? `core dist 与当前代码一致(${cs.builtHash})` : "git 不可用, 跳过新鲜度判定");
+  } else {
+    const why =
+      cs.reason === "missing"
+        ? "产物不存在"
+        : cs.reason === "no_marker"
+          ? "产物无构建标记(太旧)"
+          : `产物构建于 ${cs.builtHash}, 当前代码 ${cs.headHash}`;
+    console.log(`    ${yellow("!")} core dist 陈旧 — ${why}`);
+    console.log(dim("    提示: core build 约 10-30 秒; 跳过请设 TW_SKIP_CORE_BUILD=1"));
+    if (!buildCore()) {
+      fail("core dist 重建失败", [
+        "看上方 tsc 报错; 或手动执行: corepack pnpm -C packages/core build",
+        "确认要用旧产物启动可设 TW_SKIP_CORE_BUILD=1(app 可能行为不符)",
+      ]);
+    }
+    // 复验: 重建后产物必须在位且标记与 HEAD 一致
+    const after = coreStaleness();
+    if (after.stale) {
+      fail("core dist 重建后仍陈旧", [`build_id=${after.builtHash ?? "(无)"} vs HEAD=${after.headHash ?? "(无)"} — 检查 packages/core build 脚本的 marker 注入段`]);
+    }
+    ok(`core dist 已重建(${after.headHash})`);
+  }
+} else {
+  info("core dist 构建检查 — TW_SKIP_CORE_BUILD=1 豁免跳过");
+}
+
+// ---- 5.6 MCP daemon 产物新鲜度(9/24 老大提议: 「启动前重新构建 mcp 服务(如果需要的话)」) ----
 // 问题背景: daemon = resources/ 下的 PyInstaller 现场构建产物(不进 git), 代码前进后 exe 不会跟着变 —
 // 两次真机事故同根(置顶折线 hour 维缺数据 / guide 旧版): UI 新 daemon 旧, 排障绕远。
 // 新鲜度判定: 读产物尾部 TW_MCP_BUILD_ID marker 的 <git短hash> 段 vs 当前 HEAD 短hash —
