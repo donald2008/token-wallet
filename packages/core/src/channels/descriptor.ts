@@ -47,6 +47,19 @@ export const WebSessionAuthSchema = z.object({
   required_cookies: z.array(z.string().min(1)).min(1),
   /** 登录页 URL(auth_expired 时「重新授权」入口数据源) */
   login_url: z.string().min(1),
+  /**
+   * 就绪检测查询域列表(缺省 = [cookie_domain], 向后兼容)。Electron cookies.get 的
+   * domain 过滤器不匹配父域 cookie(如 .xiaomimimo.com 形态)——平台把 session cookie
+   * 种在注册域父域时(L4 实测, comment 2010)须显式扩查。
+   * ⚠️ 查询域 ≠ 发送域: 数据面仍只发 cookie_domain 同域端点(D-058 同域护栏不变)。
+   */
+  cookie_query_domains: z.array(z.string().min(1)).min(1).optional(),
+  /**
+   * 拼装发送的已知 cookie 全集(缺省 = required_cookies)。平台除必需项外常随发附加
+   * 令牌(如 MiMo api-platform_ph/slh, CodexBar 四项全发实证): known 集合中已存在的
+   * 全带上, required 仍做就绪门禁(缺 required = 未就绪)。
+   */
+  known_cookies: z.array(z.string().min(1)).optional(),
   /** cookie 注入请求头名, 缺省 "Cookie" */
   header_name: z.string().min(1).default("Cookie"),
 });

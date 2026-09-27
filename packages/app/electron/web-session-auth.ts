@@ -5,8 +5,9 @@
  * 交互流(卡面 ①):
  *   1. web_session_auth_start(instanceId, auth) → 主进程开**独立 BrowserWindow**
  *      加载 login_url(未登录会被小米 SSO 接管至 account.xiaomi.com)
- *   2. 轮询 session.cookies: 目标域出现 required_cookies 全部 cookie →
- *      按声明顺序拼装 `name=value; …` Cookie 串 → keyring blob 加密落盘
+ *   2. 轮询 session.cookies: cookie_query_domains(缺省=[cookie_domain])各域并集中
+ *      required_cookies 全部出现 → known_cookies(缺省=required)分层拼装
+ *      `name=value; …`(required 按声明序, known 有则带) → keyring blob 加密落盘
  *      (safeStorage 与 api_key 同级, D-058 安全纪律) → 关窗 → resolve({ok:true})
  *      → renderer 触发该实例立即重采
  *   3. 出口三态: 成功(ok:true) / 用户手动关窗=取消({ok:false, cancelled:true},
@@ -55,6 +56,10 @@ export interface WebSessionAuthContract {
   cookie_domain: string;
   required_cookies: string[];
   login_url: string;
+  /** 就绪检测查询域(L4 缺陷#2: 父域 cookie 须扩查; 缺省 = [cookie_domain] 向后兼容) */
+  cookie_query_domains?: string[];
+  /** 拼装发送全集(known 有则带, required 判就绪; 缺省 = required_cookies) */
+  known_cookies?: string[];
   header_name?: string;
 }
 
@@ -79,20 +84,35 @@ const pending = new Map<string, Promise<WebSessionAuthResult>>();
 const aborters = new Set<() => void>();
 
 /**
- * 从目标域 cookie 列表拼装 Cookie 串(卡面 ①: 按声明顺序, 全部命中才拼)。
- * 缺任一必需 cookie → null(未就绪, 不是错误)。
+ * 从目标域 cookie 列表拼装 Cookie 串(卡面 ①: required 按声明顺序, 全部命中才拼)。
+ * known/required 分层(L4 缺陷#2, comment 2010): required 全命中 = 就绪; known 集合中
+ * 已存在的 cookie 按 known 声明序全带上(required 之后)——平台随发的附加令牌
+ * (如 MiMo ph/slh)缺失不阻断就绪, 存在则随发(CodexBar 四项全发实证)。
  * 值不进任何日志(调用方仅保存结果); 本函数纯函数可直测。
  */
 export function buildCookieString(
   cookies: Array<{ name: string; value: string }>,
   required: readonly string[],
+  known?: readonly string[],
 ): string | null {
   const byName = new Map(cookies.map((c) => [c.name, c.value]));
-  const parts: string[] = [];
-  for (const name of required) {
+  const emit = (name: string): string | null => {
     const v = byName.get(name);
     if (v === undefined || v === "") return null;
-    parts.push(`${name}=${v}`);
+    return `${name}=${v}`;
+  };
+  const parts: string[] = [];
+  for (const name of required) {
+    const part = emit(name);
+    if (part === null) return null; // required 缺失 = 未就绪(不是错误)
+    parts.push(part);
+  }
+  const knownSet = new Set(required);
+  for (const name of known ?? []) {
+    if (knownSet.has(name)) continue; // required 已拼, 不重复
+    knownSet.add(name);
+    const part = emit(name);
+    if (part !== null) parts.push(part); // known 有则带, 缺失不阻断
   }
   return parts.join("; ");
 }
@@ -150,7 +170,6 @@ async function runAuthFlow(shims: WebSessionAuthShims, opts: StartOptions): Prom
   const timeoutMs = opts.timeoutMs ?? AUTH_WINDOW_TIMEOUT_MS;
   const pollMs = opts.pollMs ?? POLL_INTERVAL_MS;
   const { auth } = opts;
-  const domain = auth.cookie_domain;
 
   let settled = false;
   let win: AuthWindowLike | null = null;
@@ -185,10 +204,22 @@ async function runAuthFlow(shims: WebSessionAuthShims, opts: StartOptions): Prom
     shims.showWindow(win);
 
     const session = shims.getSession();
+    // 就绪检测查询域(L4 缺陷#2): Electron domain 过滤器不匹配父域 cookie, 声明了
+    // cookie_query_domains(如 mimo 父域 .xiaomimimo.com)时逐域取并集; 按声明序去重
+    // (name 首见优先)。⚠️ 查询域 ≠ 发送域: 数据面仍只发 cookie_domain 同域端点。
+    const queryDomains = auth.cookie_query_domains?.length
+      ? auth.cookie_query_domains
+      : [auth.cookie_domain];
     const readTargetCookies = (): Array<{ name: string; value: string }> => {
       try {
-        // 只读目标域(域锁: 其它域 cookie 一律不看, 更不拼装)
-        return session.cookies.get({ domain }).map((c) => ({ name: c.name, value: c.value }));
+        // 只读声明域(域锁: 其它域 cookie 一律不看, 更不拼装)
+        const merged = new Map<string, { name: string; value: string }>();
+        for (const d of queryDomains) {
+          for (const c of session.cookies.get({ domain: d })) {
+            if (!merged.has(c.name)) merged.set(c.name, { name: c.name, value: c.value });
+          }
+        }
+        return [...merged.values()];
       } catch {
         return [];
       }
@@ -196,7 +227,7 @@ async function runAuthFlow(shims: WebSessionAuthShims, opts: StartOptions): Prom
 
     const attempt = (): void => {
       if (settled) return;
-      const cookie = buildCookieString(readTargetCookies(), auth.required_cookies);
+      const cookie = buildCookieString(readTargetCookies(), auth.required_cookies, auth.known_cookies);
       if (cookie === null) return; // 未就绪(静默续轮询; 值不落日志)
       // 就绪 → 落 keyring(safeStorage 与 api_key 同级) → 关窗 → 成功出口
       void opts

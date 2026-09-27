@@ -193,6 +193,12 @@ export const MIMO_TOKEN_PLAN: ChannelDescriptor = {
     cookie_domain: "platform.xiaomimimo.com",
     required_cookies: ["api-platform_serviceToken", "userId"],
     login_url: "https://platform.xiaomimimo.com/api/v1/genLoginUrl?currentPath=%2F%23%2Fconsole%2Fbalance",
+    // L4 缺陷#2(comment 2010, 用户 DevTools 实测): 四 cookie Domain 全 = .xiaomimimo.com
+    // 父域 —— Electron cookies.get 的 domain 过滤器不匹配父域, 就绪检测必须双域扩查。
+    // ⚠️ 查询域 ≠ 发送域: 数据面仍只发 cookie_domain 同域端点(D-058 护栏不变)。
+    cookie_query_domains: ["platform.xiaomimimo.com", "xiaomimimo.com"],
+    // CodexBar 实证: required 两项判就绪, known 四项全发(ph/slh 缺失大概率 401)。
+    known_cookies: ["api-platform_serviceToken", "userId", "api-platform_ph", "api-platform_slh"],
     header_name: "Cookie",
   },
   params_schema: [

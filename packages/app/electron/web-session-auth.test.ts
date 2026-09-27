@@ -23,6 +23,13 @@ const MIMO_AUTH = {
   login_url: "https://platform.xiaomimimo.com",
 };
 
+/** L4 缺陷#2(comment 2010): mimo 真实契约形态——cookie 全在父域, known 四项全发 */
+const MIMO_AUTH_L4 = {
+  ...MIMO_AUTH,
+  cookie_query_domains: ["platform.xiaomimimo.com", "xiaomimimo.com"],
+  known_cookies: ["api-platform_serviceToken", "userId", "api-platform_ph", "api-platform_slh"],
+};
+
 /** 受控 stub 窗: closed 出口由测试手动触发 */
 function makeStubWindow() {
   const listeners: Array<() => void> = [];
@@ -115,6 +122,53 @@ describe("buildCookieString(拼装, 纯函数)", () => {
         MIMO_AUTH.required_cookies,
       ),
     ).toBeNull();
+  });
+
+  // L4 缺陷#2(comment 2010): known/required 分层拼装
+  it("known 分层: required 两项 + known 已存在的附加令牌全带, known 缺失不阻断", () => {
+    const out = buildCookieString(
+      [
+        { name: "api-platform_serviceToken", value: "<mock-token>" },
+        { name: "userId", value: "<mock-user-id>" },
+        { name: "api-platform_ph", value: "<mock-ph>" },
+        // api-platform_slh 缺失: 不阻断就绪, 只是不带
+      ],
+      MIMO_AUTH_L4.required_cookies,
+      MIMO_AUTH_L4.known_cookies,
+    );
+    expect(out).toBe(
+      "api-platform_serviceToken=<mock-token>; userId=<mock-user-id>; api-platform_ph=<mock-ph>",
+    );
+  });
+
+  it("known 分层: 四项全在 → 按 known 声明序全发(CodexBar 实证形态)", () => {
+    const out = buildCookieString(
+      [
+        { name: "api-platform_slh", value: "<mock-slh>" },
+        { name: "userId", value: "<mock-user-id>" },
+        { name: "api-platform_ph", value: "<mock-ph>" },
+        { name: "api-platform_serviceToken", value: "<mock-token>" },
+        { name: "unrelated", value: "ignored" },
+      ],
+      MIMO_AUTH_L4.required_cookies,
+      MIMO_AUTH_L4.known_cookies,
+    );
+    // 顺序 = required 声明序在前 + known 声明序补余, 与 set-cookie 顺序无关
+    expect(out).toBe(
+      "api-platform_serviceToken=<mock-token>; userId=<mock-user-id>; api-platform_ph=<mock-ph>; api-platform_slh=<mock-slh>",
+    );
+  });
+
+  it("known 缺省(未声明) = 等价 required, 既有通道零回归", () => {
+    const out = buildCookieString(
+      [
+        { name: "api-platform_serviceToken", value: "<mock-token>" },
+        { name: "userId", value: "<mock-user-id>" },
+        { name: "api-platform_ph", value: "<ignored-without-known>" },
+      ],
+      MIMO_AUTH.required_cookies,
+    );
+    expect(out).toBe("api-platform_serviceToken=<mock-token>; userId=<mock-user-id>");
   });
 });
 
@@ -278,5 +332,39 @@ describe("startWebSessionAuth(授权流全链路)", () => {
     // 第三方域同名 cookie 不构成目标域就绪 → 走超时, 不落盘(域锁不外发)
     expect(res.ok).toBe(false);
     expect(h.saved.size).toBe(0);
+  });
+
+  // L4 缺陷#2(comment 2010): cookie 种在父域(.xiaomimimo.com) → 单查 platform 子域
+  // 永不命中(L4 实锤卡点); 双域扩查 + known 分层后命中并全发。
+  it("父域 cookie: 双域扩查命中 → known 四项全发落盘(L4 实锤回归)", async () => {
+    const h = makeHarness();
+    // stub get 用 endsWith 模拟 Electron domain 过滤语义:
+    // .xiaomimimo.com 父域 cookie 不命中 platform.xiaomimimo.com 查询, 命中 xiaomimimo.com 查询
+    h.session.cookies.get = ((filter: { domain?: string }) => {
+      const all = [
+        { name: "api-platform_serviceToken", value: "<mock-token>", domain: ".xiaomimimo.com" },
+        { name: "userId", value: "<mock-user-id>", domain: ".xiaomimimo.com" },
+        { name: "api-platform_ph", value: "<mock-ph>", domain: ".xiaomimimo.com" },
+        { name: "api-platform_slh", value: "<mock-slh>", domain: ".xiaomimimo.com" },
+      ];
+      return all.filter((c) => (filter.domain ? c.domain.endsWith(filter.domain) : true));
+    }) as Harness["session"]["cookies"]["get"];
+    const p = startWebSessionAuth(h.shims, {
+      instanceId: "inst-8",
+      auth: MIMO_AUTH_L4,
+      saveSecret: (svc, key, value) => {
+        h.saved.set(`${svc}:${key}`, value);
+        return Promise.resolve();
+      },
+      secretKey: "inst-8:web_session",
+      pollMs: 10,
+    });
+    await vi.advanceTimersByTimeAsync(15);
+    const res = await p;
+    expect(res).toEqual({ ok: true, saved: true });
+    // known 四项全发(required 判就绪 + ph/slh 随发, CodexBar 实证形态)
+    expect(h.saved.get("token-wallet:inst-8:web_session")).toBe(
+      "api-platform_serviceToken=<mock-token>; userId=<mock-user-id>; api-platform_ph=<mock-ph>; api-platform_slh=<mock-slh>",
+    );
   });
 });
