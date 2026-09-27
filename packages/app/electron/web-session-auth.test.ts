@@ -51,13 +51,17 @@ function makeStubWindow() {
   return { win, fireClosed: () => { for (const l of [...listeners]) l(); } };
 }
 
-/** 受控 stub session: cookies 集合由测试逐 tick 演化 */
+/** 受控 stub session: cookies 集合由测试逐 tick 演化。
+ * get 返回 Promise —— 与真机 Electron 一致(t_bc344087 P1, comment 2042:
+ * 旧 stub 返回同步数组 = mock 假绿, 生产路径 Promise 形态从未被测到)。 */
 function makeStubSession(initial: Array<{ name: string; value: string; domain: string }> = []) {
   const cookies = [...initial];
   return {
     cookies: {
       get: (filter: { domain?: string }) =>
-        cookies.filter((c) => !filter.domain || c.domain.endsWith(filter.domain)),
+        Promise.resolve(
+          cookies.filter((c) => !filter.domain || c.domain.endsWith(filter.domain)),
+        ),
     },
     setCookie: (name: string, value: string) =>
       cookies.push({ name, value, domain: MIMO_AUTH.cookie_domain }),
@@ -185,6 +189,8 @@ describe("startWebSessionAuth(授权流全链路)", () => {
       secretKey: "inst-1:web_session",
       pollMs: 10,
     });
+    // 首探异步(comment 2042 P1 修复): 冲刷微任务后未命中才开窗
+    await vi.advanceTimersByTimeAsync(0);
     // 开窗加载 login_url
     expect(h.createdUrls).toEqual([MIMO_AUTH.login_url]);
     // 首轮轮询: 未就绪 → 继续等
@@ -281,6 +287,8 @@ describe("startWebSessionAuth(授权流全链路)", () => {
       secretKey: "inst-5:web_session",
       pollMs: 10,
     });
+    // 首探异步: 冲刷微任务, 未命中 → 只开一扇窗
+    await vi.advanceTimersByTimeAsync(0);
     expect(created).toBe(1); // 只开一扇窗
     expect(webSessionAuthCount()).toBe(1);
     h.session.setCookie("api-platform_serviceToken", "<mock-token>");
@@ -314,7 +322,7 @@ describe("startWebSessionAuth(授权流全链路)", () => {
       const all = [
         { name: "api-platform_serviceToken", value: "<evil-third-party>", domain: "evil.example.com" },
       ];
-      return all.filter((c) => (filter.domain ? c.domain.endsWith(filter.domain) : true));
+      return Promise.resolve(all.filter((c) => (filter.domain ? c.domain.endsWith(filter.domain) : true)));
     }) as Harness["session"]["cookies"]["get"];
     const p = startWebSessionAuth(h.shims, {
       instanceId: "inst-7",
@@ -347,7 +355,7 @@ describe("startWebSessionAuth(授权流全链路)", () => {
         { name: "api-platform_ph", value: "<mock-ph>", domain: ".xiaomimimo.com" },
         { name: "api-platform_slh", value: "<mock-slh>", domain: ".xiaomimimo.com" },
       ];
-      return all.filter((c) => (filter.domain ? c.domain.endsWith(filter.domain) : true));
+      return Promise.resolve(all.filter((c) => (filter.domain ? c.domain.endsWith(filter.domain) : true)));
     }) as Harness["session"]["cookies"]["get"];
     const p = startWebSessionAuth(h.shims, {
       instanceId: "inst-8",
@@ -429,7 +437,8 @@ describe("t_bc344087 ① 首探前置(有现成 cookie 不开窗)", () => {
       secretKey: "inst-pre-3:web_session",
       pollMs: 10,
     });
-    // 首探未命中 → 才开窗(既有行为)
+    // 首探异步: 冲刷微任务 → 未命中才开窗(既有行为)
+    await vi.advanceTimersByTimeAsync(0);
     expect(h.createdUrls).toEqual([MIMO_AUTH.login_url]);
     await vi.advanceTimersByTimeAsync(15);
     expect(h.saved.size).toBe(0);
@@ -439,5 +448,27 @@ describe("t_bc344087 ① 首探前置(有现成 cookie 不开窗)", () => {
     const res = await p;
     expect(res).toEqual({ ok: true, saved: true });
     expect(h.win.win.destroy).toHaveBeenCalled();
+  });
+
+  // 增量审查 P3-1(comment 2035) + comment 2042 修向 2: timeoutTimer 前置布防后,
+  // 首探 get 挂起(不 resolve)也有超时兜底出口 —— 不再永久 pending。
+  it("首探 get 挂起 → 超时兜底出口(不永久 pending, 不开窗)", async () => {
+    const h = makeHarness();
+    h.session.cookies.get = (() => new Promise(() => {})) as Harness["session"]["cookies"]["get"];
+    const p = startWebSessionAuth(h.shims, {
+      instanceId: "inst-pre-4",
+      auth: MIMO_AUTH,
+      saveSecret: () => Promise.resolve(),
+      secretKey: "inst-pre-4:web_session",
+      timeoutMs: 50,
+      pollMs: 10,
+    });
+    await vi.advanceTimersByTimeAsync(60);
+    const res = await p;
+    expect(res.ok).toBe(false);
+    expect(res.saved).toBe(false);
+    expect(res.message).toContain("授权超时");
+    expect(h.createdUrls).toEqual([]); // 挂起发生在首探, 未走到开窗
+    expect(webSessionAuthCount()).toBe(0);
   });
 });

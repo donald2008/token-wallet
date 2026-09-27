@@ -34,10 +34,12 @@ export interface AuthWindowLike {
   focus?(): void;
 }
 
-/** electron session 最小面(测试注入 stub) */
+/** electron session 最小面(测试注入 stub)。
+ * ⚠️ cookies.get 是异步 API —— 真机 Electron 返回 Promise(t_bc344087 P1, comment 2042
+ * 实锤: 同步声明/同步遍历在真机必抛 TypeError 被 catch 吞掉 → 探测永远空)。 */
 export interface AuthSessionLike {
   cookies: {
-    get(filter: { domain?: string }): Array<{ name: string; value: string; domain: string }>;
+    get(filter: { domain?: string }): Promise<Array<{ name: string; value: string; domain: string }>>;
   };
 }
 
@@ -198,21 +200,29 @@ async function runAuthFlow(shims: WebSessionAuthShims, opts: StartOptions): Prom
     cancelHooks.set(opts.instanceId, () => {
       if (win && !win.isDestroyed()) win.destroy();
     });
-
-    // ---- 开授权窗(独立 BrowserWindow; closed = 用户手动关窗 = 静默取消) ----
     const session = shims.getSession();
-    // 就绪检测查询域(L4 缺陷#2): Electron domain 过滤器不匹配父域 cookie, 声明了
+    // ---- 超时布防前置(t_bc344087 P1 修复 + 增量审查 P3-1): 首探 await 之前就位 ----
+    // 覆盖面 = 首探探测挂起 / saveSecret(keychain/safeStorage)挂起 / 开窗轮询全程
+    timeoutTimer = setTimeout(() => {
+      if (settled) return;
+      finish({ ok: false, saved: false, message: "授权超时(5 分钟未完成登录), 请重试" });
+    }, timeoutMs);
+
+    // ---- 就绪检测查询域(L4 缺陷#2): Electron domain 过滤器不匹配父域 cookie, 声明了
     // cookie_query_domains(如 mimo 父域 .xiaomimimo.com)时逐域取并集; 按声明序去重
     // (name 首见优先)。⚠️ 查询域 ≠ 发送域: 数据面仍只发 cookie_domain 同域端点。
     const queryDomains = auth.cookie_query_domains?.length
       ? auth.cookie_query_domains
       : [auth.cookie_domain];
-    const readTargetCookies = (): Array<{ name: string; value: string }> => {
+    // ⚠️ 真机 Electron cookies.get 返回 Promise(t_bc344087 P1, comment 2042 实锤):
+    // 必须逐域 await; 同步遍历 Promise 必抛 TypeError(此前被 try/catch 吞掉 → 探测永远空)。
+    const readTargetCookies = async (): Promise<Array<{ name: string; value: string }>> => {
       try {
         // 只读声明域(域锁: 其它域 cookie 一律不看, 更不拼装)
         const merged = new Map<string, { name: string; value: string }>();
         for (const d of queryDomains) {
-          for (const c of session.cookies.get({ domain: d })) {
+          const found = await session.cookies.get({ domain: d });
+          for (const c of found) {
             if (!merged.has(c.name)) merged.set(c.name, { name: c.name, value: c.value });
           }
         }
@@ -239,32 +249,48 @@ async function runAuthFlow(shims: WebSessionAuthShims, opts: StartOptions): Prom
 
     const attempt = (): void => {
       if (settled) return;
-      const cookie = buildCookieString(readTargetCookies(), auth.required_cookies, auth.known_cookies);
-      if (cookie === null) return; // 未就绪(静默续轮询; 值不落日志)
-      saveAuthorized(cookie);
+      void readTargetCookies()
+        .then((cookies) => {
+          if (settled) return;
+          const cookie = buildCookieString(cookies, auth.required_cookies, auth.known_cookies);
+          if (cookie === null) return; // 未就绪(静默续轮询; 值不落日志)
+          saveAuthorized(cookie);
+        })
+        .catch(() => {
+          /* readTargetCookies 内部已兜底, 双保险: 探测异常按未就绪静默续轮询 */
+        });
     };
 
     // ---- t_bc344087 ① 首探前置: 有现成 cookie 就不开窗 ----
     // 真机反馈(用户 9/27): 「每次点重新授权都弹出页面显示已登录」——defaultSession 持久化后
     // 已登录用户首探必命中, 原实现先开窗再首探 → 窗口必闪一次。命中 → 直接落盘 + 成功出口,
     // 全程不创建窗口; 未命中才走下面的开窗轮询(既有路径不动)。
-    const readyCookie = buildCookieString(readTargetCookies(), auth.required_cookies, auth.known_cookies);
-    if (readyCookie !== null) {
-      saveAuthorized(readyCookie);
-      return;
-    }
+    // 注: 首探是异步的(comment 2042 P1 修复)——await 结果后再决定是否 createWindow,
+    // 探测期间不开窗, 命中路径保持零窗口。
+    const openWindowAndPoll = (): void => {
+      win = shims.createWindow(auth.login_url);
+      win.on("closed", abort);
+      shims.showWindow(win);
 
-    // ---- 未命中: 开授权窗(独立 BrowserWindow; closed = 用户手动关窗 = 静默取消) ----
-    win = shims.createWindow(auth.login_url);
-    win.on("closed", abort);
-    shims.showWindow(win);
-
-    pollTimer = setInterval(attempt, pollMs);
-    // 开窗后立即探一次(既有逻辑: 开窗瞬间 cookie 可能已就绪, 不必等首个 poll 周期)
-    attempt();
-    timeoutTimer = setTimeout(() => {
-      if (settled) return;
-      finish({ ok: false, saved: false, message: "授权超时(5 分钟未完成登录), 请重试" });
-    }, timeoutMs);
+      pollTimer = setInterval(attempt, pollMs);
+      // 开窗后立即探一次(既有逻辑: 开窗瞬间 cookie 可能已就绪, 不必等首个 poll 周期)
+      attempt();
+    };
+    void readTargetCookies()
+      .then((initialCookies) => {
+        if (settled) return; // 首探在途时已超时/被 abort → 不再开窗
+        const readyCookie = buildCookieString(initialCookies, auth.required_cookies, auth.known_cookies);
+        if (readyCookie !== null) {
+          saveAuthorized(readyCookie);
+          return;
+        }
+        // ---- 未命中: 开授权窗(独立 BrowserWindow; closed = 用户手动关窗 = 静默取消) ----
+        openWindowAndPoll();
+      })
+      .catch(() => {
+        // readTargetCookies 内部已兜底, 双保险: 首探异常按未命中走开窗路径
+        if (settled) return;
+        openWindowAndPoll();
+      });
   });
 }
