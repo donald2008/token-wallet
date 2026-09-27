@@ -192,7 +192,7 @@ export const MIMO_TOKEN_PLAN: ChannelDescriptor = {
     kind: "web_session",
     cookie_domain: "platform.xiaomimimo.com",
     required_cookies: ["api-platform_serviceToken", "userId"],
-    login_url: "https://account.xiaomi.com/",
+    login_url: "https://platform.xiaomimimo.com/api/v1/genLoginUrl?currentPath=%2F%23%2Fconsole%2Fbalance",
     header_name: "Cookie",
   },
   params_schema: [

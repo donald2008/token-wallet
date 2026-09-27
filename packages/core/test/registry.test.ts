@@ -152,4 +152,22 @@ describe("ChannelRegistry", () => {
       expect(key?.required).toBe(true);
     }
   });
+
+  // t_e371caca L4 缺陷#1(comment 2001): login_url 与 cookie_domain 必须同 eTLD+1 ——
+  // 账号域(account.xiaomi.com)登录对平台域(platform.xiaomimimo.com) cookie 天然隔离
+  // (不同 eTLD+1), 授权窗在账号域登录后轮询永不命中。防再填成 SSO 上游账号域。
+  it("web_session 通道: login_url 与 cookie_domain 同 eTLD+1(SSO 入口必须在目标平台域)", () => {
+    const registrableDomain = (host: string): string => {
+      // eTLD+1 简化实现: 取末两段标签(等价「主域.通用后缀」形态)。
+      // 多级公后缀(.co.uk 等)下一家真域接入时再引入真 PSL, MiMo 族(xiaomimimo.com)够用。
+      const labels = host.split(".");
+      return labels.slice(-2).join(".");
+    };
+    for (const c of PRESET_CHANNELS) {
+      const auth = c.auth;
+      if (auth?.kind !== "web_session") continue;
+      const loginHost = new URL(auth.login_url).hostname;
+      expect(registrableDomain(loginHost)).toBe(registrableDomain(auth.cookie_domain));
+    }
+  });
 });
