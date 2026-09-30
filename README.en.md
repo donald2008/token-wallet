@@ -363,12 +363,13 @@ the only network requests are to the official endpoints of channels you added on
 
 ### Mid term
 
-- MCP data plane "cloud × local" usage comparison view (mcp-server data-plane extension)
+- MCP data plane "cloud × local" usage comparison view (the data plane itself shipped in v0.3.0; the comparison view is next)
+- More agent harness integrations: claude-code / opencode and others via the `/guide` contract
 - Meituan LongCat, opencode zen pay-as-you-go channels
 
 ### Long term
 
-- Code signing (remove SmartScreen warning), CI automation
+- Code signing (remove SmartScreen warning)
 - macOS / Linux installers: code-ready (safeStorage / derived paths), needs real-machine validation before publishing
 
 Full channel-level plan: [docs/DESIGN.md §5.2](docs/DESIGN.md).

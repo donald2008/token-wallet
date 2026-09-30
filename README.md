@@ -336,12 +336,13 @@ SQLite。应用无任何遥测/上报代码，网络请求只有你在设置页�
 
 ### 中期
 
-- MCP 数据面「云 × 本地」用量对比视角（mcp-server 数据面扩展）
+- MCP 数据面「云 × 本地」用量对比视角（数据面本体已随 v0.3.0 发布，对比视角待建）
+- 更多 Agent harness 适配：claude-code / opencode 等按 `/guide` 契约接入
 - 美团 LongCat、opencode zen 按量余额通道
 
 ### 远期
 
-- 代码签名（消除 SmartScreen 警告）、CI 自动化
+- 代码签名（消除 SmartScreen 警告）
 - macOS / Linux 安装包：代码层已兼容（safeStorage / 路径派生），需要真机验收后发布
 
 完整通道级规划见 [docs/DESIGN.md §5.2](docs/DESIGN.md)。
