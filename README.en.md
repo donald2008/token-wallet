@@ -7,12 +7,12 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Electron](https://img.shields.io/badge/Electron-37-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Platforms 7](https://img.shields.io/badge/Platforms-7-6E56CF)](#supported-channels)
+[![Platforms 7](https://img.shields.io/badge/Platforms-8-6E56CF)](#supported-channels)
 [![gitee primary](https://img.shields.io/badge/gitee-ITEater%2Ftoken--wallet-C71D23?logo=gitee&logoColor=white)](https://gitee.com/ITEater/token-wallet)
 [![中文](https://img.shields.io/badge/docs-%E4%B8%AD%E6%96%87-blue)](README.md)
 
-**DeepSeek · Kimi · opencode · Zhipu GLM · MiniMax · Alibaba Bailian · Volcengine Ark** — quota
-windows from seven AI platforms in a single 360×720px desktop widget: progress bars, reset
+**DeepSeek · Kimi · opencode · Zhipu GLM · MiniMax · Alibaba Bailian · Volcengine Ark · Xiaomi MiMo** —
+quota windows from eight AI platforms in a single 360×720px desktop widget: progress bars, reset
 countdowns, and "days remaining" estimated from your consumption rate.
 
 > **The silent bomb of the multi-agent era**: token spend is scattered across plans — 5-hour
@@ -31,7 +31,7 @@ data collected automatically by the MCP data plane, see [below](#local-agent-usa
 |------|------|------|
 | ![dashboard dark](docs/screenshots/dashboard-dark.png) | ![dashboard light](docs/screenshots/dashboard-light.png) | ![dashboard glass](docs/screenshots/dashboard-glass.png) |
 
-**Paste a key and go (HTTP channels) · One-click authorize in app (CLI channels, auto-opens browser) · Zero telemetry · Data never leaves your machine**
+**Paste a key and go · One-click authorize in app (CLI / session login) · Zero telemetry · Data never leaves your machine**
 
 [![Download Windows installer](https://img.shields.io/badge/Download-Windows_installer-6E56CF?logo=windows&logoColor=white)](https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe)
 
@@ -72,10 +72,10 @@ countdowns, and consumption rates into one desktop widget — readable at a glan
 
 ## Features
 
-- **Seven platforms on one screen**: window-based (multi-window progress bars + reset countdowns) and balance-based (balance + estimated days left) plans in a unified view
+- **Eight platforms on one screen**: window-based (multi-window progress bars + reset countdowns) and balance-based (balance + estimated days left) plans in a unified view
 - **Early warning, not after-the-fact errors**: "days remaining" extrapolated from recent consumption rate; cards change color before quota runs dry
 - **Failures are explicit**: invalid key / missing CLI / expired session — the card tells you how to fix it or offers a one-click "re-authorize" button, never fake data
-- **Paste a key and go — CLI channels included**: HTTP channels take an API key; Bailian / Volcengine Ark install their official CLI and authorize via browser, all in-app
+- **Paste a key and go — CLI / session auth included**: HTTP channels take an API key; Bailian / Volcengine Ark install their official CLI and authorize via browser, all in-app; Xiaomi MiMo logs in once in-app and the session is captured automatically (no cookie copying)
 - **Three themes + glass transparency**: dark / light / glass, follow the system or pick manually; the glass slider previews live and persists on release
 - **Drag-to-reorder**: drag a card to take over ordering; persists exactly once on drop
 - **Data stays on your machine**: zero telemetry, credentials in the OS keychain, snapshots in local SQLite, last-known data readable offline
@@ -131,19 +131,21 @@ long-term trends. Protocol spec: [docs/mcp-protocol.md](docs/mcp-protocol.md)
 | MiniMax | Token Plan | Window (5h + weekly) | Official API | Token Plan key (`sk-cp-` prefix) |
 | Alibaba Bailian | Token Plan | Window | Official CLI `bl` | No key; log in once |
 | Volcengine Ark | Coding Plan | Window | Official CLI `arkcli` | No key; SSO once |
+| Xiaomi MiMo | Token Plan | Window | Official web session | No key; log in once in-app |
 
 > MiniMax (pay-as-you-go), Meituan LongCat, opencode zen balance are planned (docs/DESIGN.md §5.2).
 > Adding a channel = registering a declarative mapping in the channel registry, zero code
 > for standard APIs; complex APIs use a TS adapter.
 
 Channel-level prerequisites: the two CLI channels need the official CLI installed (a one
-in-app install button handles it when missing the first time); all other channels
-work with an API key:
+in-app install button handles it when missing the first time); Xiaomi MiMo needs no key —
+a one-time in-app session login; all other channels work with an API key:
 
 | Channel | Extra dependency | Authorization (in-app one-click) |
 |---------|-----------------|----------------------------------|
 | Alibaba Bailian | `bl` CLI (one-click install in app) | Tap "Authorize" on the card → opens the Bailian console for browser login; CLI sessions are server-side time-limited (empirically a few days); expired sessions turn the card yellow and prompt re-authorize |
 | Volcengine Ark | `arkcli` CLI (one-click install in app) | Tap "Authorize" on the card → SSO device-code browser verification; CLI sessions are server-side time-limited; expired sessions turn the card yellow and prompt re-authorize (**Volcengine SSO self-heal, see [USER_GUIDE.md](docs/USER_GUIDE.md)**) |
+| Xiaomi MiMo | None (fully in-app) | Tap "Authorize" when adding → complete the Xiaomi account login in the popup window; the app captures the session automatically (no cookie copying); expired sessions prompt re-authorize on the card |
 
 > **CLI channels no longer require the command line**: pre-v0.2.8 you had to run `bl auth login --console` or
 > `arkcli auth login volc-sso --no-browser` in a terminal. Since v0.2.8 the OneClickAuth panel in the app handles
@@ -244,6 +246,44 @@ pure Node tooling (electron-builder) — no Rust / Visual Studio / WebView2 need
 > `TW_SKIP_DAEMON_BUILD=1` to skip explicitly (the installed app will then show
 > "daemon executable not found" in the MCP panel — not recommended).
 
+## Quick start
+
+From launch to your first data point in under three minutes — everything happens inside the app, no command line.
+
+### 1. Add your first platform
+
+Click the "＋" button at the bottom, expand a platform in the tree, click a product to jump straight to its form, and configure it by access type:
+
+| Access type | Platforms | Steps |
+|-------------|-----------|-------|
+| **Key and go** | DeepSeek · Kimi · opencode · Zhipu GLM · MiniMax | Generate an API key in the platform console (MiniMax: the `sk-cp-` Token Plan subscription key) → paste → Test connection → Save instance |
+| **CLI one-click auth** | Alibaba Bailian · Volcengine Ark | If the CLI is missing, follow the in-app one-click install; then tap "Authorize" on the card → the browser opens for login (Ark uses the SSO device-code flow) |
+| **Session login** | Xiaomi MiMo | Tap "Authorize" → complete the Xiaomi account login in the popup window — the app captures the session automatically, no cookie copying |
+
+Each instance starts polling independently as soon as it is saved: the first snapshot appears immediately, then refreshes on its own window cadence.
+
+### 2. Read the panel
+
+- **One card = one platform plan**: the progress bar shows current-window usage; "~N days left" is extrapolated from your recent burn rate (balance plans)
+- **Color semantics**: green = healthy · yellow = needs attention (quota tight / credentials expired — the card carries the right button) · red = abnormal or exhausted · gray = not configured
+- **Hover for details**: hover a card for window details; hover a progress bar for remaining quota and reset countdown (the tightest window gets a red left edge)
+- **Drag to reorder**: drag a card to set your own order; persists on drop
+- **Themes**: the ☀ button in the title bar cycles light / dark / system; glass transparency is adjustable in Settings (translucent + backdrop blur)
+
+### 3. Connect your AI agents (optional)
+
+Running Hermes / Claude Code / opencode / Codex? Route their local token spend into the "Agent usage" dashboard automatically:
+
+1. Settings → "MCP Service" → click "Start" (the daemon ships with the installer — works out of the box)
+2. Click "Copy guide link" and paste the link to your agent — the agent reads the built-in doc and completes integration & reporting on its own (auth → API spec → example → verify), no manual config
+3. Every LLM call flows in automatically; click the local agent usage card on the panel ("Open usage dashboard") for live tokens / cost / cache hit rate
+
+### 4. Stay updated
+
+Built-in auto-update since v0.2.0: silent check on launch, one-click upgrade in Settings → About; instances and history are fully preserved.
+
+> For the full screen-by-screen manual (Volcengine SSO self-heal, tray behavior, etc.), see [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
+
 ## FAQ
 
 **Q: SmartScreen blocks the install?**
@@ -258,6 +298,7 @@ Expected for an unsigned app: "More info" → "Run anyway".
 | opencode | opencode.ai → account Settings → API Keys (zen/go plans) |
 | Zhipu bigmodel | bigmodel.cn → API Keys (Coding Plan key; same as the coding inference key) |
 | MiniMax | platform.MiniMax.io → Token Plan subscription management (key prefix `sk-cp-`) |
+| Xiaomi MiMo | Nothing to fetch — tap "Authorize" when adding and log in once in the popup (the app captures the session automatically) |
 
 **Q: How do I authorize Bailian / Volcengine Ark? Why a CLI?**
 Both platforms' usage APIs only accept control-console login sessions (managed by the official
@@ -268,6 +309,7 @@ device-code flow). **Never touch the command line.**
 Sessions are server-side time-limited (empirically a few days); when expired, the card turns
 yellow and shows a "Please re-authorize" button — click it to self-heal
 (Volcengine SSO self-heal: see [USER_GUIDE.md §4](docs/USER_GUIDE.md)).
+Xiaomi MiMo works the same in-app way: tap "Authorize" when adding and complete the Xiaomi account login in the popup — nothing to copy.
 
 **Q: What does a yellow/red card mean?**
 Yellow = needs attention (quota low or credentials expired; the card carries the exact fix
@@ -284,9 +326,9 @@ the only network requests are to the official endpoints of channels you added on
 
 ## Docs
 
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — **user manual**: clone → add provider → authorize → read data → settings; includes Volcengine SSO self-heal
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — **user manual**: clone → add provider (key / CLI auth / session login) → authorize → read data → settings; includes Volcengine SSO self-heal
 - [docs/DESIGN.md](docs/DESIGN.md) — architecture & design (two-layer channel model / adapter system / scheduling / UI)
-- [docs/DECISIONS.md](docs/DECISIONS.md) — decision records (D-001 ~ D-053, each with empirical evidence)
+- [docs/DECISIONS.md](docs/DECISIONS.md) — decision records (D-001 ~ D-059, each with empirical evidence)
 - [TESTING.md](TESTING.md) — test matrix and how to run
 - [RELEASE.md](RELEASE.md) — release manual
 
