@@ -13,7 +13,7 @@
  *   （替代 electron-builder --win nsis）
  */
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -97,6 +97,24 @@ async function main() {
       "[dist:win] 中止: daemon sidecar 未就绪 — NSIS 安装包缺它时设置页 MCP 服务必然 not_installed。",
     );
     process.exit(1);
+  }
+
+  // 跨平台产物混放守卫: Windows 出包要求 resources/ 只含 .exe 形态 daemon 产物。
+  // files 通配 "resources/token-wallet-mcp*" 会把同目录的 Linux 构建产物(无后缀版,
+  // ~80MB)一并打进安装包 — 2026-09-30 实锤(包体 94MB→207MB)。
+  const resourcesDir = path.resolve(__dirname, "..", "..", "resources");
+  if (existsSync(resourcesDir)) {
+    const stray = readdirSync(resourcesDir).filter(
+      (f) => f.startsWith("token-wallet-mcp") && !f.endsWith(".exe"),
+    );
+    if (stray.length > 0) {
+      console.error(
+        `[dist:win] 中止: resources/ 存在非 Windows 平台 daemon 产物 ${JSON.stringify(stray)} — ` +
+          `会被 files 通配 "resources/token-wallet-mcp*" 一并打入安装包(包体虚胖)。` +
+          `请先移走(如 packages/mcp-server/build/)再重试。`,
+      );
+      process.exit(1);
+    }
   }
 
   const githubReachable = await probeTcp("github.com", 443);
