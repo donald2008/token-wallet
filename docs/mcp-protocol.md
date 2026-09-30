@@ -532,7 +532,7 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 
 ### 5.1 自助接入端点 `GET /guide`（onboarding，与 v1 同版交付）
 
-- **语义**：文档即产品——任何 agent 凭 `http://<host>:9131/guide` + key **自助**接入（D-058），无 per-agent 适配器；app 面板「复制引导链接」（主钮+endpoint 行内联钮）与该端点同源；
+- **语义**：文档即产品——任何 agent 凭 `http://<host>:9131/guide` + key **自助**接入（D-060），无 per-agent 适配器；app 面板「复制引导链接」（主钮+endpoint 行内联钮）与该端点同源；
 - **双视图**：`Accept: text/html` → 五段式文档页（概述→认证→接口规格→真实示例→验证步骤；中文正文英文代码，无外部资源依赖）；`Accept: application/json` → `doc.sections[].items[]` 结构化视图（程序化消费方直接取分段）；MCP 工具 `get_onboarding_guide` 返回同一数据源；
 - **单一事实源**：五段内嵌 SCHEMA/ENVELOPE/EXAMPLE 常量由本文档 §1.1/§2.1/§8 程序化提取生成（`packages/mcp-server/src/mcp_server/guide_doc.py`，**禁手编**；`tests/test_doc_consistency.py` 与权威源逐字比对，篡改任一字符即红）；协议变更流程 = 先改本文档，再重新提取更新常量；
 - **鉴权同面**：/guide 与 /mcp 同一把 Bearer（§5），无 key 一律 401；文档任何视图零 key 值出现；
