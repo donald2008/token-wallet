@@ -85,7 +85,7 @@ Claude Code / opencode / Codex 等）时，它们的 token 消耗与成本通过
 **工作方式**：
 
 - **Agent 侧（hook 插件）**：挂在 agent harness 的 LLM 调用点，每次调用自动提取用量并批量上报
-  （断线排队、重发幂等、零阻塞主流程），支持 Hermes / Claude Code / opencode / Codex 等常见 harness
+  （断线排队、重发幂等、零阻塞主流程）；任意 agent 均可依 `/guide` 标准自助接入
 - **数据面（daemon）**：7×24 常驻的 MCP server，端点 `http://127.0.0.1:9131/mcp`（streamable-http，
   Bearer 鉴权）；桌面 app 关闭不影响采集与查询
 - **桌面 app**：发现 daemon 后自动切换为其展示面板，无需额外配置

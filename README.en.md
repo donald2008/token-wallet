@@ -91,8 +91,8 @@ self-querying by agents.
 **How it works**:
 
 - **Agent side (hook plugin)**: hooks into the agent harness's LLM call points, extracts usage on
-  every call and reports it in batches (offline queuing, idempotent retries, zero blocking), supporting
-  Hermes / Claude Code / opencode / Codex and other common harnesses
+  every call and reports it in batches (offline queuing, idempotent retries, zero blocking); any
+  agent can self-onboard following the `/guide` standard
 - **Data plane (daemon)**: a 7×24 resident MCP server at `http://127.0.0.1:9131/mcp` (streamable-http,
   Bearer auth); collection and querying keep running when the desktop app is closed
 - **Desktop app**: automatically switches to the daemon's display panel once detected, no extra setup
