@@ -188,7 +188,7 @@ token-wallet/
 
 ### Download the installer (recommended)
 
-Current version **v0.2.9**, stable link (always points to the latest stable release, updated on every release):
+Current version **v0.3.0**, stable link (always points to the latest stable release, updated on every release):
 
 ```text
 https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
@@ -206,7 +206,7 @@ https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_set
   check-only; download and install are always user-triggered; see Settings → About
 - Upgrades preserve everything: instances, settings, SQLite snapshots are kept
   (NSIS `deleteAppDataOnUninstall:false` + stable userData directory). On a pre-v0.2.0
-  version, install v0.2.9 manually once, then auto-update takes over
+  version, install v0.3.0 manually once, then auto-update takes over
 
 ### Run from source
 

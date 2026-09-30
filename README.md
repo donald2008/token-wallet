@@ -171,7 +171,7 @@ token-wallet/
 
 ### 下载安装包（推荐）
 
-当前版本 **v0.2.9**，稳定版直链（始终指向最新稳定版，发版自动更新）：
+当前版本 **v0.3.0**，稳定版直链（始终指向最新稳定版，发版自动更新）：
 
 ```text
 https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
@@ -187,7 +187,7 @@ https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_set
   `https://gitee.com/ITEater/token-wallet/releases/download/stable/`），启动静默 check only；
   下载与安装始终用户点击触发，详见设置页「关于」区
 - 升级保留：实例配置、settings、SQLite 快照全部保留（NSIS `deleteAppDataOnUninstall:false`
-  + userData 目录稳定）。v0.2.0 之前的旧版本请先手动安装一次 v0.2.9，之后即走自动更新
+  + userData 目录稳定）。v0.2.0 之前的旧版本请先手动安装一次 v0.3.0，之后即走自动更新
 
 ### 从源码运行
 
