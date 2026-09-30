@@ -261,7 +261,7 @@ corepack pnpm build:win    # = corepack pnpm -r build + corepack pnpm -C package
 
 1. 设置页 →「MCP 服务」→ 点「一键启动」（daemon 随安装包分发，开箱即用）
 2. 点「复制引导链接」，把链接粘贴给你的 Agent —— Agent 打开后按文档自助完成接入与上报（认证 → 接口规格 → 示例 → 验证），无需手工配置
-3. 之后每次 LLM 调用自动入库；在主面板点本地 Agent 用量卡片（「打开用量大屏」）即看实时 tokens / 成本 / 缓存命中
+3. 之后每次 LLM 调用自动入库；切到主面板的「本地 Agent」tab，点顶部用量卡片（「打开用量大屏」）即看实时 tokens / 成本 / 缓存命中
 
 ### 4. 保持更新
 

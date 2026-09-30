@@ -276,7 +276,7 @@ Running Hermes / Claude Code / opencode / Codex? Route their local token spend i
 
 1. Settings → "MCP Service" → click "Start" (the daemon ships with the installer — works out of the box)
 2. Click "Copy guide link" and paste the link to your agent — the agent reads the built-in doc and completes integration & reporting on its own (auth → API spec → example → verify), no manual config
-3. Every LLM call flows in automatically; click the local agent usage card on the panel ("Open usage dashboard") for live tokens / cost / cache hit rate
+3. Every LLM call flows in automatically; switch to the "Local Agent" tab and click the usage card at the top ("Open usage dashboard") for live tokens / cost / cache hit rate
 
 ### 4. Stay updated
 
