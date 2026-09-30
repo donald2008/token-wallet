@@ -51,12 +51,17 @@ node --version   # >= 22
    pnpm build:win    # = pnpm -r build + electron-builder NSIS
    ```
 
-   产物: `packages/app/release/token-wallet_<版本>_setup.exe`(~120MB, 单文件全离线, 含内置
-   MCP daemon)。大小仅 ~174KB = 打包中断只出了 stub, 重跑。
+   产物: `packages/app/release/token-wallet_<版本>_setup.exe`(~90MB, 单文件全离线)。
+   大小仅 ~174KB = 打包中断只出了 stub, 重跑。
 
-   > **打包前检查 `packages/app/resources/` 只含目标平台产物**(2026-09-30 实锤): files 通配
-   > `resources/token-wallet-mcp*` 会把同目录的 Linux 构建产物(无后缀版, ~80MB)一并打进
-   > Windows 安装包(包体 94MB→207MB)。dist-win.mjs 已加守卫自动中止, 手动出包同样适用。
+   **daemon 独立附件物料**(2026-09-30 起): 打包成功后 `dist:win` 自动复制
+   `release/token-wallet-mcp-win-x64.exe`(~29MB) — **发版时必须把该文件上传 gitee stable**
+   (固定名, 与 app 内 `DEFAULT_DAEMON_DOWNLOAD_URL` 对齐; 用户端「安装 MCP 服务」一键下载)。
+   遗漏该附件 = 用户端一键安装 404。
+
+   > **打包前检查 `packages/app/resources/` 只含目标平台产物**(2026-09-30 实锤): 曾因 files
+   > 通配把 Linux 构建产物(无后缀版, ~80MB)打进 Windows 安装包(包体 94MB→207MB); 现 daemon
+   > 已外置(files 不收 resources/), 守卫防物料复制误用/回归。dist-win.mjs 已内建自动中止。
 
 4. **计算 SHA256**(发布校验):
 
@@ -78,9 +83,11 @@ node --version   # >= 22
    - Tag: `vX.Y.Z`
    - 标题: `vX.Y.Z`
    - 描述: 变更摘要 + **安装提示**(见下)
-   - 附件: 安装包 + SHA256 文本(文件名 `SHA256SUMS.txt`)
+   - 附件: 安装包 + SHA256 文本(文件名 `SHA256SUMS.txt`) + daemon 附件
+     `token-wallet-mcp-win-x64.exe`(29MB, 供人工下载; stable 必须另传, 见下)
 
-7. **更新 stable 更新源**(v0.2.4 起自更新走 gitee, 每次发版必做):
+7. **更新 stable 更新源 + daemon 分发源**(v0.2.4 起自更新走 gitee; daemon 2026-09-30
+   起同为 stable 固定名, 每次发版必做):
 
    ```bash
    # 固定名副本(latest.yml 里的 url 也用固定名 token-wallet_setup.exe)
@@ -88,9 +95,14 @@ node --version   # >= 22
    cp packages/app/release/token-wallet_X.Y.Z_setup.exe.blockmap /tmp/token-wallet_setup.exe.blockmap
    sed 's/token-wallet_X.Y.Z_setup.exe/token-wallet_setup.exe/g' \
      packages/app/release/latest.yml > /tmp/latest.yml
+   # daemon 物料(dist:win 打包成功后自动复制产出, 原样使用)
+   cp packages/app/release/token-wallet-mcp-win-x64.exe /tmp/token-wallet-mcp-win-x64.exe
    # 到 https://gitee.com/ITEater/token-wallet/releases → stable release →
-   # 删旧 3 附件 → 传上面 3 个固定名文件(latest.yml/token-wallet_setup.exe[.blockmap])
-   # 验证: curl -sL https://gitee.com/ITEater/token-wallet/releases/download/stable/latest.yml | grep version
+   # 删旧附件(3 件套 + daemon; 首次无 daemon) → 传 4 个固定名文件:
+   #   latest.yml / token-wallet_setup.exe[.blockmap] / token-wallet-mcp-win-x64.exe
+   # 验证:
+   curl -sL https://gitee.com/ITEater/token-wallet/releases/download/stable/latest.yml | grep version
+   curl -sIL https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet-mcp-win-x64.exe | grep -i "200\|content-length"
    ```
 
 ## 安装提示(每次发布描述里带上)

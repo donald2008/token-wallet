@@ -107,21 +107,23 @@ self-querying by agents.
 
 **Deployment & configuration (one-click in the app)**:
 
-The installer bundles the daemon (Python fastmcp sidecar) — no separate Python setup needed.
-After installing the app:
+The MCP service component (Python fastmcp sidecar) ships on demand: **first use downloads it
+from the "MCP Service" panel with one click** (~30 MB, offline-ready afterwards) — no separate
+Python setup needed. After installing the app:
 
-1. The "**MCP Service**" panel in Settings: status at a glance (running / stopped); tap "**Start**"
-   to bring it up at `127.0.0.1:9131/mcp`
-2. "**Launch at login**" toggle: the daemon starts with your system, independent of the desktop app
-3. **API key fully managed for you**: the app generates a random key into `mcp.env`
+1. **Install (first time only)**: in Settings → "**MCP Service**", click "**Install MCP service**"
+   — it downloads the component and starts automatically at `127.0.0.1:9131/mcp`
+2. **Everyday start/stop**: status at a glance (running / stopped); tap "**Start**" anytime
+3. "**Launch at login**" toggle: the daemon starts with your system, independent of the desktop app
+4. **API key fully managed for you**: the app generates a random key into `mcp.env`
    (Linux/macOS `~/.config/token-wallet/mcp.env`, Windows `%APPDATA%\token-wallet\mcp.env`);
    copy it from the panel; after "regenerate", restart the daemon when prompted
-4. **Agent onboarding**: click "**Copy guide link**" in the panel and send the link to your
+5. **Agent onboarding**: click "**Copy guide link**" in the panel and send the link to your
    agent — it opens the `/guide` self-service standard (five sections: overview → auth →
    API spec → real example → verification) and completes the MCP client integration and
    usage reporting on its own, no per-harness manual setup required;
    the Hermes official implementation lives at [hook-usage-reporter](packages/hook-usage-reporter/) (reference)
-5. After upgrading the app, a leftover old daemon process is detected and the panel offers
+6. After upgrading the app, a leftover old daemon process is detected and the panel offers
    a one-click restart
 
 Configuration (`mcp.env`, normally no hand-editing needed):
@@ -194,7 +196,7 @@ Current version **v0.3.0**, stable link (always points to the latest stable rele
 https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
 ```
 
-- Windows 10/11 x64; single-file fully-offline installer (~120 MB, bundles the Chromium runtime and the built-in MCP daemon, no external dependencies)
+- Windows 10/11 x64; single-file fully-offline installer (~90 MB, bundles the full Chromium runtime, no external dependencies; the MCP service component is downloaded once on first use)
 - Platform note: **officially supported on Windows** today. macOS / Linux are code-ready
   (credentials via system safeStorage, platform-derived paths) but no installers are
   published and no real-machine validation has been done — see [Roadmap](#roadmap)
@@ -254,14 +256,17 @@ Output: `packages/app/release/token-wallet_<version>_setup.exe`. The packaging c
 pure Node tooling (electron-builder) — no Rust / Visual Studio / WebView2 needed; see
 [RELEASE.md](RELEASE.md) for the full release manual (incl. WSL2 prereqs: wine64 + npmmirror).
 
-> **MCP daemon sidecar bundled with the installer** (lite-01): `dist:win` builds the MCP
-> daemon automatically before packaging (`packages/mcp-server/deploy/build-exe.ps1`,
-> PyInstaller onefile; requires a Windows host + Python ≥ 3.11, pip deps auto-installed)
-> and bundles it into the installer — the Settings "MCP Service" panel works out of the box.
+> **MCP daemon as a separate component** (2026-09-30; gitee release assets cap at 100 MB, so the
+> daemon moved out of the installer): `dist:win` builds the MCP daemon automatically before
+> packaging (`packages/mcp-server/deploy/build-exe.ps1`, PyInstaller onefile; requires a Windows
+> host + Python ≥ 3.11, pip deps auto-installed) and, after a successful build, copies it to
+> `release/token-wallet-mcp-win-x64.exe` — **upload this asset to gitee stable on release (fixed
+> name, aligned with the in-app download URL)**. The app downloads it to `<userData>/mcp/` on
+> first use via "Install MCP service".
 > When packaging from WSL2, first run that script once on the Windows host to produce
 > `packages/app/resources/token-wallet-mcp.exe` (gitignored), or set
-> `TW_SKIP_DAEMON_BUILD=1` to skip explicitly (the installed app will then show
-> "daemon executable not found" in the MCP panel — not recommended).
+> `TW_SKIP_DAEMON_BUILD=1` to skip explicitly (no release asset is produced then, so the
+> one-click install would 404 — not recommended).
 
 ## Quick start
 
@@ -291,7 +296,7 @@ Each instance starts polling independently as soon as it is saved: the first sna
 
 Running Hermes / Claude Code / opencode / Codex? Route their local token spend into the "Agent usage" dashboard automatically:
 
-1. Settings → "MCP Service" → click "Start" (the daemon ships with the installer — works out of the box)
+1. Settings → "MCP Service" → first click "Install MCP service" to download the component (~30 MB, once); then click "Start"
 2. Click "Copy guide link" and paste the link to your agent — the agent reads the built-in doc and completes integration & reporting on its own (auth → API spec → example → verify), no manual config
 3. Every LLM call flows in automatically; switch to the "Local Agent" tab and click the usage card at the top ("Open usage dashboard") for live tokens / cost / cache hit rate
 

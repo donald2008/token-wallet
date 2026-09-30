@@ -100,17 +100,20 @@ Claude Code / opencode / Codex 等）时，它们的 token 消耗与成本通过
 
 **部署与配置（app 内一键）**：
 
-安装包已内置 daemon（Python fastmcp sidecar），无需单独装 Python 环境。装好 app 后：
+MCP 服务组件（Python fastmcp sidecar）按需分发：**首次使用在面板点「安装 MCP 服务」一键下载**
+（约 30 MB，之后离线可用），无需单独装 Python 环境。装好 app 后：
 
-1. 设置页「**MCP 服务**」面板：状态一瞥（运行中 / 未运行），点「**一键启动**」即起在 `127.0.0.1:9131/mcp`
-2. 「**开机自启**」开关：登录系统自动拉起 daemon，不依赖桌面 app 是否打开
-3. **API Key 全自动管理**：app 生成随机 key 写入 `mcp.env`（Linux/macOS `~/.config/token-wallet/mcp.env`，
+1. **安装（仅首次）**：设置页「**MCP 服务**」面板点「**安装 MCP 服务**」——下载组件并自动启动，
+   起在 `127.0.0.1:9131/mcp`
+2. **日常启停**：状态一瞥（运行中 / 未运行），点「**一键启动**」随时拉起 daemon
+3. 「**开机自启**」开关：登录系统自动拉起 daemon，不依赖桌面 app 是否打开
+4. **API Key 全自动管理**：app 生成随机 key 写入 `mcp.env`（Linux/macOS `~/.config/token-wallet/mcp.env`，
    Windows `%APPDATA%\token-wallet\mcp.env`），面板内一键复制；「随机生成」换 key 后按提示重启 daemon 生效
-4. **Agent 接入**：面板点「**复制引导链接**」，把链接发给你用的 agent——agent 打开
+5. **Agent 接入**：面板点「**复制引导链接**」，把链接发给你用的 agent——agent 打开
    `/guide` 自适配标准文档（五段式：概述→认证→接口规格→真实示例→验证步骤），
    自行完成 MCP 客户端接入与用量上报，无需人工按 harness 逐一配置；
    Hermes 官方实现见 [hook-usage-reporter](packages/hook-usage-reporter/)（参考实现）
-5. 升级 app 后检测到旧版本 daemon 残留进程时，面板提示「一键重启」完成换代
+6. 升级 app 后检测到旧版本 daemon 残留进程时，面板提示「一键重启」完成换代
 
 配置项（`mcp.env`，一般无需手改）：
 
@@ -177,7 +180,7 @@ token-wallet/
 https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
 ```
 
-- Windows 10/11 x64，单文件全离线安装包（~120 MB，含 Chromium 运行时与内置 MCP daemon，无外部依赖）
+- Windows 10/11 x64，单文件全离线安装包（~90 MB，含完整 Chromium 运行时，无外部依赖；MCP 服务组件首次使用时一键下载）
 - 平台说明：当前**官方支持 Windows**；macOS / Linux 的代码层已兼容（凭据走系统
   safeStorage，路径按平台派生），但未发布安装包、未经真机验收——见 [Roadmap](#roadmap)
 - 校验：Release 附件中的 `SHA256SUMS.txt` 与安装包比对
@@ -235,13 +238,14 @@ corepack pnpm build:win    # = corepack pnpm -r build + corepack pnpm -C package
 （electron-builder），不需要 Rust / Visual Studio / WebView2 工具链；详细发版手册见
 [RELEASE.md](RELEASE.md)（含 WSL2 出包时的 wine64 / npmmirror 镜像前置）。
 
-> **MCP daemon sidecar 随包分发**（lite-01）：`dist:win` 打包前自动构建 MCP daemon
-> （`packages/mcp-server/deploy/build-exe.ps1`，PyInstaller onefile，前置 Windows 宿主 +
-> Python ≥ 3.11 + pip 依赖自动补装）并收进安装包——设置页「MCP 服务」开箱即用。
+> **MCP daemon 独立组件分发**（2026-09-30；起因 gitee release 附件 100MB 上限，daemon 出包瘦身）：
+> `dist:win` 打包前自动构建 MCP daemon（`packages/mcp-server/deploy/build-exe.ps1`，PyInstaller
+> onefile，前置 Windows 宿主 + Python ≥ 3.11 + pip 依赖自动补装），打包成功后复制为
+> `release/token-wallet-mcp-win-x64.exe` 物料——**发布时上传 gitee stable（固定名，与 app 内
+> 下载 URL 对齐）**；用户端由设置页「安装 MCP 服务」一键下载到 `<userData>/mcp/`（原子落位）。
 > WSL2 侧出包时需先在 Windows 宿主跑一次该脚本产出
 > `packages/app/resources/token-wallet-mcp.exe`（产物已 gitignore），或设
-> `TW_SKIP_DAEMON_BUILD=1` 显式跳过（跳过后装出的 app 设置页 MCP 面板将提示
-> 未找到 daemon 可执行文件，不建议）。
+> `TW_SKIP_DAEMON_BUILD=1` 显式跳过（跳过后无发布物料，用户端一键安装将 404，不建议）。
 
 ## 快速上手
 
@@ -271,7 +275,7 @@ corepack pnpm build:win    # = corepack pnpm -r build + corepack pnpm -C package
 
 用 Hermes / Claude Code / opencode / Codex 等 Agent 跑任务时，把本机 token 消耗自动汇总进「Agent 用量」大屏：
 
-1. 设置页 →「MCP 服务」→ 点「一键启动」（daemon 随安装包分发，开箱即用）
+1. 设置页 →「MCP 服务」→ 首次点「**安装 MCP 服务**」一键下载组件（约 30 MB，仅一次）；装好点「一键启动」
 2. 点「复制引导链接」，把链接粘贴给你的 Agent —— Agent 打开后按文档自助完成接入与上报（认证 → 接口规格 → 示例 → 验证），无需手工配置
 3. 之后每次 LLM 调用自动入库；切到主面板的「本地 Agent」tab，点顶部用量卡片（「打开用量大屏」）即看实时 tokens / 成本 / 缓存命中
 
