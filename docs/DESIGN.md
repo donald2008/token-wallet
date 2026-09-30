@@ -1,7 +1,7 @@
 # token-wallet 设计文档
 
-版本: v0.2.8 (2026-09-08 同步)
-状态: v0.2.8 UI 全线重构已合 master, P2 多通道适配器落地 (七通道全真数据), v0.2.x 自动更新链路就绪 (D-046)
+版本: v0.3.0 (2026-09-30 同步)
+状态: v0.3.0 已发布 — 平台通道 8 家(新增 MiniMax Token Plan / 小米 MiMo web_session D-058), MCP 数据面独立组件分发(设置页一键安装), 本地 Agent 页重设计(双 tab IA), 自动更新链路就绪 (D-046)
 
 ## 1. 定位
 
@@ -122,6 +122,10 @@ channels/  (两层模型: platform → product, D-025)
 │   └── balance/          http, balance, params: { api_key }  (/user/balance 已实测)
 ├── zai/                  智谱 bigmodel (D-045 已实测 2026-08-31)
 │   └── coding/           http, window,  params: { api_key }  (/api/monitor/usage/quota/limit, body_code 判态)
+├── minimax/
+│   └── token-plan/       http, window,  params: { api_key }  (sk-cp- 订阅 key, /v1/token_plan/remains 已实测 2026-09-01; 双模型各 5h+周窗)
+├── mimo/
+│   └── token-plan/       http + web_session 凭据(D-058), window, params: { web_session }  (无 API key 端点, 会话 cookie 落 safeStorage; 三端点组合已实测)
 ├── opencode/
 │   ├── go/               http, window,  params: { api_key }  (/zen/go/v1/usage 已实测, 订阅窗口制)
 │   └── zen/              http, balance, params: { api_key }  (按量付费, 余额端点待 spike)
@@ -140,10 +144,10 @@ channels/  (两层模型: platform → product, D-025)
 
 | 类型 | 机制 | 通道 | 会话/凭据归属 |
 |------|------|------|--------------|
-| http | 单次 HTTP + Bearer key + JSON 映射 | deepseek / kimi-code / opencode-go / zai | app 管 key |
+| http | 单次 HTTP + Bearer key + JSON 映射 | deepseek / kimi-code / minimax-token-plan / opencode-go / zai / mimo-token-plan(web_session 凭据, D-058) | app 管凭据(key 或会话 cookie, 均落 safeStorage) |
 | command | 包装官方 CLI 子进程, 解析 stdout JSON | aliyun(bl) / 火山方舟(arkcli) | CLI 自己管会话(SSO/登录态), app 零会话负担 |
 
-(local-agent 本地用量为 P3 预留的第三类, 不属于云端套餐采集。)
+(local-agent 本地用量为 P3 预留的第三类, 不属于云端套餐采集。web_session(D-058) 是**凭据种类**而非新通道类型——数据面复用 http 通道, 声明式 auth 契约(cookie_domain/required_cookies/login_url)挂在 descriptor 上。)
 
 command 类健康检查: 跑通道定义的 health_check 命令(如 `bl auth status` / `arkcli auth status`), 会话失效 → auth_expired, 卡片展示 setup_hint(如 `bl auth login --console` / `arkcli auth login --no-browser`)。
 
@@ -157,7 +161,7 @@ command 类健康检查: 跑通道定义的 health_check 命令(如 `bl auth sta
 | `command` | `COMMAND_ADAPTERS[channel]`(core channels/aliyun-bailian.ts) | **主进程 command_run 桥**: renderer 经 `window.tokenWallet.invoke("command_run", {channel, descriptor, instance})`, 主进程 handler 内 `COMMAND_ADAPTERS[channel]()`(缺省 runner=**真实 spawn**) 执行 fetchSnapshot, 返回 ProviderSnapshot |
 | 两者都缺 | 显式 `unsupported` 卡(P0-8, 不静默) | — |
 
-**IPC 名单登记(D-033 搬迁不变量, 新增必须登记)**: `get_bootstrap` / `instances_load` / `instances_save` / `record_consent` / `keyring_get|set|delete` / `http_get_json` / `sqlite_batch|exec|query` / `get_storage_paths` / `update_tray_status` / `win_minimize` / `win_close` / `win_get_always_on_top` / `win_set_always_on_top` / `get_sort_config` / `set_sort_config` / **`command_run`(D-042 新增)** / **`updater_check` / `updater_download` / `updater_install`(D-046 新增; 下载进度走 `updater_event` 单向推送 + preload `onUpdaterEvent` 事件桥, 不占 invoke 名单)**。
+**IPC 名单登记(D-033 搬迁不变量, 新增必须登记)**: `get_bootstrap` / `instances_load` / `instances_save` / `record_consent` / `keyring_get|set|delete` / `http_get_json` / `sqlite_batch|exec|query` / `get_storage_paths` / `update_tray_status` / `win_minimize` / `win_close` / `win_get_always_on_top` / `win_set_always_on_top` / `get_sort_config` / `set_sort_config` / **`command_run`(D-042 新增)** / **`updater_check` / `updater_download` / `updater_install`(D-046 新增; 下载进度走 `updater_event` 单向推送 + preload `onUpdaterEvent` 事件桥, 不占 invoke 名单)** / **`mcp_*` 家族(v0.3.0 新增: probe / start / stop / restart / get_config / check_version / gen_key / set_autostart / get_autostart / set_stop_on_quit / get_stop_on_quit / get_guide / install_daemon / delete_usage / usage_summary / usage_report_echo; 安装进度走 `mcp_install_progress` 单向推送 + preload `onMcpInstallProgress` 事件桥, 不占 invoke 名单)**。
 
 **spawn 为什么必须走主进程**: renderer 是 vite bundle, 静态 import `node:child_process` 不可行(P0-4 同族); core `adapters.ts` 的 spawn 逻辑在 Node 侧, 主进程 handler 内调用零风险。renderer 侧只读 `COMMAND_ADAPTERS` 判断通道是否注册(vite 可打包, node:child_process 动态 import 被 externalize), 不执行 spawn。浏览器 dev 无桌面桥时 commandRun 返回 null → 引擎转显式 error 快照(「需桌面壳执行」, 非 unsupported 语义)。
 
@@ -251,7 +255,7 @@ generic-http 只接"一次请求+静态映射"。
 安全约束: JSONPath 用 jsonpath-plus 纯求值; 状态断言用受限比较表达式,
 禁止 eval/new Function; 管道过滤器白名单(number/string/round/duration)。
 
-### 5.2 各平台采集方式与实测结论(2026-09-01 现状: 六通道全部落地, 美团 LongCat 与 opencode zen 余额为 backlog)
+### 5.2 各平台采集方式与实测结论(2026-09-30 现状: 八通道全部落地, 美团 LongCat 与 opencode zen 余额为 backlog)
 
 | Provider | 路径 | 风险 |
 |----------|------|------|
@@ -262,8 +266,10 @@ generic-http 只接"一次请求+静态映射"。
 | meituan LongCat | 待查 | 中 |
 | opencode | **go 已实测(2026-08-27)**: `GET https://opencode.ai/zen/go/v1/usage` 返回 rolling/weekly/monthly 三窗 {status, percent, resetsAt}。**zen 是按量付费(balance)**, 余额端点待 spike(/zen/v1/usage 返回 SPA 非 API)。注: zen/go key 打 go 端点返回一致数据(账户级), 推理被地域封锁但用量 API 可达 | go 低 / zen 中 |
 | zai (智谱 bigmodel) | **已实测通过(2026-08-31, D-045)**: `GET https://open.bigmodel.cn/api/monitor/usage/quota/limit` + Bearer(Coding Plan 套餐 key, 与 coding 推理 key 同一个), 双窗(5h/周)绝对值制(used=currentValue, limit=usage, unit=credits)。**HTTP 恒 200, auth 状态在 body.code** → GenericHttpMapping 走 `body_code` 判态(401=auth_expired / 200=ok / 其余=error), 非 HTTP 状态码; reset_at 用 `ms_epoch` pipe(毫秒 epoch, 对 ISO 用 iso_epoch 会拿到毫秒级错误值) | 低: 真 key 三态 fixture 全实证 |
+| minimax token-plan | **已实测通过(2026-09-01, L3)**: `GET https://api.minimaxi.com/v1/token_plan/remains` + Bearer Token Plan 订阅 key(`sk-cp-` 前缀; 国际端点 api.minimax.io 对 cn key 报 2049, 国内端点是主形态)。双模型(general/video)各 5h 窗+周窗, 主卡取 general(首个); HTTP 恒 200 业务码在 body(zai 同款 body 码判态) | 低: L3 实测 golden |
+| mimo token-plan | **已实测通过(2026-09-27, D-058 web_session 首落地)**: 无 tp- key 查询端点(/v1/usage 404 实锤), 三端点组合(balance / tokenPlan/detail / tokenPlan/usage)声明式组合适配器并发拉取 best-effort 聚合; 凭据 = 小米账号 SSO 会话 cookie(`api-platform_serviceToken`+`userId` 必需, `api-platform_ph/slh` 已知随发), 落 safeStorage 与 key 同级; login_url 必须平台域 SSO 入口(genLoginUrl)而非账号首页(eTLD+1 会话隔离), 就绪检测 cookie_query_domains 双域扩查(父域 `.xiaomimimo.com` cookie 单查子域不命中); **查询域 ≠ 发送域**(数据面仍锁 platform.xiaomimimo.com 同域, 禁外发第三方域) | 低: L4 真机验收通过; 细节见 D-058 |
 
-spike 产出 = YES/NO + 接口样本; NO 降级为 unsupported 卡片。上表六通道均已按
+spike 产出 = YES/NO + 接口样本; NO 降级为 unsupported 卡片。上表八通道均已按
 「实测定案」落地为内置通道(§5 通道树 + core `PRESET_CHANNELS` 单一真相源, D-036),
 「风险」列保留各通道实测中踩到的语义差异(单位/时区/判态), 接同类新通道前先读。
 
@@ -444,14 +450,14 @@ Windows 人肉只留"桌面外壳本身"(安装/托盘/WebView2)。
 - CI: P0~P2 worker 内测; P4 上 gitee Actions/自建 runner 全自动
 - 测试矩阵详见根目录 `TESTING.md`
 
-## 11. 阶段划分(2026-09-08 对齐 v0.2.8 现状)
+## 11. 阶段划分(2026-09-30 对齐 v0.3.0 现状)
 
 | 阶段 | 内容 | 现状 |
 |------|------|------|
 | P0 | monorepo 骨架 + core(schema/缓存/调度/generic-http) + app(托盘+面板+bars/ticker+排序) + mock 适配器 + 首开向导 + 设置页 | ✅ 完成(壳经 E1 换 Electron, D-033) |
 | E1~E3 | 换壳 Electron(D-033) + 主进程服务接真(D-034 node:sqlite / D-042 command 桥) + Windows NSIS 打包(D-035) | ✅ 完成(2026-08-29~30, Windows 真机可装可用) |
 | P1 | 真实数据跑通(deepseek 起步) + 消耗速率/预计天数 + gauge/ring-stack/battery 模板 + 真机 UI 打磨迭代(v0.1.2→v0.1.4: 过滤 chips/logo 网格/滚动条重设计) | ✅ 完成 |
-| P2 | 多通道适配器落地: kimi-code / 方舟(arkcli) / 百炼(bl) / opencode-go / zai(D-041~D-045 全实测); **美团 LongCat 与 opencode zen 余额 → backlog** | ✅ 完成(2026-08-31 六通道真数据; **v0.2.8 = 七通道全真数据 + 全 app 内一键授权**) |
+| P2 | 多通道适配器落地: kimi-code / 方舟(arkcli) / 百炼(bl) / opencode-go / zai / minimax-token-plan / mimo-token-plan(D-041~D-058 全实测); **美团 LongCat 与 opencode zen 余额 → backlog** | ✅ 完成(2026-08-31 六通道真数据; v0.2.8 = 七通道; **v0.3.0 = 八通道全真数据**, 含 web_session 第三凭据范式) |
 | P2.5 | 玻璃主题 + 透明度滑槽(D-053) + P5 主页短窗并排(D-049) + micro/duo/hero/ticker 排版变体(t_af01e265/t_35ff3c1f) + 手动拖拽排序收敛(D-039 + t_d086543b) + 卡 head 删钮 hover 激活(D-051) + OneClickAuth 完成态点击=刷线(D-048) + 火山 SSO 失效一键恢复(D-052) + 360×720 面板高度(t_27eeadad) + 中英双语(D-047) + 自动更新(D-046) | ✅ 完成(2026-09-08, v0.2.8 全线合 master) |
-| P3 | mcp-server 数据面 + LocalAgentAdapter + 云×本地对比行 + 通知(配置项) | ⏳ mcp-server 包骨架已建, local-agent 未接 |
-| P4 | 代码签名(消除 SmartScreen) + CI 自动化 + GitHub 镜像同步 + macOS / Linux 安装包(代码层已兼容, 需真机验收) | ⏳ v0.2.8 仍无签名(预期); macOS / Linux 真机验收待发布 |
+| P3 | mcp-server 数据面 + LocalAgentAdapter + 云×本地对比行 + 通知(配置项) | ✅ 数据面主体完成(v0.3.0: daemon + hook 上报 + usage_summary/echo/delete_usage 协议 v1.1 + /guide 自助接入(D-060) + **独立组件分发/设置页一键安装** + 本地 Agent 页置顶用量总览); ⏳ 云×本地对比行未接 |
+| P4 | 代码签名(消除 SmartScreen) + CI 自动化 + GitHub 镜像同步 + macOS / Linux 安装包(代码层已兼容, 需真机验收) | ✅ CI 已上线(2026-09-02 GitHub Actions, push/PR 触发) + GitHub 镜像同步(donald2008/token-wallet); ⏳ 代码签名仍无(预期); macOS / Linux 真机验收待发布 |
