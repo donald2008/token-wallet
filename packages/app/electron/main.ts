@@ -638,6 +638,8 @@ function registerIpc(): void {
     platform: process.platform,
     storagePathsFn: () => storagePaths(),
     settingsFilePathFn: () => settingsFilePath(),
+    // daemon 外置(一键安装): 下载落位与路径候选根 <userData>/mcp/
+    userDataDir: app.getPath("userData"),
     app: {
       setLoginItemSettings: (opts: { openAtLogin: boolean }) => app.setLoginItemSettings(opts),
       getLoginItemSettings: () => app.getLoginItemSettings(),

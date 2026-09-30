@@ -1,74 +1,69 @@
 import { readFileSync } from "node:fs";
+import * as path from "node:path";
 import { describe, expect, it } from "vitest";
-import { defaultPathShim } from "./mcp-daemon";
+import { DEFAULT_DAEMON_DOWNLOAD_URL, defaultPathShim } from "./mcp-daemon";
 
 /**
- * lite-01(t_aeb0447b): daemon sidecar 随包分发 — electron-builder 配置门禁。
+ * daemon 分发形态契约门禁(2026-09-30 改: 随包 → 独立附件 + 一键安装)。
  *
- * 历史欠账: defaultPathShim(mcp-daemon.ts) 探测 <appRoot>/resources/token-wallet-mcp.exe,
- * 但打包配置从未把 daemon 产物收进包 → 装出的 app 必然 not_installed。
- * 本测试锁死三件契约, 防回归:
- *   1. build.files 收 resources/token-wallet-mcp*(进 asar, appRoot=asar 根即探测根)
- *   2. build.asarUnpack 排除同 glob(原生 PE 无法从 asar 内 spawn, 必须落实体文件;
- *      Electron fs 透明重定向保持 resolveDaemonPath 的 existsSync 语义不变)
- *   3. dist:win 构建链串联 daemon PyInstaller 构建(fail-closed + TW_SKIP_DAEMON_BUILD 豁免阀)
- *      —— 产物经 gitignore 不入库, 故此处断言脚本接线(静态)而非 exe 本体。
+ * 起因: gitee release 附件 100MB 硬限, 内置 daemon 后安装包 118.5MB 超限被拒 →
+ * daemon 出包为稳定附件, 用户端设置页一键下载到 <userData>/mcp/。
+ * 本测试锁死新契约链(与 mcp-daemon.ts installDaemon 同源), 防回归:
+ *   1. build.files 不收 resources/token-wallet-mcp*(daemon 不进安装包, 包体瘦身前提)
+ *   2. build.asarUnpack 同不收(包内无 exe 即无需解包)
+ *   3. dist:win 构建产物复制为 release/ 上传物料(stable 固定名)
+ *   4. 下载 URL 常量 ↔ 物料文件名(改任一侧必须同步)
+ *   5. defaultPathShim 外置候选(<userData>/mcp/) 与缺省旧行为兼容
  */
 
 const pkgJson = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
 );
 
-describe("lite-01: daemon sidecar 随包分发接线(electron-builder)", () => {
-  it("build.files 收录 resources/token-wallet-mcp*(探测路径 = asar 根/resources)", () => {
+const distWinScript = readFileSync(
+  new URL("../electron/scripts/dist-win.mjs", import.meta.url),
+  "utf-8",
+);
+
+describe("daemon 外置分发接线(electron-builder)", () => {
+  it("build.files 不收 daemon(不进安装包; 100MB 附件限的瘦身前提)", () => {
     const files: string[] = pkgJson.build?.files ?? [];
-    const hit = files.find((f) => f.includes("resources/token-wallet-mcp"));
-    expect(hit, "build.files 缺 resources/token-wallet-mcp* — daemon 不进包").toBeTruthy();
+    const hit = files.find((f) => f.includes("token-wallet-mcp"));
+    expect(hit, "build.files 仍收 daemon — 包体将超 gitee 附件上限").toBeUndefined();
   });
 
-  it("build.asarUnpack 排除 resources/token-wallet-mcp*(原生 PE 必须落实体文件)", () => {
+  it("build.asarUnpack 不含 daemon(包内无 exe 即无需解包)", () => {
     const unpack: string[] = pkgJson.build?.asarUnpack ?? [];
-    const hit = unpack.find((f) => f.includes("resources/token-wallet-mcp"));
-    expect(
-      hit,
-      "asarUnpack 缺 resources/token-wallet-mcp* — exe 若留在 asar 内无法 spawn",
-    ).toBeTruthy();
+    const hit = unpack.find((f) => f.includes("token-wallet-mcp"));
+    expect(hit, "asarUnpack 仍列 daemon — 与 files 契约矛盾(应收 0 项)").toBeUndefined();
   });
 
-  it("defaultPathShim 探测路径与打包落点对齐(join(appRoot,'resources',exe))", () => {
-    // 契约锚: mcp-daemon.ts defaultPathShim 的 candidate = path.join(appRoot,"resources",exe)
-    // 打包态 appRoot = app.getAppPath() = resources/app.asar → files 收进 asar 根 resources/。
-    // 本断言锁 glob 与探测目录一致, 改探测逻辑或改打包落点任一侧都必须同步此测试。
-    const files: string[] = pkgJson.build?.files ?? [];
-    const hit = files.find((f) => f === "resources/token-wallet-mcp*");
-    expect(hit).toBe("resources/token-wallet-mcp*");
-  });
-
-  it("dist:win 串联 daemon 构建(fail-closed, TW_SKIP_DAEMON_BUILD 豁免阀)", async () => {
-    const script = readFileSync(
-      new URL("../electron/scripts/dist-win.mjs", import.meta.url),
-      "utf-8",
+  it("dist:win 复制 daemon 为 release/ 上传物料(stable 固定名)", () => {
+    expect(distWinScript).toContain("build-exe.ps1");
+    expect(distWinScript).toContain("TW_SKIP_DAEMON_BUILD");
+    expect(distWinScript).toContain("token-wallet-mcp-win-x64.exe");
+    expect(distWinScript, "物料复制步骤缺失 — release/ 将无附件可传").toContain(
+      "copyFileSync",
     );
-    expect(script).toContain("build-exe.ps1");
-    expect(script).toContain("TW_SKIP_DAEMON_BUILD");
-    expect(script).toContain("token-wallet-mcp.exe");
   });
 
-  it("round-2 P0 对齐断言: 打包态探测路径(asar.unpacked 重映射) ↔ asarUnpack 落点一致", () => {
-    // Electron 不 patch child_process.spawn(源码 asar-fs-wrapper.ts 实锤) — 打包态
-    // defaultPathShim 必须显式重映射 .asar → .asar.unpacked, 且该重映射路径必须被
-    // asarUnpack glob 覆盖(物理文件真实存在), 二者缺一即打包态启动必败。
+  it("下载 URL 常量 ↔ 物料文件名对齐(改任一侧必须同步)", () => {
+    // 契约锚: mcp-daemon.ts DEFAULT_DAEMON_DOWNLOAD_URL 末尾文件名 = dist:win 物料名
+    expect(DEFAULT_DAEMON_DOWNLOAD_URL).toContain("token-wallet-mcp-win-x64.exe");
+    expect(distWinScript).toContain("token-wallet-mcp-win-x64.exe");
+  });
+
+  it("defaultPathShim 外置候选: 包内不存在 → <userData>/mcp/(与 installDaemon 落点同源)", () => {
+    const shim = defaultPathShim({ userDataDir: "/u" });
+    const p = shim.resolveDaemonPath("win32", true, "/opt/nonexistent/resources/app.asar");
+    expect(p).toBe(path.join("/u", "mcp", "token-wallet-mcp.exe"));
+  });
+
+  it("defaultPathShim 缺省(无 userDataDir): 保持旧行为(兼容历史调用方/测试)", () => {
+    // Electron 不 patch child_process.spawn — 打包态重映射 .asar → .asar.unpacked 的
+    // 探测语义在「包内物理存在」分支仍然承载(dev/历史形态)。
     const shim = defaultPathShim();
-    const packagedPath = shim.resolveDaemonPath(
-      "win32",
-      true,
-      "<install>/resources/app.asar",
-    );
-    expect(packagedPath).toContain("app.asar.unpacked/resources/token-wallet-mcp.exe");
-    const unpack: string[] = pkgJson.build?.asarUnpack ?? [];
-    expect(
-      unpack.some((g) => g.startsWith("resources/token-wallet-mcp")),
-      "asarUnpack 未覆盖 resources/token-wallet-mcp* — 重映射路径将无物理文件",
-    ).toBe(true);
+    const p = shim.resolveDaemonPath("win32", true, "<install>/resources/app.asar");
+    expect(p).toContain("app.asar.unpacked/resources/token-wallet-mcp.exe");
   });
 });

@@ -27,6 +27,8 @@ const ipcMocks = vi.hoisted(() => ({
   mcpGetStopOnQuit: vi.fn(),
   mcpSetStopOnQuit: vi.fn(),
   mcpRestart: vi.fn(),
+  mcpInstallDaemon: vi.fn(),
+  onMcpInstallProgress: vi.fn(),
   maskMcpKey: (key: string): string => {
     if (key.length <= 12) return "•".repeat(key.length);
     return `${key.slice(0, 4)}-••••-••••-••••-${key.slice(-4)}`;
@@ -74,6 +76,8 @@ beforeEach(() => {
   });
   ipcMocks.mcpSetAutostart.mockResolvedValue({ mcpAutostart: true, osAutostart: true });
   ipcMocks.mcpRestart.mockResolvedValue({ restarted: true, started: true, pid: 12345 });
+  // daemon 一键安装默认(各 it 覆盖): 进度订阅返回 unsub
+  ipcMocks.onMcpInstallProgress.mockReturnValue(() => {});
   // mock clipboard(组件复制用)
   Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
 });
@@ -126,7 +130,7 @@ describe("McpServicePanel: 状态机", () => {
     await render();
     const panel = container.querySelector('[data-testid="mcp-panel"]') as HTMLElement;
     expect(panel.getAttribute("data-status")).toBe("not_installed");
-    expect(panel.textContent).toContain("未找到 daemon");
+    expect(panel.textContent).toContain("尚未安装本地服务组件");
   });
 });
 
@@ -149,7 +153,7 @@ describe("McpServicePanel: 按钮启用矩阵", () => {
     expect(stop.disabled).toBe(true);
   });
 
-  it("not_installed: start 禁用(需先构建 resources/)", async () => {
+  it("not_installed: start 禁用(需先安装服务组件)", async () => {
     ipcMocks.mcpProbe.mockResolvedValue({ alive: false, installed: false });
     await render();
     const start = container.querySelector('[data-testid="mcp-start"]') as HTMLButtonElement;
@@ -464,5 +468,64 @@ describe("McpServicePanel: 复制引导链接(OB-03 SC-03)", () => {
     await render();
     const btn = container.querySelector('[data-testid="mcp-copy-guide"]') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
+  });
+});
+
+describe("McpServicePanel: daemon 一键安装(外置形态)", () => {
+  it("not_installed: 显示安装按钮 + 安装提示副标题", async () => {
+    ipcMocks.mcpProbe.mockResolvedValue({ alive: false, installed: false });
+    setLang("zh");
+    await render();
+    const btn = container.querySelector('[data-testid="mcp-install"]') as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toContain("安装 MCP 服务");
+    expect(container.textContent).toContain("首次使用需下载本地服务组件");
+  });
+
+  it("installed 状态: 不渲染安装按钮", async () => {
+    ipcMocks.mcpProbe.mockResolvedValue({ alive: false, installed: true });
+    await render();
+    expect(container.querySelector('[data-testid="mcp-install"]')).toBeNull();
+  });
+
+  it("点击安装: 下载 → 自动启动 → running 闭环(装完即用)", async () => {
+    ipcMocks.mcpProbe
+      .mockResolvedValueOnce({ alive: false, installed: false })
+      .mockResolvedValue({ alive: true, installed: true });
+    ipcMocks.mcpInstallDaemon.mockResolvedValue({
+      installed: true,
+      path: "/u/mcp/token-wallet-mcp.exe",
+    });
+    await render();
+    const panel0 = container.querySelector('[data-testid="mcp-panel"]') as HTMLElement;
+    expect(panel0.getAttribute("data-status")).toBe("not_installed");
+
+    const btn = container.querySelector('[data-testid="mcp-install"]') as HTMLButtonElement;
+    await act(async () => {
+      fireClick(btn);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    expect(ipcMocks.mcpInstallDaemon).toHaveBeenCalledTimes(1);
+    expect(ipcMocks.mcpStart).toHaveBeenCalledTimes(1);
+    const panel = container.querySelector('[data-testid="mcp-panel"]') as HTMLElement;
+    expect(panel.getAttribute("data-status")).toBe("running");
+  });
+
+  it("安装失败: 错误可见 + 不启动 + 按钮可重试", async () => {
+    ipcMocks.mcpProbe.mockResolvedValue({ alive: false, installed: false });
+    ipcMocks.mcpInstallDaemon.mockResolvedValue({ installed: false, reason: "http_404" });
+    await render();
+    const btn = container.querySelector('[data-testid="mcp-install"]') as HTMLButtonElement;
+    await act(async () => {
+      fireClick(btn);
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("http_404");
+    expect(ipcMocks.mcpStart).not.toHaveBeenCalled();
+    const btnAfter = container.querySelector('[data-testid="mcp-install"]') as HTMLButtonElement;
+    expect(btnAfter.disabled).toBe(false);
   });
 });

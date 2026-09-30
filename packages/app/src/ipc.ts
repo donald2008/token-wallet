@@ -465,6 +465,8 @@ interface TokenWalletBridgeV2 {
   tokenWallet?: {
     invoke?: <T>(channel: string, payload?: Record<string, unknown>) => Promise<T>;
     onUpdaterEvent?: (callback: (event: UpdaterState) => void) => void;
+    /** daemon 一键安装进度桥(与 onUpdaterEvent 同 event 模式) */
+    onMcpInstallProgress?: (callback: (progress: { percent: number }) => void) => void;
   };
 }
 
@@ -692,6 +694,30 @@ export async function mcpGetGuide(): Promise<McpGuideResult> {
   const viaHost = await hostInvoke<McpGuideResult>("mcp_get_guide");
   if (viaHost) return viaHost;
   return { agents: [], reason: "daemon_not_running" };
+}
+
+/** daemon 外置一键安装: 下载 stable 固定名附件 → <userData>/mcp/ 原子落位; 进度走 onMcpInstallProgress */
+export interface McpInstallResult {
+  installed: boolean;
+  path?: string;
+  reason?: string;
+}
+
+export async function mcpInstallDaemon(): Promise<McpInstallResult> {
+  const viaHost = await hostInvoke<McpInstallResult>("mcp_install_daemon");
+  return viaHost ?? { installed: false, reason: "no_host" };
+}
+
+/** 订阅 daemon 安装进度(0-100); 无桥/mock 未实现 → no-op */
+export function onMcpInstallProgress(callback: (percent: number) => void): () => void {
+  const bridge = bridgeV2()?.tokenWallet;
+  if (typeof bridge?.onMcpInstallProgress === "function") {
+    bridge.onMcpInstallProgress((p) => callback(p.percent));
+    return () => {
+      // 同 onUpdaterEvent: preload 未透出 off, 订阅生命周期=页面级(设置页挂载一次)
+    };
+  }
+  return () => {};
 }
 
 /** UI 遮罩(纯客户端, 4-••••-••••-••••-末4; 短串全遮) */

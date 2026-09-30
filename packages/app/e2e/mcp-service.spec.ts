@@ -27,11 +27,29 @@ test.describe("设置页 MCP 服务区", () => {
     const panel = page.getByTestId("mcp-panel");
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute("data-status", "not_installed");
-    await expect(panel.getByTestId("mcp-status")).toContainText("未找到 daemon");
+    await expect(panel.getByTestId("mcp-status")).toContainText("尚未安装本地服务组件");
     await expect(panel.getByTestId("mcp-start")).toBeDisabled();
+    // 外置 daemon: 安装入口可见可点
+    await expect(panel.getByTestId("mcp-install")).toBeVisible();
+    await expect(panel.getByTestId("mcp-install")).toBeEnabled();
     // 端点 + key 行常显(masked)
     await expect(panel.getByTestId("mcp-endpoint")).toContainText("127.0.0.1:9131");
     await expect(panel.getByTestId("mcp-key-masked")).toContainText("••••");
+  });
+
+  test("未安装场景: 一键安装 → 自动启动 → 运行中(装完即用)", async ({ hostPage: page }) => {
+    await page.goto("/");
+    await seedMcpState(page, { installed: false });
+    await page.reload();
+    await page.getByTestId("settings-btn").click();
+    const panel = page.getByTestId("mcp-panel");
+    await expect(panel).toHaveAttribute("data-status", "not_installed");
+    await panel.getByTestId("mcp-install").click();
+    // mock 链路: install → mock.mcp installed(stopped); 自动 start → alive → running
+    await expect(panel).toHaveAttribute("data-status", "running");
+    await expect(panel.getByTestId("mcp-stop")).toBeEnabled();
+    // 装完即用: 安装按钮随状态离开 not_installed 而消失
+    await expect(panel.getByTestId("mcp-install")).toHaveCount(0);
   });
 
   test("未运行场景: 一键启动 → 状态变绿(已 installed)", async ({ page }) => {

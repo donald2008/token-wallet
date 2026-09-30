@@ -7,6 +7,7 @@ import {
   defaultPathShim,
   discoverPidByPort,
   getLastStartedPid,
+  installDaemon,
   type HttpShim,
   isInstalled,
   isSameProcessTree,
@@ -658,5 +659,114 @@ describe("mcp-daemon: defaultPathShim(t_aeb0447b round-2 P0)", () => {
     const shim = defaultPathShim();
     const p = shim.resolveDaemonPath("win32", false, "/repo/packages/app");
     expect(p).toBe(path.join("/repo/packages/app", "resources", "token-wallet-mcp.exe"));
+  });
+});
+
+describe("mcp-daemon: installDaemon(daemon 外置一键安装)", () => {
+  function memFs() {
+    const ops: string[] = [];
+    return {
+      ops,
+      fs: {
+        mkdirSync: (d: string) => void ops.push(`mkdir:${d}`),
+        renameSync: (a: string, b: string) => void ops.push(`rename:${a}->${b}`),
+        rmSync: (p: string) => void ops.push(`rm:${p}`),
+      },
+    };
+  }
+
+  it("win32: 下载 .part → 原子 rename 落位; 进度透传; 返回最终路径", async () => {
+    const mem = memFs();
+    const progress: number[] = [];
+    let partPath = "";
+    const r = await installDaemon({
+      url: "https://example.com/dl.exe",
+      userDataDir: "/u",
+      platform: "win32",
+      onProgress: (p) => progress.push(p),
+      fs: mem.fs,
+      download: {
+        download: async (_url, destPath, onProgress) => {
+          partPath = destPath;
+          onProgress(42);
+          onProgress(100);
+        },
+      },
+    });
+    const dest = path.join("/u", "mcp", "token-wallet-mcp.exe");
+    expect(r.installed).toBe(true);
+    expect(r.path).toBe(dest);
+    // 半文件绝不出现正式名: shim 收到的是 .part, 完成后才 rename
+    expect(partPath).toBe(`${dest}.part`);
+    expect(progress).toEqual([42, 100]);
+    expect(mem.ops).toContain(`mkdir:${path.join("/u", "mcp")}`);
+    expect(mem.ops).toContain(`rename:${dest}.part->${dest}`);
+  });
+
+  it("下载失败: 清理 .part + 返回 reason, 不执行 rename", async () => {
+    const mem = memFs();
+    const r = await installDaemon({
+      url: "https://example.com/dl.exe",
+      userDataDir: "/u",
+      platform: "win32",
+      fs: mem.fs,
+      download: {
+        download: async () => {
+          throw new Error("http_404");
+        },
+      },
+    });
+    expect(r.installed).toBe(false);
+    expect(r.reason).toBe("http_404");
+    expect(mem.ops.some((o) => o.startsWith("rename:"))).toBe(false);
+    expect(mem.ops).toContain(`rm:${path.join("/u", "mcp", "token-wallet-mcp.exe")}.part`);
+  });
+
+  it("非 win32: 落位无 .exe 后缀(linux 形态)", async () => {
+    const mem = memFs();
+    const r = await installDaemon({
+      url: "u",
+      userDataDir: "/u",
+      platform: "linux",
+      fs: mem.fs,
+      download: { download: async () => {} },
+    });
+    expect(r.installed).toBe(true);
+    expect(r.path).toBe(path.join("/u", "mcp", "token-wallet-mcp"));
+  });
+});
+
+describe("mcp-daemon: defaultPathShim userData 候选(daemon 外置)", () => {
+  it("缺省(无 userDataDir): 完全旧行为", () => {
+    const shim = defaultPathShim();
+    const p = shim.resolveDaemonPath("win32", true, "/opt/token-wallet/resources/app.asar");
+    expect(p).toBe(
+      path.join("/opt/token-wallet/resources/app.asar.unpacked", "resources", "token-wallet-mcp.exe"),
+    );
+  });
+
+  it("传 userDataDir + 包内不存在 → 回落 <userData>/mcp/", () => {
+    const shim = defaultPathShim({ userDataDir: "/u" });
+    const p = shim.resolveDaemonPath(
+      "win32",
+      true,
+      "/opt/nonexistent-tw/resources/app.asar",
+    );
+    expect(p).toBe(path.join("/u", "mcp", "token-wallet-mcp.exe"));
+  });
+
+  it("传 userDataDir + 包内物理存在 → 包内优先", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tw-shim-"));
+    try {
+      const appRoot = path.join(tmp, "resources", "app.asar");
+      const unp = path.join(tmp, "resources", "app.asar.unpacked", "resources");
+      fs.mkdirSync(unp, { recursive: true });
+      fs.writeFileSync(path.join(unp, "token-wallet-mcp.exe"), "x");
+      const shim = defaultPathShim({ userDataDir: "/u" });
+      const p = shim.resolveDaemonPath("win32", true, appRoot);
+      expect(p).toBe(path.join(unp, "token-wallet-mcp.exe"));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

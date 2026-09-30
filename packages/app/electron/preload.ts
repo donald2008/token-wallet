@@ -13,4 +13,10 @@ contextBridge.exposeInMainWorld("tokenWallet", {
   onUpdaterEvent: (callback: (event: unknown) => void): void => {
     ipcRenderer.on("updater_event", (_event, payload) => callback(payload));
   },
+  // daemon 一键安装进度(主进程主动推, 同 on* 事件桥模式)
+  onMcpInstallProgress: (callback: (progress: { percent: number }) => void): void => {
+    ipcRenderer.on("mcp_install_progress", (_event, payload) =>
+      callback(payload as { percent: number }),
+    );
+  },
 });

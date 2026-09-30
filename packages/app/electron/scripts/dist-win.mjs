@@ -5,7 +5,8 @@
  * 墙内网络直连 GitHub 经常 ETIMEDOUT（20.205.243.166 等），导致打包失败。
  * 手动设 ELECTRON_MIRROR 又要求用户背系统知识（用户 9/8 拍板：零命令行）。
  *
- * 方案：启动打包前先探 github.com:443 连通性 ——
+ * 方案：启动打包前先探 github.com HTTPS 可达性（HEAD 真请求）——
+ *   TCP 握手下中间设备可伪装「可达」而不通数据（2026-09-30 实锤卡死），不作数。
  *   - 可达 → 保持官方源（用户可能已配代理，不乱动）
  *   - 不可达 → 自动注入 npmmirror 镜像到子进程 env
  *
@@ -13,8 +14,7 @@
  *   （替代 electron-builder --win nsis）
  */
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
-import net from "node:net";
+import { copyFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -23,31 +23,33 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/";
 const BUILDER_MIRROR = "https://npmmirror.com/mirrors/electron-builder-binaries/";
 
-/** TCP 连通性探测（3s 超时）—— 不依赖 curl/外部命令，跨平台 */
-function probeTcp(host, port = 443, timeoutMs = 3000) {
-  return new Promise((resolve) => {
-    const sock = net.connect({ host, port });
-    const timer = setTimeout(() => {
-      sock.destroy();
-      resolve(false);
-    }, timeoutMs);
-    sock.once("connect", () => {
-      clearTimeout(timer);
-      sock.destroy();
-      resolve(true);
+/** GitHub 可达探测（5s 超时）—— TCP 握手 ≠ 可下载: 墙内存在「握手成功但 TLS/数据流
+ * 被阻断」的伪装场景（2026-09-30 实锤: TCP 探测判「可达」→ 官方源 → 下载卡死 SYN_SENT）。
+ * 改用 HTTPS HEAD 真请求: 与 electron 下载同面, 重定向链首跳拿到响应头即视为可达
+ * （2xx/3xx）; 任何异常（TLS reset/abort/DNS）→ 不可达 → 镜像。 */
+async function probeGithubReachable(timeoutMs = 5000) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch("https://github.com/", {
+      method: "HEAD",
+      redirect: "manual",
+      signal: ctrl.signal,
     });
-    sock.once("error", () => {
-      clearTimeout(timer);
-      resolve(false);
-    });
-  });
+    clearTimeout(timer);
+    return res.status > 0 && res.status < 500;
+  } catch {
+    return false;
+  }
 }
 
 async function main() {
-  // ---- lite-01(t_aeb0447b): daemon sidecar 随包分发 ----
-  // 独立产品铁律: daemon = app 托管 sidecar, 必须随 NSIS 安装包分发(设置页 MCP 服务
-  // 面板探测 <appRoot>/resources/token-wallet-mcp.exe, mcp-daemon.ts defaultPathShim)。
-  // 打包前先构建 daemon(Windows 宿主自动跑 PyInstaller onefile), 缺产物 → fail-closed。
+  // ---- daemon 外置分发(2026-09-30): 构建产物作为发布附件物料, 不进安装包 ----
+  // gitee release 附件 100MB 硬限: 内置 daemon 后安装包 118.5MB 超限被拒;
+  // 故 daemon 独立附件分发(stable 固定名 token-wallet-mcp-win-x64.exe), 设置页
+  // 一键下载到 <userData>/mcp/(mcp-daemon.ts installDaemon + defaultPathShim 候选)。
+  // 打包前构建/校验 daemon(Windows 宿主自动跑 PyInstaller onefile), 打包成功后
+  // 无条件复制为 release/ 物料; 缺产物 → fail-closed(发布链不完整)。
   const daemonExe = path.resolve(__dirname, "..", "..", "resources", "token-wallet-mcp.exe");
   const daemonBuildPs1 = path.resolve(
     __dirname, "..", "..", "..", "mcp-server", "deploy", "build-exe.ps1",
@@ -94,14 +96,14 @@ async function main() {
 
   if (!(await buildDaemon())) {
     console.error(
-      "[dist:win] 中止: daemon sidecar 未就绪 — NSIS 安装包缺它时设置页 MCP 服务必然 not_installed。",
+      "[dist:win] 中止: daemon 产物未就绪 — release/ 附件物料无法生成, 用户端一键安装将 404。",
     );
     process.exit(1);
   }
 
-  // 跨平台产物混放守卫: Windows 出包要求 resources/ 只含 .exe 形态 daemon 产物。
-  // files 通配 "resources/token-wallet-mcp*" 会把同目录的 Linux 构建产物(无后缀版,
-  // ~80MB)一并打进安装包 — 2026-09-30 实锤(包体 94MB→207MB)。
+  // 跨平台产物混放守卫: resources/ 只允许 .exe 形态 daemon 产物。
+  // 2026-09-30 实锤: files 通配曾把 Linux 产物(无后缀, ~80MB)打入包体(94MB→207MB);
+  // 现 daemon 已外置(files 不再收 resources/), 守卫防物料复制误用/未来 files 回归再踩。
   const resourcesDir = path.resolve(__dirname, "..", "..", "resources");
   if (existsSync(resourcesDir)) {
     const stray = readdirSync(resourcesDir).filter(
@@ -110,22 +112,25 @@ async function main() {
     if (stray.length > 0) {
       console.error(
         `[dist:win] 中止: resources/ 存在非 Windows 平台 daemon 产物 ${JSON.stringify(stray)} — ` +
-          `会被 files 通配 "resources/token-wallet-mcp*" 一并打入安装包(包体虚胖)。` +
+          `物料复制/回归打包都会误用(错误分发或包体虚胖)。` +
           `请先移走(如 packages/mcp-server/build/)再重试。`,
       );
       process.exit(1);
     }
   }
 
-  const githubReachable = await probeTcp("github.com", 443);
+  // 保险绳(9/30): 探测万一仍假阳性(握手层伪装), 显式 TW_FORCE_MIRROR=1 强制镜像
+  const forceMirror = process.env.TW_FORCE_MIRROR === "1";
+  if (forceMirror) console.log("[mirror] TW_FORCE_MIRROR=1 → 强制 npmmirror 镜像");
+  const githubReachable = forceMirror ? false : await probeGithubReachable();
 
   // 子进程 env（含注入的镜像变量）
   const env = { ...process.env };
 
   if (githubReachable) {
-    console.log("[mirror] github.com:443 可达 → 使用官方源");
+    console.log("[mirror] github.com HTTPS 可达 → 使用官方源");
   } else {
-    console.log("[mirror] github.com:443 不可达 → 自动启用 npmmirror 镜像");
+    console.log("[mirror] github.com HTTPS 不可达 → 自动启用 npmmirror 镜像");
     env.ELECTRON_MIRROR = env.ELECTRON_MIRROR || ELECTRON_MIRROR;
     env.ELECTRON_BUILDER_BINARIES_MIRROR =
       env.ELECTRON_BUILDER_BINARIES_MIRROR || BUILDER_MIRROR;
@@ -155,7 +160,18 @@ async function main() {
 
   child.on("exit", (code, signal) => {
     if (code === 0) {
-      console.log("[dist:win] 打包完成");
+      // daemon 独立附件物料: 发布时上传 gitee stable 固定名(URL 与 mcp-daemon.ts
+      // DEFAULT_DAEMON_DOWNLOAD_URL 常量对齐; 每次发版同名替换保持 URL 稳定)
+      const artifact = path.resolve(
+        __dirname, "..", "..", "release", "token-wallet-mcp-win-x64.exe",
+      );
+      try {
+        copyFileSync(daemonExe, artifact);
+        console.log(`[dist:win] 打包完成; daemon 附件物料 → ${artifact}`);
+      } catch (err) {
+        console.error(`[dist:win] daemon 物料复制失败: ${err.message}`);
+        process.exit(1);
+      }
     } else {
       console.error(
         `[dist:win] 打包失败 code=${code} signal=${signal ?? ""}`,

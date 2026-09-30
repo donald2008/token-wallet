@@ -22,12 +22,14 @@ import {
   mcpGetAutostart,
   mcpGetConfig,
   mcpGetStopOnQuit,
+  mcpInstallDaemon,
   mcpProbe,
   mcpRestart,
   mcpSetAutostart,
   mcpSetStopOnQuit,
   mcpStart,
   mcpStop,
+  onMcpInstallProgress,
   type McpConfigView,
   type McpDaemonVersionView,
 } from "../ipc";
@@ -51,7 +53,9 @@ export function McpServicePanel(): ReactNode {
   const [autostart, setAutostart] = useState(false);
   // t_d59a9ad8: 退出侧启停设置(与 mcpAutostart 正交)
   const [stopOnQuit, setStopOnQuit] = useState(false);
-  const [busy, setBusy] = useState<"start" | "stop" | "genKey" | "autostart" | "stopOnQuit" | null>(null);
+  const [busy, setBusy] = useState<
+    "start" | "stop" | "genKey" | "autostart" | "stopOnQuit" | "install" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   // OB-03: 引导链接复制成功的瞬态反馈(与 key 复制同款 1.5s)
@@ -67,6 +71,8 @@ export function McpServicePanel(): ReactNode {
   const [genKeyHint, setGenKeyHint] = useState<false | "manual" | "auto" | "failed">(false);
   // t_1b396e2f: daemon 与本机 exe 版本不一致(get_config 已并入比对结果)
   const [staleVersion, setStaleVersion] = useState<McpDaemonVersionView | null>(null);
+  // daemon 外置一键安装: null=非安装中; 0-100=下载进度(主进程 mcp_install_progress 事件)
+  const [installPercent, setInstallPercent] = useState<number | null>(null);
 
   const probe = useCallback(async () => {
     // ⚠️ 不要无条件 setError(null): 操作流的错误(start/stop/genKey 失败)会被下次 probe 抹掉
@@ -145,6 +151,33 @@ export function McpServicePanel(): ReactNode {
       }
       await probe();
     } finally {
+      setBusy(null);
+    }
+  };
+
+  // daemon 外置一键安装: 下载 → 原子落位 → 走既有启动链(probe + start), 装完即用闭环
+  const onInstall = async () => {
+    if (busy) return;
+    setBusy("install");
+    setError(null);
+    setInstallPercent(0);
+    const unsub = onMcpInstallProgress((p) => setInstallPercent(p));
+    try {
+      const r = await mcpInstallDaemon();
+      if (!r.installed) {
+        setError(t("set.mcpErrorGeneric", { msg: r.reason ?? "install_failed" }));
+        return;
+      }
+      const s = await mcpStart();
+      if (!s.started) {
+        setError(t("set.mcpErrorGeneric", { msg: s.reason ?? "unknown" }));
+      } else {
+        dispatchMcpStarted();
+      }
+      await probe();
+    } finally {
+      unsub();
+      setInstallPercent(null);
       setBusy(null);
     }
   };
@@ -267,10 +300,25 @@ export function McpServicePanel(): ReactNode {
         <span className="mcp-status-label" data-testid="mcp-status">
           {statusLabel(status)}
         </span>
-        <span className="mcp-subtitle">{t("set.mcpSubtitle")}</span>
+        <span className="mcp-subtitle">
+          {status === "not_installed" ? t("set.mcpInstallHint") : t("set.mcpSubtitle")}
+        </span>
       </div>
 
       <div className="mcp-row mcp-actions" data-testid="mcp-actions">
+        {status === "not_installed" && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            data-testid="mcp-install"
+            disabled={busy !== null}
+            onClick={() => void onInstall()}
+          >
+            {busy === "install"
+              ? t("set.mcpInstalling", { percent: installPercent ?? 0 })
+              : t("set.mcpInstall")}
+          </button>
+        )}
         <button
           type="button"
           className="btn"

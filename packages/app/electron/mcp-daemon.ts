@@ -13,7 +13,7 @@
  * node vitest 单测。本文件导出函数不与 IPC 直绑(IPC 层 main.ts/mcp-ipc.ts 包装)。
  */
 import * as path from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 
 export type ProbeResult =
   | { alive: true; latencyMs: number }
@@ -234,7 +234,11 @@ export function defaultSpawnShim(): SpawnShim {
   };
 }
 
-export function defaultPathShim(): PathShim {
+/**
+ * 路径 shim 真实现。opts.userDataDir 传递后启用"外置 daemon"候选:
+ * 包内(dev/历史随包)不存在时回落到 <userData>/mcp/ 的下载安装形态。
+ */
+export function defaultPathShim(opts?: { userDataDir?: string | null }): PathShim {
   return {
     resolveDaemonPath: (platform, _isPackaged, appRoot) => {
       // 卡体钉死: 约定 `resources/token-wallet-mcp(.exe)`
@@ -252,6 +256,12 @@ export function defaultPathShim(): PathShim {
         : appRoot;
       const exe = platform === "win32" ? "token-wallet-mcp.exe" : "token-wallet-mcp";
       const candidate = path.join(root, "resources", exe);
+      // daemon 外置形态(t_ 一键安装): 安装包不再内置 daemon, 用户经设置页下载到
+      // <userData>/mcp/。优先级: 包内物理存在(dev 构建产物/历史随包形态) → 包内;
+      // 否则 → userData 候选(存在性仍由调用方 exists() 判定, 保持"返回预期路径"语义)。
+      if (opts?.userDataDir && !existsSync(candidate)) {
+        return path.join(opts.userDataDir, "mcp", exe);
+      }
       return candidate;
     },
     exists: (p) => existsSync(p),
@@ -494,4 +504,71 @@ export async function checkDaemonVersion(
 export function isInstalled(paths: PathShim, platform: NodeJS.Platform, isPackaged: boolean, appRoot: string): boolean {
   const p = paths.resolveDaemonPath(platform, isPackaged, appRoot);
   return p !== null && paths.exists(p);
+}
+
+// ---------------- daemon 外置一键安装 (100MB 附件限 → daemon 独立附件按需下载) ----------------
+
+/** 下载 shim — 生产实现(mcp-download.ts, Electron net)注入; 单测 mock。 */
+export interface DownloadShim {
+  /**
+   * 下载 url 写入 destPath(调用方给 .part 临时名, 完成后由 installDaemon rename 原子落位)。
+   * onProgress: 0-100(无 content-length 时报累计字节近似值); throw = 失败。
+   */
+  download: (url: string, destPath: string, onProgress: (percent: number) => void) => Promise<void>;
+}
+
+/** stable 固定名附件: 发版同名替换, URL 永久稳定(win-x64)。env 覆盖见 mcp-ipc。 */
+export const DEFAULT_DAEMON_DOWNLOAD_URL =
+  "https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet-mcp-win-x64.exe";
+
+export interface InstallDaemonOpts {
+  url: string;
+  userDataDir: string;
+  download: DownloadShim;
+  platform?: NodeJS.Platform;
+  onProgress?: (percent: number) => void;
+  /** 缺省 node:fs 真实现; 单测注入 mock */
+  fs?: {
+    mkdirSync: (dir: string) => void;
+    renameSync: (from: string, to: string) => void;
+    rmSync: (p: string) => void;
+  };
+}
+
+/**
+ * 下载 daemon 到 <userData>/mcp/ 并原子落位(.part → rename):
+ * 半文件绝不以正式名出现(spawn 不会执行残缺 exe); 失败清理 .part 并返回 reason。
+ */
+export async function installDaemon(
+  opts: InstallDaemonOpts,
+): Promise<{ installed: boolean; path?: string; reason?: string }> {
+  const platform = opts.platform ?? process.platform;
+  const exe = platform === "win32" ? "token-wallet-mcp.exe" : "token-wallet-mcp";
+  const dir = path.join(opts.userDataDir, "mcp");
+  const dest = path.join(dir, exe);
+  const part = `${dest}.part`;
+  const fs = opts.fs ?? {
+    mkdirSync: (d: string) => void mkdirSync(d, { recursive: true }),
+    renameSync: (a: string, b: string) => renameSync(a, b),
+    rmSync: (p: string) => void rmSync(p, { force: true }),
+  };
+  try {
+    fs.mkdirSync(dir);
+    await opts.download.download(opts.url, part, (p) => opts.onProgress?.(p));
+    // Windows rename 不覆盖已存在目标 → 先清目标(重装/更新场景), 再原子落位。
+    try {
+      fs.rmSync(dest);
+    } catch {
+      /* 不存在则忽略 */
+    }
+    fs.renameSync(part, dest);
+    return { installed: true, path: dest };
+  } catch (e) {
+    try {
+      fs.rmSync(part);
+    } catch {
+      /* 清理尽力而为 */
+    }
+    return { installed: false, reason: e instanceof Error ? e.message : "download_failed" };
+  }
 }

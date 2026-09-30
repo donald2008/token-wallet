@@ -29,16 +29,20 @@ import {
   type SpawnShimDiscovery,
   checkDaemonVersion,
   type DaemonVersionCheck,
+  type DownloadShim,
+  DEFAULT_DAEMON_DOWNLOAD_URL,
   defaultDiscoveryShim,
   defaultPathShim,
   defaultSpawnShim,
   discoverPidByPort,
   getLastStartedPid,
+  installDaemon,
   isInstalled as isInstalledFn,
   probe as probeFn,
   start as startFn,
   stop as stopFn,
 } from "./mcp-daemon";
+import { netDownloadShim } from "./mcp-download";
 import {
   callMcpToolFromEnv,
   defaultHttpShim as defaultQueryHttpShim,
@@ -77,6 +81,10 @@ export interface McpIpcDeps {
   queryHttp?: QueryHttpShim;
   /** t_1b396e2f: 端口归属反查 shim(netstat/ss execFile) — 单测注入 fake; 默认走真命令 */
   discovery?: SpawnShimDiscovery;
+  /** daemon 外置: userData 根(下载落位 <userData>/mcp/ + 路径候选); 缺省禁用外置形态 */
+  userDataDir?: string;
+  /** 下载 shim(一键安装) — 单测 mock; 默认 Electron net 实现 */
+  download?: DownloadShim;
 }
 
 /** 默认 fetch 实现: POST /mcp initialize + AbortController 超时, 返回 { status } */
@@ -125,10 +133,11 @@ export function defaultHttpShim(): HttpShim {
 
 export function registerMcpIpc(deps: McpIpcDeps): void {
   const spawn = deps.spawn ?? defaultSpawnShim();
-  const paths = deps.paths ?? defaultPathShim();
+  const paths = deps.paths ?? defaultPathShim({ userDataDir: deps.userDataDir });
   const http = deps.http ?? defaultHttpShim();
   const queryHttp = deps.queryHttp ?? defaultQueryHttpShim();
   const discovery = deps.discovery ?? defaultDiscoveryShim();
+  const download = deps.download ?? netDownloadShim();
   const app = deps.app;
   const configDir = (): string => deps.storagePathsFn().configDir;
   /** stop/restart 兜底所需的完整 probe 目标(归一 connect 地址 + key) */
@@ -440,6 +449,41 @@ export function registerMcpIpc(deps: McpIpcDeps): void {
         );
         if (e instanceof McpCallError) return { ok: false, reason: e.kind };
         return { ok: false, reason: "protocol_error" };
+      }
+    },
+  );
+
+  // ---- 通道: mcp_install_daemon (daemon 外置一键安装: 附件 100MB 限 → daemon 出包独立分发) ----
+  // 下载 stable 固定名附件 → <userData>/mcp/ → 原子落位; 进度经发起窗口事件上报。
+  // 安装完成后由 renderer 走既有 mcp_start 启动(不改启动链; 路径解析经 userData 候选自动命中)。
+  let mcpInstalling = false;
+  ipcMain.handle(
+    "mcp_install_daemon",
+    async (event): Promise<{ installed: boolean; path?: string; reason?: string }> => {
+      if (!deps.userDataDir) return { installed: false, reason: "userdata_unavailable" };
+      if (mcpInstalling) return { installed: false, reason: "busy" };
+      mcpInstalling = true;
+      try {
+        const url = process.env.TOKEN_WALLET_MCP_DL_URL || DEFAULT_DAEMON_DOWNLOAD_URL;
+        const r = await installDaemon({
+          url,
+          userDataDir: deps.userDataDir,
+          download,
+          platform: deps.platform,
+          onProgress: (percent) => {
+            try {
+              event.sender.send("mcp_install_progress", { percent });
+            } catch {
+              /* 发起窗口已关, 进度丢弃(下载照常完成) */
+            }
+          },
+        });
+        console.log(
+          `[mcp-ipc] install_daemon ok=${r.installed}${r.reason ? ` reason=${r.reason}` : ""}`,
+        );
+        return r;
+      } finally {
+        mcpInstalling = false;
       }
     },
   );

@@ -153,6 +153,18 @@ export const ipcMocks: Record<string, IpcHandler> = {
       installed: true,
     };
   },
+  // daemon 外置一键安装(9/30): 成功 → mock.mcp 置 installed(装完未启动, 由 start 接管)
+  mcp_install_daemon: () => {
+    try {
+      localStorage.setItem(
+        "token-wallet.mock.mcp",
+        JSON.stringify({ installed: true, alive: false, reason: "stopped" }),
+      );
+      return { installed: true, path: "/mock/userData/mcp/token-wallet-mcp.exe" };
+    } catch {
+      return { installed: false, reason: "storage_unavailable" };
+    }
+  },
   mcp_start: () => {
     try {
       const raw = localStorage.getItem("token-wallet.mock.mcp");
@@ -773,6 +785,10 @@ export const test = base.extend<{ hostPage: Page }>({
       window.__pushUpdaterEvent = (event) => {
         for (const cb of window.__updaterListeners) cb(event);
       };
+      window.__mcpInstallListeners = [];
+      window.__pushMcpInstallProgress = (progress) => {
+        for (const cb of window.__mcpInstallListeners) cb(progress);
+      };
       window.tokenWallet = {
         invoke: (channel, payload) => {
           window.__capturedInvokes.push({ cmd: channel, args: payload });
@@ -781,6 +797,9 @@ export const test = base.extend<{ hostPage: Page }>({
         },
         onUpdaterEvent: (callback) => {
           window.__updaterListeners.push(callback);
+        },
+        onMcpInstallProgress: (callback) => {
+          window.__mcpInstallListeners.push(callback);
         },
       };
     })()`);
