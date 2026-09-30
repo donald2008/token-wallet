@@ -51,8 +51,12 @@ node --version   # >= 22
    pnpm build:win    # = pnpm -r build + electron-builder NSIS
    ```
 
-   产物: `packages/app/release/token-wallet_<版本>_setup.exe`(~93MB, 单文件全离线)。
-   大小仅 ~174KB = 打包中断只出了 stub, 重跑。
+   产物: `packages/app/release/token-wallet_<版本>_setup.exe`(~120MB, 单文件全离线, 含内置
+   MCP daemon)。大小仅 ~174KB = 打包中断只出了 stub, 重跑。
+
+   > **打包前检查 `packages/app/resources/` 只含目标平台产物**(2026-09-30 实锤): files 通配
+   > `resources/token-wallet-mcp*` 会把同目录的 Linux 构建产物(无后缀版, ~80MB)一并打进
+   > Windows 安装包(包体 94MB→207MB)。dist-win.mjs 已加守卫自动中止, 手动出包同样适用。
 
 4. **计算 SHA256**(发布校验):
 

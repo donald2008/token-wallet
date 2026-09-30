@@ -165,7 +165,7 @@ token-wallet/
 https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
 ```
 
-- Windows 10/11 x64，单文件全离线安装包（~93 MB，含 Chromium 运行时，无外部依赖）
+- Windows 10/11 x64，单文件全离线安装包（~120 MB，含 Chromium 运行时与内置 MCP daemon，无外部依赖）
 - 平台说明：当前**官方支持 Windows**；macOS / Linux 的代码层已兼容（凭据走系统
   safeStorage，路径按平台派生），但未发布安装包、未经真机验收——见 [Roadmap](#roadmap)
 - 校验：Release 附件中的 `SHA256SUMS.txt` 与安装包比对

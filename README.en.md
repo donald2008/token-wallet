@@ -177,7 +177,7 @@ Current version **v0.2.9**, stable link (always points to the latest stable rele
 https://gitee.com/ITEater/token-wallet/releases/download/stable/token-wallet_setup.exe
 ```
 
-- Windows 10/11 x64; single-file fully-offline installer (~93 MB, bundles Chromium runtime, no external dependencies)
+- Windows 10/11 x64; single-file fully-offline installer (~120 MB, bundles the Chromium runtime and the built-in MCP daemon, no external dependencies)
 - Platform note: **officially supported on Windows** today. macOS / Linux are code-ready
   (credentials via system safeStorage, platform-derived paths) but no installers are
   published and no real-machine validation has been done — see [Roadmap](#roadmap)
