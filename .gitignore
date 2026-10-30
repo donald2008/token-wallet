@@ -46,3 +46,7 @@ packages/app/resources/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# verify.sh 运行产物(可重生成,不入库)
+verification/verify-logs/
+verification/verify-report.json

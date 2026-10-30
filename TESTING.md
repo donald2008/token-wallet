@@ -12,6 +12,20 @@
 | L3 真通道 | 真 API + 真余额 | 手动 + golden sample | 我们的机器 | ⚠️ 半自动 |
 | L4 Windows 冒烟 | 安装/托盘/首开 | 手动 | Windows 本机 | ❌ 人肉 |
 
+## 统一验证入口(scripts/verify.sh, 2026-10-30 v1)
+
+一条命令串起 Linux 可跑层,替代逐条手敲;Windows/人工层显式 skip + 原因,不冒充通过。
+
+```bash
+scripts/verify.sh          # 全量: S1 typecheck → S2 core 单测 → S3 app 单测 → S4 L2 e2e(browser-only) → S5 build → S6 MCP pytest → S7 编译冒烟
+scripts/verify.sh --fast   # 跳过 S5 build
+```
+
+- 机器可读报告: `verification/verify-report.json`(schema `token-wallet.verify/v1`,含每步 status/耗时/用例计数/skip 原因), 逐步日志 `verification/verify-logs/`;两者均不入库
+- S6 MCP pytest 依赖 `packages/mcp-server/.venv`(README §51 建 venv);未建时 skip 并注明原因,由 S7 `compileall` 兜底(**仅语法级,不等价导入级验证**)
+- L2.5 真壳视觉 / L3 真通道 / L4 Windows 冒烟在本机恒 skip——报告里如实出现"未运行",交付声明不得引用它们
+- 已知点: e2e 会重写 `verification/` 截图基线(字体/时序像素噪声);脚本收尾只还原本轮新弄脏的,跑前已脏的不碰。截图确定性(固定字体/时钟)留待独立卡
+
 ## L1 单元测试(packages/core)
 
 ```bash
