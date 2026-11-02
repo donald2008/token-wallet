@@ -33,6 +33,59 @@ def _protocol_block(anchor: str) -> str:
     return md[j + 7 : k].rstrip("\n")
 
 
+def _protocol_fence(anchor: str) -> str:
+    """提取 anchor 之后第一个 (无语言标记) ``` 围栏块原文。"""
+    md = PROTOCOL_MD.read_text(encoding="utf-8")
+    i = md.index(anchor)  # anchor 缺失 = 红, 禁静默
+    j = md.index("```", i) + 3
+    k = md.index("```", j)
+    return md[j:k].strip()
+
+
+def _s71_rows() -> list[dict]:
+    """解析 §7.1 表格 5 行 × 4 列 → requirements 投影。
+
+    提取规则与 guide_doc.SYNC_CONTRACT 生成脚本同一套: 单元格去 markdown
+    标记 (** 加粗 / ` 代码) 进纯文本, 编号列 **S1** → "S1"。
+    文件缺失 (read_text) / 锚点缺失 (index) / 列数不符 / 零行 → 直接红, 禁静默空串。
+    """
+    md = PROTOCOL_MD.read_text(encoding="utf-8")
+    i = md.index("### 7.1 同步契约")
+    j = md.index("### 7.2", i)
+    seg = md[i:j]
+
+    def plain(cell: str) -> str:
+        return cell.replace("**", "").replace("`", "").strip()
+
+    rows = []
+    for line in seg.splitlines():
+        if not line.startswith("| **S"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        assert len(cells) == 4, f"§7.1 行非 4 列: {line!r}"
+        rows.append(cells)
+    assert rows, "§7.1 表格零行 — 提取不得静默空串"
+    return [
+        {
+            "id": plain(r[0]),
+            "title": plain(r[1]),
+            "why": plain(r[2]),
+            "verify": plain(r[3]),
+        }
+        for r in rows
+    ]
+
+
+@pytest.fixture(scope="module")
+def protocol_contract() -> dict:
+    """§7.1 表格 → /guide contract 段期望结构 (单一事实源投影)。"""
+    return {
+        "id": "agent-usage-sync",
+        "version": 1,
+        "requirements": _s71_rows(),
+    }
+
+
 @pytest.fixture(scope="module")
 def protocol_schema() -> str:
     return _protocol_block("### 1.1 JSON Schema")
@@ -80,8 +133,51 @@ class TestSchemaConsistency:
             "### 1.1 JSON Schema",
             "批量信封（`report_usage` 的 input）",
             "### F1 正常 completed",
+            "### 7.1 同步契约",
+            "### 7.4 自证顺序",
         ):
             assert anchor in md
+
+
+# ------------------------------------------------- v1.2 同步契约一致性 ----
+
+class TestSyncContract:
+    """§7.1 表格 → /guide contract 段 (v1.2 §7.5): 程序化投影, 逐格守护。
+
+    判别力: §7.1 任一单元格被改动 → 期望结构与 guide_doc.SYNC_CONTRACT 不等 → 红;
+    常量侧被手改 → 同样红 (双向)。
+    """
+
+    def test_sync_contract_verbatim_projection(self, protocol_contract):
+        """/guide contract 段与 §7.1 表格逐格一致 (改一格即红)。"""
+        assert guide_doc.SYNC_CONTRACT == protocol_contract
+
+    def test_sync_contract_shape(self):
+        """contract 结构齐全: id/version/5 条 S1–S5 × {id,title,why,verify}, 禁空串禁 markdown。"""
+        c = guide_doc.SYNC_CONTRACT
+        assert c["id"] == "agent-usage-sync"
+        assert c["version"] == 1
+        assert [r["id"] for r in c["requirements"]] == ["S1", "S2", "S3", "S4", "S5"]
+        for r in c["requirements"]:
+            assert set(r) == {"id", "title", "why", "verify"}
+            for v in r.values():
+                assert isinstance(v, str) and v.strip(), f"空值 (禁静默空串): {r}"
+                assert "**" not in v and "`" not in v, f"markdown 标记残留: {v!r}"
+
+    def test_self_verify_order_verbatim(self):
+        """§7.4 自证顺序 fence 逐字投影 (建议顺序也走单一事实源)。"""
+        assert guide_doc.SELF_VERIFY_ORDER == _protocol_fence("### 7.4 自证顺序")
+
+    def test_sections_carry_requirements(self):
+        """第六段 item 形态沿用 ul/code, 五个编号逐个在场。"""
+        sec = {s["id"]: s for s in guide_doc.doc_sections()}["sync-contract"]
+        assert sec["title"] == "同步契约"
+        ul = [it for it in sec["items"] if it["type"] == "ul"]
+        assert ul and ul[0].get("kind") == "requirements"
+        blob = "\n".join(ul[0]["items"])
+        for sid in ("S1", "S2", "S3", "S4", "S5"):
+            assert f"{sid} · " in blob
+        assert any(it["type"] == "code" for it in sec["items"])
 
 
 # ------------------------------------------------------ S3/S4 内容纪律 ----
@@ -104,14 +200,20 @@ class TestContentDiscipline:
         # hex-64 形态 (openssl rand -hex 32 产物) 不应出现
         assert not re.search(r"\b[0-9a-f]{64}\b", blob)
 
-    def test_five_sections_structure(self):
-        """S1 五段式: 概述→认证→接口规格→真实示例→验证步骤。"""
+    def test_sections_structure(self):
+        """S1 五段式 + v1.2 第六段: 概述→认证→接口规格→真实示例→验证步骤→同步契约。
+
+        原断言为 ids/titles 等值语义 (非「至少包含」) — §7.5 追加第六段后
+        必须同步为六段 (老大 comment #3013 点名按测试实际语义处理)。
+        """
         sections = guide_doc.doc_sections()
         assert [s["id"] for s in sections] == [
-            "overview", "auth", "api", "example", "verify",
+            "overview", "auth", "api", "example", "verify", "sync-contract",
         ]
         titles = [s["title"] for s in sections]
-        assert titles == ["概述", "认证", "接口规格", "真实示例", "验证步骤"]
+        assert titles == [
+            "概述", "认证", "接口规格", "真实示例", "验证步骤", "同步契约",
+        ]
 
     def test_schema_section_carries_full_schema(self):
         """P3 checklist: schema 全文嵌入 (含四分项/event_id/status 语义)。"""

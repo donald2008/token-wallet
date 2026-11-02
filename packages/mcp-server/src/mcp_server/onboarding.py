@@ -72,6 +72,9 @@ def onboarding_guide(endpoint: str) -> dict:
     app 侧据此外判 daemon 是否陈旧。
     OB-01 新增 doc 字段 (追加不改义): 五段式文档分段, 渲染归 _render_guide_html,
     JSON 视图同样暴露 (程序化消费方可直接取分段)。
+    v1.2 新增 contract 字段 (追加不改义, §7.5): 同步契约投影
+    {id, version, requirements:[{id,title,why,verify}]} — guide_doc.SYNC_CONTRACT
+    与协议 §7.1 表格程序化同源 (测试逐格守护, 篡改即红)。
     """
     return {
         "endpoint": endpoint,
@@ -84,4 +87,5 @@ def onboarding_guide(endpoint: str) -> dict:
             "server_version": server_version(),
             "sections": guide_doc.doc_sections(),
         },
+        "contract": guide_doc.sync_contract(),
     }

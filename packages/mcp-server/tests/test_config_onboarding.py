@@ -174,7 +174,11 @@ class TestOnboardingGuide:
         mcp = _build(tmp_path)
         data = _tool_data(mcp, "get_onboarding_guide")
         # 兼容字段 (t_1b396e2f 追加不改义): dev 运行无 frozen exe → build_id None
-        assert set(data) == {"endpoint", "server_version", "agents", "build_id", "doc"}
+        # v1.2: contract 为追加键 (§7.5); 既有五键一个不动 (app mcp_get_guide /
+        # build_id 陈旧检测链路依赖) — 等值断言同步为六键。
+        assert set(data) == {
+            "endpoint", "server_version", "agents", "build_id", "doc", "contract",
+        }
         assert data["endpoint"] == f"http://{HOST}:{PORT}/mcp"
         assert isinstance(data["server_version"], str) and data["server_version"]
         assert data["build_id"] is None or isinstance(data["build_id"], str)
@@ -188,12 +192,25 @@ class TestOnboardingGuide:
         assert agent["plugin_url"] is None
         assert agent["docs_url"] is None
 
-        # doc 分段: 五段式完整
+        # doc 分段: 五段式 + v1.2 第六段 (等值语义同步为六段)
         doc = data["doc"]
         assert doc["endpoint"] == data["endpoint"]
         assert [s["id"] for s in doc["sections"]] == [
-            "overview", "auth", "api", "example", "verify",
+            "overview", "auth", "api", "example", "verify", "sync-contract",
         ]
+
+        # v1.2 contract 段 (§7.5): 同步契约投影 S1–S5, 结构齐全
+        contract = data["contract"]
+        assert contract["id"] == "agent-usage-sync"
+        assert contract["version"] == 1
+        assert [r["id"] for r in contract["requirements"]] == [
+            "S1", "S2", "S3", "S4", "S5",
+        ]
+        for r in contract["requirements"]:
+            assert set(r) == {"id", "title", "why", "verify"}
+            assert all(
+                isinstance(r[k], str) and r[k] for k in ("id", "title", "why", "verify")
+            )
 
     def test_build_id_compat_field(self, tmp_path):
         """H2 继承: build_id 字段与语义保留 — app 陈旧检测链路依赖 (REQ-06)。"""
@@ -280,6 +297,14 @@ class TestGuideHttp:
         assert "TOKEN_WALLET_MCP_KEY" in body
         # 参考实现链接 (S5)
         assert "hook-usage-reporter" in body
+        # v1.2 第六章节: 同步契约 — requirements 渲染为四列表格 (编号/要求/为什么/自证方法)
+        assert 'id="sync-contract"' in body
+        assert "同步契约" in body
+        assert '<table class="contract">' in body
+        assert "<th>编号</th>" in body and "<th>自证方法</th>" in body
+        for sid in ("S1", "S2", "S3", "S4", "S5"):
+            assert f"<td><code>{sid}</code></td>" in body
+        assert body.count('<tr><td><code>S') == 5
 
     def test_guide_html_self_contained(self, tmp_path):
         """SC-07 / REQ-07: 自包含离线渲染 — 零外部资源依赖。"""

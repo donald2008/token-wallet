@@ -214,11 +214,43 @@ def _render_guide_html(guide: dict) -> str:
             return f'<pre class="code"><code>{body}</code></pre>'
         return ""
 
-    def _render_section(sec: dict) -> str:
-        items = "".join(_render_item(it) for it in sec["items"])
+    def _render_contract_table(contract: dict) -> str:
+        """同步契约 requirements 表格 — §7.1 四列投影 (编号/要求/为什么/自证方法), 全量转义。"""
+        ths = "".join(
+            f"<th>{esc(h)}</th>" for h in ("编号", "要求", "为什么", "自证方法")
+        )
+        rows = []
+        for r in contract.get("requirements", []):
+            rows.append(
+                "<tr><td><code>" + esc(r["id"]) + "</code></td>"
+                "<td>" + esc(r["title"]) + "</td>"
+                "<td>" + esc(r["why"]) + "</td>"
+                "<td>" + esc(r["verify"]) + "</td></tr>"
+            )
+        return (
+            '<table class="contract">\n<thead><tr>' + ths
+            + "</tr></thead>\n<tbody>\n" + "\n".join(rows)
+            + "\n</tbody>\n</table>"
+        )
+
+    def _render_section(sec: dict, contract: dict | None = None) -> str:
+        if sec["id"] == "sync-contract" and contract:
+            # §7.5 第六章节: requirements 列表换渲染为表格 (其余 item 走通用通道)
+            parts = []
+            for it in sec["items"]:
+                if it.get("type") == "ul" and it.get("kind") == "requirements":
+                    parts.append(_render_contract_table(contract))
+                else:
+                    parts.append(_render_item(it))
+            items = "\n".join(parts)
+        else:
+            items = "".join(_render_item(it) for it in sec["items"])
         return f'<section id="{esc(sec["id"])}">\n<h2>{esc(sec["title"])}</h2>\n{items}\n</section>'
 
-    sections_html = "\n".join(_render_section(s) for s in doc["sections"])
+    contract = guide.get("contract") or {}
+    sections_html = "\n".join(
+        _render_section(s, contract) for s in doc["sections"]
+    )
     return f"""<!doctype html>
 <html lang="zh">
 <head>
@@ -245,6 +277,10 @@ ul, ol {{ padding-left: 1.4rem; }}
 li {{ margin: .3rem 0; }}
 a {{ color: #0b62c4; }}
 section {{ margin-bottom: 1rem; }}
+table.contract {{ border-collapse: collapse; width: 100%; margin: .6rem 0; font-size: .92rem; }}
+table.contract th, table.contract td {{ border: 1px solid #ddd; padding: .45rem .6rem;
+   text-align: left; vertical-align: top; }}
+table.contract th {{ background: #f0f0f0; }}
 </style>
 </head>
 <body>
