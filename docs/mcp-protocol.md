@@ -554,9 +554,59 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 - **提取点**：`post_llm_call`（成功调用 → `completed`）；`on_stream_end`（流被 cancel → 判 `partial`：拿到了部分 usage；`unknown`：拿不到 usage，`usage: null` 占位）；
   > **实现偏离（留痕）**：hook 参考实现实际取 `post_api_request` —— 宿主实测 `post_llm_call` payload 无 usage（提取不到任何 token 数），偏离经 t_0ea1d8b6 人工终审确认成立，见 [`reviews/t_0ea1d8b6.md`](reviews/t_0ea1d8b6.md)。本节其余行为约定照旧。
 - **缓冲**：内存 buffer；flush 条件 = **满 50 条 ∨ 60s 定时 ∨ 会话结束**；
-- **断线排队**：daemon 不可达时内存排队，恢复后补发（整批原样重发，event_id 幂等，见 §2.1 语义 6）；
+- **断线排队**：daemon 不可达时排队，恢复后补发（整批原样重发，event_id 幂等，见 §2.1 语义 6）；**跨进程重启仍需可补发**——持久化要求见 §7.2 / §7.3（v1.2 起内存排队不再满足 S2）；
 - **零阻塞**：hook 本体只入 buffer，flush 全异步，绝不阻塞 agent 主流程；
 - **不重发 `rejected`** 条目（§2.1）。
+
+### 7.1 同步契约（v1.2 新增，S1–S5）
+
+> 本节只规定**接入方必须满足什么**，不规定**怎么实现**。任何 harness 一律适用；
+> `GET /guide` 的 `contract` 段与本表同源（程序化投影，禁手抄）。
+
+| 编号 | 要求 | 为什么 | 自证方法（黑盒，用现有工具，无需新增接口） |
+|---|---|---|---|
+| **S1** | `event_id` 在事件发生时生成，重发/重放保持不变 | 幂等锚点（§3） | 同一批 `report_usage` 连发两次 → 第二次 `accepted=0, duplicated=N` |
+| **S2** | daemon 不可达期间的用量**不得丢弃**，须持久化到进程重启后仍可重放 | 桌面端 daemon 随 app 启停，离线是常态 | 停 daemon → 产生 N 次调用 → 恢复 → `usage_summary` 计数 +N |
+| **S3** | 恢复可达后**自动补发**，无需人工触发 | 否则用户必须记得点一下 | 恢复后不执行任何命令，≤2 个 flush 周期内 daemon 侧出现数据 |
+| **S4** | 补发保留**事件发生时刻** `ts`，不得写成补发时刻 | 小时/日桶与窗口聚合全部依赖 ts | `usage_report_echo` 的 ts 落在断线窗口内；`group_by=["hour"]` 落在对应小时 |
+| **S5** | 重复投递**不双计** | 补发必然产生重复 | 同一批发三次 → `total.calls` 只增一次 |
+
+### 7.2 数据来源优先级（强制）
+
+1. **宿主已有用量存储 → 以宿主存储为准**：若 agent 自身已持久化每次调用的用量（自有库 / 日志 / 会话记录），适配器必须从该存储读取或重放，**不得另建第二份账本**（双写必然漂移）。重放时按 §1 映射；`event_id` 取该存储中的稳定标识，或首次映射后固定落库。
+2. **宿主无存储 → 按 §7.3 本地临时保存**：该存储只服务于「未送达事件可重放」，不承担长期归档。
+3. 两条都不做 → 不满足 S2/S3，`/guide` 自检必然失败。
+
+> 判据只有一条：**daemon 恢复后，断线期间的 N 条用量能否补上**。存在哪里、什么格式，由实现方决定。
+
+### 7.3 本地临时保存参考方案（log，非强制）
+
+- **形态**：一个 append-only 文件 + 一个游标文件；不引数据库、不做框架。
+- **记录**：每行一个 JSON —— `{"seq":123,"report":{…§1 AgentUsageReport…}}`；`seq` 为本地单调序号。
+- **写序**：事件产生时即写盘（先落文件，再入内存队列）；`event_id` 落盘后不得再变。
+- **游标**：`{"acked_seq":122}` 表示 `seq≤122` 均已送达；**按批边界推进**——收到 `report_usage` 成功响应即推进到该批最大 `seq`；传输失败/超时 → 游标不动。
+- **重放**：进程启动时、以及每次探测到 daemon 可达时，从 `acked_seq+1` 起按序重放到末尾（批量 ≤100），完成后转实时流。
+- **重复**：不判重不记账，交给 daemon 的 `event_id` / fingerprint（§3）吸收；`duplicated` 不是错误。
+- **拒绝**：`rejected` 为永久失败（schema 错），记一行日志后跳过，游标照常推进（§2.1 语义 6）。
+- **上限**：`acked_seq` 之前的内容可截断；文件超限（建议 32 MB / 30 天）时丢最旧并在日志留一行 `gap`（`from_ts` / `to_ts` / `dropped`），**禁止静默丢弃**。
+- **崩溃安全**：加载时末行解析失败即丢弃；游标用 tmp + fsync + rename 原子替换；假定单进程写（多进程需文件锁）。
+- **规模参考**：单条事件约 0.7 KB；1 万条 ≈ 7 MB。
+
+### 7.4 自证顺序（建议）
+
+```
+S1 幂等 → S5 不双计 → S4 时间忠实 → S2 断线留存 → S3 自动补发
+```
+
+前三项可用构造数据验证；后两项需人为制造一次不可达窗口（停 daemon 或断网）。
+
+### 7.5 `/guide` 暴露
+
+- JSON 视图（`GET /guide` 与 `get_onboarding_guide` 工具）返回体新增 `contract` 段：
+  `{"id":"agent-usage-sync","version":1,"requirements":[{"id","title","why","verify"}]}`
+- 该段必须由本节**程序化提取或逐字比对**（沿用 §2 文档一致性断言模式），**禁止手抄**；本节为唯一事实源。
+- HTML 视图在原五段之后追加「同步契约」章节（第六段）：概述 → 认证 → 接口规格 → 真实示例 → 验证步骤 → 同步契约。
+
 
 ---
 
@@ -782,3 +832,4 @@ ALTER TABLE usage_records ADD COLUMN source TEXT NOT NULL DEFAULT 'cloud';
 | v1 | 2026-09-06 | 初版定稿：AgentUsageReport v1 schema（§1）、数据面三工具 report_usage / usage_summary / usage_report_echo（§2.1–§2.3）、两级判重（§3）、存储与 TTL（§4）、Bearer 鉴权（§5）、fixtures（§8） |
 | v1.1 | 2026-09-24 | 工具面 3→4：新增 §2.4 `delete_usage`（管理面删除，物理 DELETE + 幂等 + 可选 before_ts 上界；老大 9/24 真机反馈③ daemon 侧）。显式版本化增补，§2.1–§2.3 既有工具行为零改动；AgentUsageReport `schema_version` 保持 1 不变 |
 | v1.1 增补 | 2026-09-24 | §2.2 `usage_summary` `group_by` 维清单增 `hour`（本地时区整点桶 `YYYY-MM-DDTHH:00`，语义同 `day`，禁 UTC 硬编码；置顶 5h 折线数据面，窗口由调用方传 `since`，不新增参数）。§2.1–§2.4 既有工具行为零改动 |
+| v1.2 | 2026-11-02 | §7 新增同步契约 §7.1–§7.5（S1–S5：event_id 稳定 / 离线持久化 / 自动补发 / ts 取事件时刻 / 不双计；数据来源优先级：宿主已有存储优先，无则按 log 临时保存参考方案）；`/guide` 增 `contract` 段（由 §7.1 程序化投影）。**工具面与 schema 零改动**，`schema_version` 保持 1，`AgentUsageReport` 字段不变 |
