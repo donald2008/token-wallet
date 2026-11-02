@@ -603,7 +603,7 @@ S1 幂等 → S5 不双计 → S4 时间忠实 → S2 断线留存 → S3 自动
 ### 7.5 `/guide` 暴露
 
 - JSON 视图（`GET /guide` 与 `get_onboarding_guide` 工具）返回体新增 `contract` 段：
-  `{"id":"agent-usage-sync","version":1,"requirements":[{"id","title","why","verify"}]}`
+  `{"id":"agent-usage-sync","version":1,"requirements":[{"id":"S1","title":"…","why":"…","verify":"…"}]}`
 - 该段必须由本节**程序化提取或逐字比对**（沿用 §2 文档一致性断言模式），**禁止手抄**；本节为唯一事实源。
 - HTML 视图在原五段之后追加「同步契约」章节（第六段）：概述 → 认证 → 接口规格 → 真实示例 → 验证步骤 → 同步契约。
 
